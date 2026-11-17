@@ -20,23 +20,34 @@ internal sealed class CaptureForm : Form
     private readonly TextBox _address = new() { Dock = DockStyle.Fill, Text = "https://chatgpt.com" };
     private readonly Button _go = new() { Text = "Открыть", AutoSize = true };
     private readonly Label _status = new() { AutoSize = true, Text = "Инициализация WebView2…" };
-    private readonly Label _count = new() { AutoSize = true, Text = "Сохранено сообщений: 0" };
+    private readonly Label _count = new() { AutoSize = true, Text = "В БД: 0 сообщений" };
+    private readonly TextBox _diagnostics = new()
+    {
+        Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
+        ScrollBars = ScrollBars.Vertical, WordWrap = true, Height = 118,
+        BackColor = System.Drawing.SystemColors.Info
+    };
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill };
     private readonly string _dbPath;
     private readonly string _scriptPath;
-    private int _savedCount;
+    private int _receivedCount;
+    private int _savedEvents;
+    private int _scanCount;
+    private int _domFound;
     private bool _captureScriptRegistered;
+    private string _lastDiagnostic = "Диагностика ещё не получена.";
 
     public CaptureForm()
     {
         Text = "AIHub — WebView2 Capture Prototype";
         Width = 1280;
-        Height = 850;
+        Height = 900;
         StartPosition = FormStartPosition.CenterScreen;
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Padding = new Padding(8) };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -49,7 +60,8 @@ internal sealed class CaptureForm : Form
         info.Controls.Add(_count);
         root.Controls.Add(toolbar, 0, 0);
         root.Controls.Add(info, 0, 1);
-        root.Controls.Add(_web, 0, 2);
+        root.Controls.Add(_diagnostics, 0, 2);
+        root.Controls.Add(_web, 0, 3);
         Controls.Add(root);
 
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -61,12 +73,23 @@ internal sealed class CaptureForm : Form
         _go.Click += (_, _) => Navigate();
         _address.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { Navigate(); e.SuppressKeyPress = true; } };
         Shown += async (_, _) => await InitializeBrowserAsync();
+        UpdateDiagnostics("Приложение запущено. Ожидание WebView2.");
+    }
+
+    private void UpdateDiagnostics(string message)
+    {
+        _lastDiagnostic = $"{DateTime.Now:HH:mm:ss}  {message}";
+        _diagnostics.Text =
+            $"Браузер: {(_web.CoreWebView2 is null ? "не готов" : "готов")} | Скрипт зарегистрирован: {_captureScriptRegistered}\r\n" +
+            $"DOM: найдено {_domFound} | сканирований {_scanCount} | Получено событий: {_receivedCount} | Записей/обновлений SQLite: {_savedEvents}\r\n" +
+            $"URL: {_web.Source?.ToString() ?? "(нет)"}\r\n{_lastDiagnostic}";
     }
 
     private async Task InitializeBrowserAsync()
     {
         try
         {
+            UpdateDiagnostics("Создаю профиль WebView2…");
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var userData = Path.Combine(local, "AIHubStudio", "WebView2CapturePrototype", "BrowserData");
             Directory.CreateDirectory(userData);
@@ -75,32 +98,66 @@ internal sealed class CaptureForm : Form
             _web.CoreWebView2.Settings.AreDevToolsEnabled = true;
             _web.CoreWebView2.Settings.IsStatusBarEnabled = true;
             _web.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
-            _web.CoreWebView2.NavigationCompleted += async (_, _) => await InstallCaptureScriptAsync();
+            _web.CoreWebView2.NavigationStarting += (_, e) =>
+            {
+                _status.Text = "Загрузка страницы…";
+                UpdateDiagnostics($"Начата навигация: {e.Uri}");
+            };
+            _web.CoreWebView2.NavigationCompleted += async (_, e) =>
+            {
+                _status.Text = e.IsSuccess ? "Страница загружена. Войдите и откройте диалог." : $"Ошибка загрузки: {e.WebErrorStatus}";
+                UpdateDiagnostics(e.IsSuccess ? "Навигация завершена успешно." : $"Навигация завершилась ошибкой: {e.WebErrorStatus}");
+                await InstallCaptureScriptAsync();
+                await RefreshDatabaseCountAsync();
+            };
             await InstallCaptureScriptAsync();
             _status.Text = "WebView2 готов. Войдите на сайт и откройте диалог.";
+            UpdateDiagnostics("WebView2 инициализирован. Перехожу на страницу.");
             Navigate();
         }
         catch (Exception ex)
         {
             _status.Text = "Ошибка WebView2: " + ex.Message;
+            UpdateDiagnostics("ОШИБКА ИНИЦИАЛИЗАЦИИ: " + ex);
         }
     }
 
     private async Task InstallCaptureScriptAsync()
     {
-        if (_web.CoreWebView2 is null || !File.Exists(_scriptPath)) return;
-        var script = await File.ReadAllTextAsync(_scriptPath);
-        if (!_captureScriptRegistered)
+        try
         {
-            await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
-            _captureScriptRegistered = true;
+            if (_web.CoreWebView2 is null)
+            {
+                UpdateDiagnostics("Нельзя внедрить скрипт: CoreWebView2 ещё не готов.");
+                return;
+            }
+            if (!File.Exists(_scriptPath))
+            {
+                UpdateDiagnostics($"ФАЙЛ НЕ НАЙДЕН: {_scriptPath}");
+                return;
+            }
+            var script = await File.ReadAllTextAsync(_scriptPath);
+            if (!_captureScriptRegistered)
+            {
+                await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
+                _captureScriptRegistered = true;
+            }
+            await _web.CoreWebView2.ExecuteScriptAsync(script);
+            UpdateDiagnostics($"CaptureScript внедрён ({new FileInfo(_scriptPath).Length} байт).");
         }
-        await _web.CoreWebView2.ExecuteScriptAsync(script);
+        catch (Exception ex)
+        {
+            UpdateDiagnostics("ОШИБКА ВНЕДРЕНИЯ СКРИПТА: " + ex);
+        }
     }
 
     private void Navigate()
     {
-        if (_web.CoreWebView2 is null) return;
+        if (_web.CoreWebView2 is null)
+        {
+            UpdateDiagnostics("Навигация невозможна: WebView2 ещё не готов.");
+            return;
+        }
         var value = _address.Text.Trim();
         if (!value.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
             !value.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
@@ -109,7 +166,10 @@ internal sealed class CaptureForm : Form
             (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp))
             _web.CoreWebView2.Navigate(uri.ToString());
         else
+        {
             _status.Text = "Некорректный адрес.";
+            UpdateDiagnostics("Некорректный URL: " + value);
+        }
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -119,26 +179,84 @@ internal sealed class CaptureForm : Form
             var json = e.TryGetWebMessageAsString();
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            if (!root.TryGetProperty("type", out var type) || type.GetString() != "aihub-message") return;
+            if (!root.TryGetProperty("type", out var typeElement)) return;
+            var type = typeElement.GetString();
+            if (type == "aihub-diagnostic")
+            {
+                HandleScriptDiagnostic(root);
+                return;
+            }
+            if (type != "aihub-message") return;
 
-            var url = root.GetProperty("url").GetString() ?? "";
+            _receivedCount++;
+            var url = GetString(root, "url");
             var provider = GetProvider(url);
             var conversationKey = GetConversationKey(url);
-            var role = root.GetProperty("role").GetString() ?? "unknown";
-            var content = root.GetProperty("text").GetString() ?? "";
-            var messageKey = root.GetProperty("messageKey").GetString() ?? "";
-            if (string.IsNullOrWhiteSpace(content) || string.IsNullOrWhiteSpace(messageKey)) return;
+            var role = GetString(root, "role", "unknown");
+            var content = GetString(root, "text");
+            var messageKey = GetString(root, "messageKey");
+            if (string.IsNullOrWhiteSpace(content) || string.IsNullOrWhiteSpace(messageKey))
+            {
+                UpdateDiagnostics($"Получено пустое сообщение (role={role}, key={messageKey.Length} символов).");
+                return;
+            }
 
             await SaveMessageAsync(provider, conversationKey, messageKey, role, content, url);
-            _savedCount++;
-            _count.Text = $"Сохранено/обновлено событий: {_savedCount}";
-            _status.Text = $"Захват: {provider} · {role} · {DateTime.Now:T}";
+            _savedEvents++;
+            _count.Text = $"Записей/обновлений: {_savedEvents}";
+            _status.Text = $"Захват: {provider} · {role}";
+            UpdateDiagnostics($"SQLite OK: {provider}/{role}, {content.Length} символов. Последнее событие: {_receivedCount}.");
+            await RefreshDatabaseCountAsync();
         }
         catch (Exception ex)
         {
-            _status.Text = "Ошибка сохранения: " + ex.Message;
+            _status.Text = "Ошибка обработки сообщения: " + ex.Message;
+            UpdateDiagnostics("ОШИБКА ПРИЁМА/СОХРАНЕНИЯ: " + ex);
         }
     }
+
+    private void HandleScriptDiagnostic(JsonElement root)
+    {
+        var stage = GetString(root, "stage", "unknown");
+        var detail = GetString(root, "detail");
+        var url = GetString(root, "url");
+        if (root.TryGetProperty("scanCount", out var scans) && scans.TryGetInt32(out var scanCount))
+            _scanCount = scanCount;
+        if (root.TryGetProperty("foundCount", out var found) && found.TryGetInt32(out var foundCount))
+            _domFound = foundCount;
+
+        var extra = stage == "scan"
+            ? $" | provider={GetString(root, "providerHost")} | найдено={_domFound} | scans={_scanCount}"
+            : stage == "message-sent"
+                ? $" | role={GetString(root, "role")} | chars={GetInt(root, "textLength")}"
+                : "";
+        UpdateDiagnostics($"JS [{stage}]: {detail}{extra} | {url}");
+    }
+
+    private async Task RefreshDatabaseCountAsync()
+    {
+        try
+        {
+            if (!File.Exists(_dbPath)) { _count.Text = "В БД: 0 сообщений"; return; }
+            await using var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _dbPath }.ToString());
+            await db.OpenAsync();
+            var command = db.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM messages;";
+            var count = Convert.ToInt64(await command.ExecuteScalarAsync());
+            _count.Text = $"В БД: {count} сообщений";
+        }
+        catch (Exception ex)
+        {
+            UpdateDiagnostics("ОШИБКА ЧТЕНИЯ SQLITE: " + ex.Message);
+        }
+    }
+
+    private static string GetString(JsonElement root, string name, string fallback = "")
+        => root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? fallback : fallback;
+
+    private static int GetInt(JsonElement root, string name)
+        => root.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : 0;
 
     private async Task SaveMessageAsync(string provider, string conversationKey, string messageKey, string role, string content, string url)
     {
