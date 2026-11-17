@@ -214,23 +214,29 @@ internal sealed class AdapterRegistry
             throw new InvalidDataException("Adapter id contains unsupported characters.");
         var version = root.TryGetProperty("version", out var v) && v.TryGetInt32(out var n) ? n : 0;
         if (version < 1) throw new InvalidDataException("Adapter version must be positive.");
-        var detection = root.GetProperty("detection");
-        var confidence = detection.TryGetProperty("minimum_confidence", out var c) && c.TryGetDouble(out var score) ? score : 0.7;
+        if (!root.TryGetProperty("detection", out var detection) || detection.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Adapter detection object is required.");
+        if (!root.TryGetProperty("extraction", out var extraction) || extraction.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Adapter extraction object is required.");
+        var confidence = detection.TryGetProperty("minimum_confidence", out var confidenceElement) &&
+            confidenceElement.TryGetDouble(out var score) ? score : 0.7;
         if (confidence is < 0 or > 1) throw new InvalidDataException("minimum_confidence must be between 0 and 1.");
+        var domains = StringArray("domains");
+        if (domains.Length == 0 || domains.Any(domain => Uri.CheckHostName(domain) != UriHostNameType.Dns))
+            throw new InvalidDataException("At least one valid DNS domain is required.");
         var mapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (root.TryGetProperty("extraction", out var extraction) &&
-            extraction.TryGetProperty("role_mapping", out var roles) && roles.ValueKind == JsonValueKind.Object)
+        if (extraction.TryGetProperty("role_mapping", out var roles) && roles.ValueKind == JsonValueKind.Object)
             foreach (var item in roles.EnumerateObject())
                 if (item.Value.ValueKind == JsonValueKind.String) mapping[item.Name] = item.Value.GetString()!;
 
         var strategies = StringArrayFrom(root, "extraction", "strategies");
-        if (strategies.Any(s => !AllowedStrategies.Contains(s)))
-            throw new InvalidDataException("Adapter requests an unsupported extraction strategy.");
+        if (strategies.Length == 0 || strategies.Any(s => !AllowedStrategies.Contains(s)))
+            throw new InvalidDataException("Adapter must request one or more supported extraction strategies.");
 
         return new AdapterDefinition(id, RequiredString("name"),
             root.TryGetProperty("vendor", out var vendor) ? vendor.GetString() ?? "unknown" : "unknown",
             version, !root.TryGetProperty("enabled", out var enabled) || enabled.ValueKind != JsonValueKind.False,
-            StringArray("domains"), confidence, StringArrayFrom(root, "detection", "dom_signatures"),
+            domains, confidence, StringArrayFrom(root, "detection", "dom_signatures"),
             strategies, mapping);
     }
 
