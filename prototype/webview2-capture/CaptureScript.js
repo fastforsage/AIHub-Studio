@@ -146,22 +146,24 @@
       if (!messageKey) continue;
       if (apiSentContent.get(messageKey) === text) continue;
       apiSentContent.set(messageKey, text);
-      window.chrome.webview.postMessage(JSON.stringify({
-        type: "aihub-message",
-        providerHost: "chatgpt.com",
-        url: location.href,
-        role,
-        messageKey,
-        text,
-        capturedAt: new Date().toISOString(),
-        extractionStrategy: "chatgpt-conversation-api"
-      }));
+      if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage(JSON.stringify({
+          type: "aihub-message",
+          providerHost: "chatgpt.com",
+          url: location.href,
+          role,
+          messageKey,
+          text,
+          capturedAt: new Date().toISOString(),
+          extractionStrategy: "chatgpt-conversation-api"
+        }));
+      }
       captured++;
     }
     chatGptApiState = "ready";
     diagnostic("api-capture", "История ChatGPT прочитана из авторизованной сессии", {
       conversationId, pathNodes: ordered.length, mappingNodes: Object.keys(mapping).length,
-      messagesSent: captured, apiStatus: response.status, elapsedMs: Date.now() - startedAt
+      messagesSent: captured, apiStatus: responseStatus
     });
   }
 
