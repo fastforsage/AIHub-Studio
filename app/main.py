@@ -72,6 +72,14 @@ def load_cfg():
     cfg["active_connection_profile"] = active
     cfg["servers"] = profiles[active].get("servers", cfg["servers"])
     cfg["gpu_agent_token"] = profiles[active].get("gpu_agent_token", cfg.get("gpu_agent_token", ""))
+    try:
+        secrets = json.loads(keyring.get_password("AIHubStudio", "secrets") or "{}")
+        cfg["proxy_url"] = secrets.get("proxy_url", cfg.get("proxy_url", ""))
+        for profile_name, profile_data in cfg["connection_profiles"].items():
+            profile_data["gpu_agent_token"] = secrets.get("gpu_agent_tokens", {}).get(profile_name, profile_data.get("gpu_agent_token", ""))
+        cfg["gpu_agent_token"] = cfg["connection_profiles"][active].get("gpu_agent_token", cfg.get("gpu_agent_token", ""))
+    except Exception:
+        pass
     return cfg
 
 def load_ai_catalog_cache():
@@ -127,11 +135,18 @@ class CatalogFetchWorker(QRunnable):
             self.signals.finished.emit([], str(exc))
 
 def save_cfg(cfg):
-    clean = {k: v for k, v in cfg.items() if k not in ("dockhand_url", "gpu_agent_url")}
+    clean = {k: v for k, v in cfg.items() if k not in ("dockhand_url", "gpu_agent_url", "gpu_agent_token", "proxy_url")}
     clean["ai_services"] = [x for x in clean.get("ai_services", []) if x.get("name", "").lower() != "open webui"]
     active = clean.get("active_connection_profile", "Локальная сеть")
     profiles = clean.setdefault("connection_profiles", {})
-    profiles[active] = {"servers": clean.get("servers", {}), "gpu_agent_token": clean.get("gpu_agent_token", "")}
+    profiles[active] = {"servers": clean.get("servers", {}), "gpu_agent_token": cfg.get("gpu_agent_token", "")}
+    token_secrets = {}
+    for profile_name, profile_data in profiles.items():
+        token = profile_data.get("gpu_agent_token", "")
+        if token: token_secrets[profile_name] = token
+        profile_data.pop("gpu_agent_token", None)
+    keyring.set_password("AIHubStudio", "secrets", json.dumps({"proxy_url": cfg.get("proxy_url", ""), "gpu_agent_tokens": token_secrets}, ensure_ascii=False))
+    clean["proxy_configured"] = bool(cfg.get("proxy_url", ""))
     CFG.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def server_url(item):
@@ -211,6 +226,22 @@ class ConnectionCheck(QRunnable):
         except requests.exceptions.Timeout: result = "Тайм-аут: сервер не ответил"
         except Exception as exc: result = f"Ошибка: {exc}"
         self.signals.finished.emit(result)
+
+class AgentFetchSignals(QObject):
+    finished = Signal(object, str)
+
+class AgentFetchWorker(QRunnable):
+    def __init__(self, url, token, proxies=None):
+        super().__init__()
+        self.url, self.token, self.proxies = url, token, (proxies or {})
+        self.signals = AgentFetchSignals()
+    def run(self):
+        try:
+            response = requests.get(self.url.rstrip("/") + "/gpu", headers={"Authorization": "Bearer " + self.token}, timeout=(2, 4), proxies=self.proxies)
+            response.raise_for_status()
+            self.signals.finished.emit(response.json(), "")
+        except Exception as exc:
+            self.signals.finished.emit({}, str(exc))
 
 class Main(QMainWindow):
     def __init__(self):
@@ -431,19 +462,18 @@ class Main(QMainWindow):
         widget = QWidget()
         outer = QVBoxLayout(widget)
         header = QHBoxLayout()
-        title = QLabel("СИСТЕМА / МОНИТОРИНГ")
+        title = QLabel("УДАЛЁННЫЙ GPU МОНИТОРИНГ")
         title.setObjectName("heading")
         header.addWidget(title)
         header.addStretch()
-        self.status = QLabel("Опрос каждые 3 сек.")
+        self.status = QLabel("Опрос удалённого ROCm Agent каждые 5 сек.")
         header.addWidget(self.status)
         outer.addLayout(header)
         grid = QGridLayout()
-        self.cpu, self.ram, self.gpu, self.agent = Metric("CPU"), Metric("RAM"), Metric("GPU / NVIDIA"), Metric("AMD ROCm agent")
-        for i, metric in enumerate([self.cpu, self.ram, self.gpu, self.agent]):
-            grid.addWidget(metric, 0, i)
+        self.agent = Metric("Linux ROCm Agent")
+        grid.addWidget(self.agent, 0, 0)
         outer.addLayout(grid)
-        self.gpu_info = QLabel("GPU устройства появятся после опроса.")
+        self.gpu_info = QLabel("Метрики будут получены с удалённого Linux-агента.")
         self.gpu_info.setObjectName("info")
         self.gpu_info.setWordWrap(True)
         outer.addWidget(self.gpu_info)
@@ -644,31 +674,65 @@ class Main(QMainWindow):
         self.populate_ai_catalog()
         save_cfg(self.cfg)
 
+    def proxy_map(self):
+        proxy = self.cfg.get("proxy_url", "").strip()
+        return {"http": proxy, "https": proxy} if proxy else {}
+
+    def current_ai_view(self):
+        view = self.ai_tabs.currentWidget()
+        return view if isinstance(view, QWebEngineView) else None
+
+    def navigate_ai_address(self):
+        view = self.current_ai_view()
+        if not view: return
+        value = self.ai_address.text().strip()
+        if value and not value.startswith(("http://", "https://")): value = "https://" + value
+        if value: view.setUrl(QUrl(value))
+
+    def update_ai_address_for(self, view, url):
+        if view is self.current_ai_view(): self.ai_address.setText(url.toString())
+
+    def update_ai_address(self, *_):
+        view = self.current_ai_view()
+        self.ai_address.setText(view.url().toString() if view else "")
+
+    def close_ai_tab(self, index):
+        view = self.ai_tabs.widget(index)
+        if view is self.openwebui_view: return
+        name = self.ai_tabs.tabText(index)
+        self.ai_tabs.removeTab(index)
+        if name in self.ai_views:
+            self.ai_views.pop(name, None)
+            view.deleteLater()
+            self.cfg["enabled_ai_services"] = [x for x in self.cfg.get("enabled_ai_services", []) if x != name]
+            self.cfg["ai_services"] = [x for x in self.cfg.get("ai_services", []) if x.get("name") != name]
+            save_cfg(self.cfg)
+
     def refresh(self):
-        self.cpu.set(f"{psutil.cpu_percent():.0f}%")
-        mem = psutil.virtual_memory()
-        self.ram.set(f"{mem.percent:.0f}% · {mem.used / 1024**3:.1f}/{mem.total / 1024**3:.1f} GB")
-        ng = nvidia_stats()
-        info = []
-        if ng:
-            self.gpu.set(f"{ng[0]['gpu_percent']}%")
-            info.extend(f"{x['name']}: GPU {x['gpu_percent']}% · VRAM {x['vram_used_mb']}/{x['vram_total_mb']} MB · {x['temperature_c']}°C · {x['power_w']} W" for x in ng)
-        else:
-            self.gpu.set("NVIDIA не обнаружена")
         gpu_url = server_url(self.cfg["servers"]["gpu"])
         if not gpu_url:
             self.agent.set("Адрес не задан")
-        else:
-            try:
-                response = requests.get(gpu_url.rstrip("/") + "/gpu", headers={"Authorization": "Bearer " + self.cfg.get("gpu_agent_token", "")}, timeout=2)
-                response.raise_for_status()
-                devices = response.json().get("devices", [])
-                self.agent.set(f"{len(devices)} AMD GPU" if devices else "Агент доступен; нет распознанных метрик")
-                info.extend(f"AMD GPU {d.get('index')}: GPU {d.get('gpu_percent', '—')}% · VRAM {d.get('vram_percent', '—')}% · {d.get('temperature_c', '—')}°C · {d.get('power_w', '—')} W" for d in devices)
-            except Exception:
-                self.agent.set("Нет подключения")
-        self.gpu_info.setText("\n".join(info) if info else "Нет данных GPU. Проверьте драйверы и настройки удалённого агента.")
-        self.status.setText("Опрос выполнен")
+            self.gpu_info.setText("Укажите адрес удалённого Linux ROCm Agent в настройках.")
+            return
+        if self.agent_worker_active: return
+        self.agent_worker_active = True
+        worker = AgentFetchWorker(gpu_url, self.cfg.get("gpu_agent_token", ""), self.proxy_map())
+        self.agent_worker = worker
+        worker.signals.finished.connect(self.on_agent_result)
+        self.thread_pool.start(worker)
+
+    def on_agent_result(self, payload, error):
+        self.agent_worker_active = False
+        if error:
+            self.agent.set("Нет подключения")
+            self.gpu_info.setText("Удалённый агент недоступен. Проверьте адрес, токен и соединение LAN/VPN.")
+            self.status.setText("Ошибка связи с GPU Agent")
+            return
+        devices = payload.get("devices", []) if isinstance(payload, dict) else []
+        self.agent.set(f"{len(devices)} AMD GPU" if devices else "Агент доступен · нет метрик")
+        info = [f"AMD GPU {d.get('index', '—')}: загрузка {d.get('gpu_percent', '—')}% · VRAM {d.get('vram_percent', '—')}% · температура {d.get('temperature_c', '—')}°C · мощность {d.get('power_w', '—')} W" for d in devices]
+        self.gpu_info.setText("\\n".join(info) if info else "Агент отвечает, но не вернул данные GPU.")
+        self.status.setText("Данные получены от удалённого ROCm Agent")
 
 app = QApplication(sys.argv)
 app.setStyleSheet("""
