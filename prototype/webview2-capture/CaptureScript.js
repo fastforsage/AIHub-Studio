@@ -381,7 +381,7 @@
     const host = location.hostname.toLowerCase();
     const isChatGpt = host === "chatgpt.com";
     if (isChatGpt) void captureChatGptConversationApi();
-    const found = isChatGpt && chatGptApiState !== "unavailable" ? [] : identifyMessages();
+    const found = isChatGpt && chatGptApiState === "ready" ? [] : identifyMessages();
     const detection = detectAdapter();
     const supported = Boolean(detection.adapter) || found.some(item => item.strategy === "semantic-fallback") ||
       (isChatGpt && chatGptApiState === "ready");
