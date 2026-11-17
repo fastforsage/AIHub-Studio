@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="AIHub Studio" Manufacturer="FastForsage" Version="0.1.0" UpgradeCode="B7C79E5A-6A13-4B65-8A1E-4DAA9E89B012" Scope="perMachine" Platform="x64">
+  <Package Name="AIHub Studio" Manufacturer="FastForsage" Version="0.1.0" UpgradeCode="B7C79E5A-6A13-4B65-8A1E-4DAA9E89B012" Scope="perMachine">
     <SummaryInformation Description="AIHub Studio for Windows 10 x64" Manufacturer="FastForsage" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of AIHub Studio is already installed." />
     <MediaTemplate EmbedCab="yes" />
@@ -13,13 +13,13 @@
   </Package>
   <Fragment>
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-      <Files Include="publish\**" />
+      <Files Include="publish\\**" />
     </ComponentGroup>
     <ComponentGroup Id="StartMenuShortcuts" Directory="ApplicationProgramsFolder">
       <Component Id="StartMenuShortcutComponent" Guid="*">
         <Shortcut Id="StartMenuShortcut" Name="AIHub Studio" Target="[INSTALLFOLDER]AIHubStudio.exe" WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
-        <RegistryValue Root="HKLM" Key="Software\FastForsage\AIHubStudio" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\\FastForsage\\AIHubStudio" Name="installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </ComponentGroup>
   </Fragment>
