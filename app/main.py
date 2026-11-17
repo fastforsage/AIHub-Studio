@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 import requests
 import psutil
 from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal, Qt
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem, QSplitter, QStackedWidget, QAbstractItemView, QDialog, QTextEdit, QDialogButtonBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem, QSplitter, QStackedWidget, QAbstractItemView, QDialog, QTextEdit, QDialogButtonBox, QMenu
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
@@ -340,6 +340,10 @@ class Main(QMainWindow):
         side_caption = QLabel("ВАШИ AI-ПОМОЩНИКИ")
         side_caption.setObjectName("sideCaption")
         side_layout.addWidget(side_caption)
+        self.service_search = QLineEdit()
+        self.service_search.setPlaceholderText("⌕  Найти AI-помощника")
+        self.service_search.textChanged.connect(self.filter_service_list)
+        side_layout.addWidget(self.service_search)
 
         self.service_list = QListWidget()
         self.service_list.setObjectName("serviceList")
@@ -348,6 +352,8 @@ class Main(QMainWindow):
         self.service_list.setDefaultDropAction(Qt.MoveAction)
         self.service_list.model().rowsMoved.connect(self.on_service_order_changed)
         self.service_list.itemClicked.connect(self.on_service_selected)
+        self.service_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.service_list.customContextMenuRequested.connect(self.service_context_menu)
         side_layout.addWidget(self.service_list, 1)
 
         side_divider = QFrame()
@@ -569,8 +575,9 @@ class Main(QMainWindow):
         available.update({x["name"]: x for x in self.cfg.get("ai_services", []) if x.get("name") and x.get("url")})
         enabled = list(dict.fromkeys(self.cfg.get("enabled_ai_services", [])))
         order = self.cfg.get("service_order", [])
+        favorites = set(self.cfg.get("favorite_services", []))
         original_positions = {name: index for index, name in enumerate(enabled)}
-        enabled.sort(key=lambda name: order.index(name) if name in order else len(order) + original_positions[name])
+        enabled.sort(key=lambda name: (0 if name in favorites else 1, order.index(name) if name in order else len(order) + original_positions[name]))
         self.ai_services_by_name = {name: available[name] for name in enabled if name in available}
         self.ai_views = self.ai_services_by_name
         self.cfg["ai_services"] = list(self.ai_services_by_name.values())
@@ -587,7 +594,7 @@ class Main(QMainWindow):
         heading.setData(Qt.UserRole, {"kind": "heading"})
         self.service_list.addItem(heading)
         for name, service in self.ai_services_by_name.items():
-            item = QListWidgetItem("✦   " + name)
+            item = QListWidgetItem(("★   " if name in favorites else "✦   ") + name)
             item.setData(Qt.UserRole, {"kind": "service", "name": name, "url": service["url"]})
             self.service_list.addItem(item)
             if name == selected: item.setSelected(True)
@@ -601,6 +608,38 @@ class Main(QMainWindow):
             self.service_list.setCurrentItem(open_item)
             self.current_service = "Open WebUI"
         self.service_list.blockSignals(False)
+        self.filter_service_list(self.service_search.text())
+
+    def filter_service_list(self, query):
+        query = (query or "").strip().casefold()
+        for row in range(self.service_list.count()):
+            item = self.service_list.item(row)
+            data = item.data(Qt.UserRole) or {}
+            if data.get("kind") == "heading":
+                item.setHidden(not any(
+                    query in (self.service_list.item(i).data(Qt.UserRole) or {}).get("name", "").casefold()
+                    for i in range(row + 1, self.service_list.count())
+                ) if query else False)
+            elif data.get("kind") == "service":
+                item.setHidden(query not in data.get("name", "").casefold())
+            else:
+                item.setHidden(False)
+
+    def service_context_menu(self, position):
+        item = self.service_list.itemAt(position)
+        if not item: return
+        data = item.data(Qt.UserRole) or {}
+        if data.get("kind") != "service": return
+        name = data.get("name", "")
+        favorites = set(self.cfg.get("favorite_services", []))
+        menu = QMenu(self)
+        action = menu.addAction("Убрать из избранного" if name in favorites else "В избранное")
+        if menu.exec(self.service_list.mapToGlobal(position)) == action:
+            if name in favorites: favorites.remove(name)
+            else: favorites.add(name)
+            self.cfg["favorite_services"] = sorted(favorites)
+            self.sync_ai_tabs()
+            save_cfg(self.cfg)
 
     def make_dashboard(self):
         widget = QWidget()
@@ -875,16 +914,22 @@ class Main(QMainWindow):
         data = item.data(Qt.UserRole) or {}
         kind = data.get("kind")
         if kind == "heading": return
+        old_name = self.current_service
+        if old_name and old_name != "Dockhand" and self.chat_view.url().isValid():
+            self.cfg.setdefault("service_last_urls", {})[old_name] = self.chat_view.url().toString()
         self.show_page("chat")
         self.current_service = "Open WebUI" if kind == "openwebui" else data.get("name", "")
         if kind == "openwebui":
-            url = server_url(self.cfg["servers"]["openwebui"])
+            base_url = server_url(self.cfg["servers"]["openwebui"])
         else:
-            url = data.get("url", "")
+            base_url = data.get("url", "")
+        url = self.cfg.get("service_last_urls", {}).get(self.current_service, base_url)
         self.page_title.setText(self.current_service or "AIHub Studio")
         self.ai_address.setText(url)
-        self.chat_view.setUrl(QUrl(url or "about:blank"))
+        if url and self.chat_view.url().toString() != url:
+            self.chat_view.setUrl(QUrl(url))
         logger.info("Выбран сервис: %s", self.current_service)
+        save_cfg(self.cfg)
 
     def select_openwebui(self):
         for row in range(self.service_list.count()):
@@ -897,6 +942,8 @@ class Main(QMainWindow):
     def show_page(self, page):
         indexes = {"chat": 0, "overview": 1, "catalog": 2, "settings": 3}
         if page == "dockhand":
+            if self.current_service != "Dockhand" and self.current_service:
+                self.cfg.setdefault("service_last_urls", {})[self.current_service] = self.chat_view.url().toString()
             self.stack.setCurrentWidget(self.chat_view)
             url = server_url(self.cfg["servers"]["dockhand"])
             self.current_service = "Dockhand"
@@ -920,6 +967,15 @@ class Main(QMainWindow):
         else:
             self.ai_address.setVisible(True)
             self.ai_go.setVisible(True)
+
+    def closeEvent(self, event):
+        try:
+            if self.current_service and self.current_service != "Dockhand":
+                self.cfg.setdefault("service_last_urls", {})[self.current_service] = self.chat_view.url().toString()
+            save_cfg(self.cfg)
+        except Exception:
+            logger.exception("Не удалось сохранить состояние перед закрытием")
+        super().closeEvent(event)
 
     def on_service_order_changed(self, *_):
         ordered = []
