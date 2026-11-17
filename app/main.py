@@ -403,7 +403,7 @@ class Main(QMainWindow):
         self.stack = QStackedWidget()
         self.chat_view = QWebEngineView()
         self.chat_view.setPage(QWebEnginePage(self.web_profile, self.chat_view))
-        self.chat_view.setFocusPolicy(Qt.StrongFocus)
+        self.chat_view.setFocusPolicy(Qt.ClickFocus)
         self.chat_view.urlChanged.connect(lambda qurl: self.update_ai_address_for(self.chat_view, qurl))
         self.chat_view.loadStarted.connect(lambda: logger.info("Загрузка страницы: %s", self.chat_view.url().toString()))
         self.chat_view.loadFinished.connect(lambda ok: logger.info("Загрузка завершена: %s", "успешно" if ok else "ошибка"))
@@ -696,6 +696,9 @@ class Main(QMainWindow):
         self.token.setEchoMode(QLineEdit.Password)
         self.token.setPlaceholderText("Bearer token для GPU Agent")
         token_form.addRow("GPU Agent token", self.token)
+        token_hint = QLabel("Токен нужен только для авторизованного GPU Agent. Он шифруется локально средствами Windows DPAPI; никаких запросов Windows Credential Manager и отдельных окон подтверждения нет.")
+        token_hint.setWordWrap(True)
+        token_form.addRow(token_hint)
         layout.addLayout(token_form)
         proxy_group = QGroupBox("Прокси для AI-сайтов и сетевых запросов")
         proxy_form = QFormLayout(proxy_group)
@@ -725,6 +728,7 @@ class Main(QMainWindow):
         return scroll
 
     def show_logs(self):
+        logger.info("Открыт просмотр журнала")
         dialog = QDialog(self)
         dialog.setWindowTitle("Журнал AIHub Studio")
         dialog.resize(900, 560)
