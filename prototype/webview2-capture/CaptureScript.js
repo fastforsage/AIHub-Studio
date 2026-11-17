@@ -79,7 +79,24 @@
           return role ? { el, role, strategy: "semantic-fallback" } : null;
         }).filter(Boolean);
     }
-    return [];
+    // Cross-provider semantic fallback. It only accepts elements whose own
+    // attributes identify a message role; it never scrapes arbitrary page text.
+    const semantic = [...document.querySelectorAll(
+      "[data-message-author-role], [data-testid*='message'], [data-testid*='turn'], [data-turn], [aria-label*='message' i]"
+    )].map(el => {
+      const explicit = (el.getAttribute("data-message-author-role") || "").toLowerCase();
+      const hint = [
+        el.getAttribute("data-testid") || "",
+        el.getAttribute("data-turn") || "",
+        el.getAttribute("aria-label") || "",
+        el.getAttribute("data-message-author-role") || ""
+      ].join(" ").toLowerCase();
+      const role = explicit === "user" || explicit === "assistant" ? explicit
+        : /user|human|prompt|question/.test(hint) ? "user"
+        : /assistant|model|response|answer/.test(hint) ? "assistant" : "";
+      return role ? { el, role, strategy: "semantic-fallback" } : null;
+    }).filter(Boolean);
+    return semantic;
   }
 
   function describeDomShape() {
@@ -112,8 +129,14 @@
     if (scans === 1) diagnostic("dom-probe", describeDomShape());
     const found = identifyMessages();
     const host = location.hostname.toLowerCase();
-    const supported = host.includes("chatgpt.com") || host.includes("openai.com") ||
-      host.includes("claude.ai") || host.includes("gemini.google.com");
+    const knownDomains = [
+      "chatgpt.com", "openai.com", "claude.ai", "gemini.google.com",
+      "qwen.ai", "deepseek.com", "kimi.com", "z.ai", "chatglm.cn",
+      "doubao.com", "yuanbao.tencent.com", "yiyan.baidu.com",
+      "copilot.microsoft.com", "perplexity.ai", "grok.com", "x.com"
+    ];
+    const supported = knownDomains.some(domain => host === domain || host.endsWith("." + domain)) ||
+      found.some(item => item.strategy === "semantic-fallback");
 
     if (found.length !== lastFoundCount || scans === 1 || scans % 20 === 0) {
       lastFoundCount = found.length;
