@@ -19,6 +19,7 @@ internal sealed class CaptureForm : Form
 {
     private readonly TextBox _address = new() { Dock = DockStyle.Fill, Text = "https://chatgpt.com" };
     private readonly Button _go = new() { Text = "Открыть", AutoSize = true };
+    private readonly Button _importAdapter = new() { Text = "Импорт адаптера JSON", AutoSize = true };
     private readonly Label _status = new() { AutoSize = true, Text = "Инициализация WebView2…" };
     private readonly Label _count = new() { AutoSize = true, Text = "В БД: 0 сообщений" };
     private readonly TextBox _diagnostics = new()
@@ -50,11 +51,13 @@ internal sealed class CaptureForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Padding = new Padding(8) };
+        var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Padding = new Padding(8) };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         toolbar.Controls.Add(_address, 0, 0);
         toolbar.Controls.Add(_go, 1, 0);
+        toolbar.Controls.Add(_importAdapter, 2, 0);
         var info = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8, 2, 8, 6) };
         info.Controls.Add(_status);
         info.Controls.Add(new Label { Text = "   •   ", AutoSize = true });
@@ -73,6 +76,7 @@ internal sealed class CaptureForm : Form
         _scriptPath = Path.Combine(AppContext.BaseDirectory, "CaptureScript.js");
 
         _go.Click += (_, _) => Navigate();
+        _importAdapter.Click += async (_, _) => await ImportAdapterFromFileAsync();
         _address.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { Navigate(); e.SuppressKeyPress = true; } };
         Shown += async (_, _) => await InitializeBrowserAsync();
         UpdateDiagnostics("Приложение запущено. Ожидание WebView2.");
@@ -151,6 +155,30 @@ internal sealed class CaptureForm : Form
         catch (Exception ex)
         {
             UpdateDiagnostics("ОШИБКА ВНЕДРЕНИЯ СКРИПТА: " + ex);
+        }
+    }
+
+    private async Task ImportAdapterFromFileAsync()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Filter = "JSON adapter (*.json)|*.json",
+            Title = "Импорт JSON-адаптера"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            var json = await File.ReadAllTextAsync(dialog.FileName);
+            await _adapterRegistry.ImportAdapterAsync(json);
+            UpdateDiagnostics($"JSON-адаптер импортирован и сохранён в SQLite: {Path.GetFileName(dialog.FileName)}");
+            MessageBox.Show(this, "Адаптер проверен и сохранён в каталоге SQLite.", "AIHub Studio",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            UpdateDiagnostics("ОШИБКА ИМПОРТА АДАПТЕРА: " + ex.Message);
+            MessageBox.Show(this, ex.Message, "Не удалось импортировать адаптер",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
