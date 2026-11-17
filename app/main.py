@@ -1,12 +1,13 @@
-import sys, os, json, subprocess
+import sys, os, json
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import psutil
 import requests
+import keyring
 from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal, Qt
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QTabWidget, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "AIHubStudio"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -20,6 +21,7 @@ DEFAULTS = {
         "gpu": {"scheme": "http", "host": "", "port": 8765, "path": ""}
     },
     "gpu_agent_token": "",
+    "proxy_url": "",
     "active_connection_profile": "Локальная сеть",
     "connection_profiles": {},
     "ai_services": [
@@ -109,12 +111,13 @@ class CatalogFetchSignals(QObject):
     finished = Signal(object, str)
 
 class CatalogFetchWorker(QRunnable):
-    def __init__(self):
+    def __init__(self, proxies=None):
         super().__init__()
+        self.proxies = proxies or {}
         self.signals = CatalogFetchSignals()
     def run(self):
         try:
-            response = requests.get(AI_CATALOG_URL, timeout=(5, 15))
+            response = requests.get(AI_CATALOG_URL, timeout=(5, 15), proxies=self.proxies)
             response.raise_for_status()
             services = normalize_ai_catalog(response.json())
             if not services:
@@ -141,23 +144,6 @@ def server_url(item):
     authority = host if port == default_port else f"{host}:{port}"
     path = item.get("path", "").strip("/")
     return f"{scheme}://{authority}" + (f"/{path}" if path else "")
-
-def nvidia_stats():
-    try:
-        p = subprocess.run(["nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=3)
-        if p.returncode:
-            return []
-        rows = []
-        for i, line in enumerate(p.stdout.splitlines()):
-            c = [x.strip() for x in line.split(",")]
-            if len(c) >= 6:
-                def num(x):
-                    try: return float(x)
-                    except ValueError: return None
-                rows.append({"name": c[0], "gpu_percent": num(c[1]), "vram_used_mb": num(c[2]), "vram_total_mb": num(c[3]), "temperature_c": num(c[4]), "power_w": num(c[5]), "index": i})
-        return rows
-    except Exception:
-        return []
 
 class Metric(QFrame):
     def __init__(self, title):
@@ -207,14 +193,14 @@ class CheckSignals(QObject):
     finished = Signal(str)
 
 class ConnectionCheck(QRunnable):
-    def __init__(self, url, token=""):
+    def __init__(self, url, token="", proxies=None):
         super().__init__()
-        self.url, self.token = url, token
+        self.url, self.token, self.proxies = url, token, (proxies or {})
         self.signals = CheckSignals()
     def run(self):
         try:
             headers = {"Authorization": "Bearer " + self.token} if self.token else {}
-            response = requests.get(self.url, headers=headers, timeout=(3, 5), stream=True)
+            response = requests.get(self.url, headers=headers, timeout=(3, 5), stream=True, proxies=self.proxies)
             code = response.status_code
             response.close()
             if code in (401, 403): result = f"Сервер доступен · HTTP {code}, нужна авторизация"
