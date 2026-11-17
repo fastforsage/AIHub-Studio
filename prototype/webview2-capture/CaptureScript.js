@@ -463,6 +463,35 @@
     });
   }
 
+
+  // Button-triggered snapshot: collect structural metadata only; never include chat text.
+  window.__aihubCollectDiagnostics = () => {
+    const detection = detectAdapter();
+    const candidates = identifyMessages().map(({ el, role, strategy, stableKey }, index) => {
+      const text = cleanText(el);
+      const key = stableKey || el.getAttribute("data-content-search-unit-key") ||
+        el.getAttribute("data-chatgpt-search-unit-key") || el.getAttribute("data-turn-key") || "";
+      return {
+        index, role, strategy: strategy || "unknown", tagName: el.tagName.toLowerCase(),
+        visible: Boolean(el.getClientRects().length), textLength: text.length,
+        contentHash: hash(text), stableKeyPresent: Boolean(key),
+        stableKey: key.slice(0, 160),
+        elementKey: elementKeys.get(el) || null,
+        candidateSent: sentContent.has(el)
+      };
+    });
+    return {
+      collectedAt: new Date().toISOString(), scriptVersion, href: location.origin +
+        (location.pathname.match(/^\\/c\\//) ? "/c/{conversation-id}" : location.pathname),
+      readyState: document.readyState, providerHost: location.hostname,
+      adapterId: detection.adapter?.id || "generic",
+      detectionConfidence: detection.confidence, signatureMatches: detection.signatureMatches,
+      scanCount: scans, apiState: chatGptApiState, apiInFlight: chatGptApiInFlight,
+      apiLastAttemptAgeMs: chatGptApiLastAttempt ? Date.now() - chatGptApiLastAttempt : null,
+      domShape: describeDomShape(), candidateCount: candidates.length, candidates
+    };
+  };
+
   window.__aihubSetAdapterCatalog = (catalog) => {
     if (!Array.isArray(catalog)) return;
     adapterCatalog = catalog;
