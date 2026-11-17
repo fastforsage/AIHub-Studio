@@ -37,11 +37,61 @@
     return (h >>> 0).toString(16);
   };
 
+  let adapterCatalog = Array.isArray(window.__aihubAdapterCatalog) ? window.__aihubAdapterCatalog : [];
+  const adapterForHost = (host) => adapterCatalog.find(adapter =>
+    (adapter.domains || []).some(domain => host === domain || host.endsWith("." + domain))
+  ) || null;
+
+  function inferRole(element, adapter) {
+    const explicit = (element.getAttribute("data-message-author-role") || "").toLowerCase();
+    const mapping = adapter?.roleMapping || {};
+    if (mapping[explicit]) return mapping[explicit];
+    if (explicit === "user" || explicit === "assistant") return explicit;
+    const hint = [
+      element.getAttribute("data-testid") || "",
+      element.getAttribute("data-turn") || "",
+      element.getAttribute("aria-label") || "",
+      element.className?.toString?.() || ""
+    ].join(" ").toLowerCase();
+    if (/user|human|prompt|question/.test(hint)) return mapping.user || "user";
+    if (/assistant|model|response|answer/.test(hint)) return mapping.assistant || "assistant";
+    return "";
+  }
+
+  function detectAdapter() {
+    const host = location.hostname.toLowerCase();
+    const adapter = adapterForHost(host);
+    if (!adapter) return { adapter: null, signatureMatches: 0, confidence: 0 };
+    let signatureMatches = 0;
+    for (const selector of adapter.domSignatures || []) {
+      try { if (document.querySelector(selector)) signatureMatches++; } catch (_) {}
+    }
+    const confidence = (adapter.domSignatures || []).length === 0
+      ? 0.7
+      : Math.min(1, 0.7 + 0.3 * signatureMatches / adapter.domSignatures.length);
+    return { adapter, signatureMatches, confidence };
+  }
+
   // PyreCrawl-inspired extraction ladder: precise provider selectors first,
   // then conservative semantic/test-id fallbacks. Keep extraction in the live
   // WebView2 session so the user's existing sign-in cookies remain available.
   function identifyMessages() {
     const host = location.hostname.toLowerCase();
+    const adapter = adapterForHost(host);
+    if (adapter?.messageSelectors?.length) {
+      const custom = [];
+      for (const selector of adapter.messageSelectors) {
+        try {
+          document.querySelectorAll(selector).forEach(el => {
+            const role = inferRole(el, adapter);
+            if (role) custom.push({ el, role, strategy: "json-adapter" });
+          });
+        } catch (error) {
+          diagnostic("adapter-selector-error", "JSON adapter contains an invalid CSS selector", { adapterId: adapter.id });
+        }
+      }
+      if (custom.length) return custom;
+    }
     if (host.includes("chatgpt.com") || host.includes("openai.com")) {
       const exact = [...document.querySelectorAll("[data-message-author-role]")].map(el => ({
         el, role: el.getAttribute("data-message-author-role"), strategy: "provider"
@@ -129,21 +179,17 @@
     if (scans === 1) diagnostic("dom-probe", describeDomShape());
     const found = identifyMessages();
     const host = location.hostname.toLowerCase();
-    const knownDomains = [
-      "chatgpt.com", "openai.com", "claude.ai", "gemini.google.com",
-      "qwen.ai", "deepseek.com", "kimi.com", "z.ai", "chatglm.cn",
-      "doubao.com", "yuanbao.tencent.com", "yiyan.baidu.com",
-      "copilot.microsoft.com", "perplexity.ai", "grok.com", "x.com"
-    ];
-    const supported = knownDomains.some(domain => host === domain || host.endsWith("." + domain)) ||
-      found.some(item => item.strategy === "semantic-fallback");
+    const detection = detectAdapter();
+    const supported = Boolean(detection.adapter) || found.some(item => item.strategy === "semantic-fallback");
 
     if (found.length !== lastFoundCount || scans === 1 || scans % 20 === 0) {
       lastFoundCount = found.length;
       diagnostic("scan", found.length
         ? "DOM-селекторы нашли элементы сообщений"
         : (supported ? "Поддерживаемый сайт открыт, но селекторы не нашли сообщения" : "Сайт пока не поддерживается"),
-        { providerHost: host, foundCount: found.length, scanCount: scans, supported, strategy: found[0]?.strategy || "none" });
+        { providerHost: host, adapterId: detection.adapter?.id || "generic", detectionConfidence: detection.confidence,
+          signatureMatches: detection.signatureMatches, foundCount: found.length, scanCount: scans, supported,
+          strategy: found[0]?.strategy || "none" });
     }
 
     found.forEach(({ el, role }, index) => {
@@ -177,6 +223,13 @@
       }
     });
   }
+
+  window.__aihubSetAdapterCatalog = (catalog) => {
+    if (!Array.isArray(catalog)) return;
+    adapterCatalog = catalog;
+    diagnostic("adapter-catalog-loaded", "Загружен JSON-каталог адаптеров", { adapterCount: adapterCatalog.length });
+    scan();
+  };
 
   const start = () => {
     diagnostic("script-start", "CaptureScript запущен");
