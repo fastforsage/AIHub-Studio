@@ -590,6 +590,7 @@ class Main(QMainWindow):
         self.cfg["ai_services"] = list(self.ai_services_by_name.values())
         if not hasattr(self, "service_list"): return
         selected = self.current_service
+        fallback_to_openwebui = bool(selected and selected not in self.ai_services_by_name and selected != "Open WebUI")
         self.service_list.blockSignals(True)
         self.service_list.clear()
         open_item = QListWidgetItem("⌂   Open WebUI")
@@ -615,6 +616,9 @@ class Main(QMainWindow):
             self.service_list.setCurrentItem(open_item)
         self.service_list.blockSignals(False)
         self.filter_service_list(self.service_search.text())
+        if fallback_to_openwebui:
+            self.current_service = ""
+            self.select_openwebui()
 
     def filter_service_list(self, query):
         query = (query or "").strip().casefold()
