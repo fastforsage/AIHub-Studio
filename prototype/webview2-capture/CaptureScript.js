@@ -10,6 +10,12 @@
   let lastFoundCount = -1;
   const elementKeys = new WeakMap();
   const sentContent = new WeakMap();
+  const scriptVersion = "2026.11.17-chatgpt-api-dom-v2";
+  let chatGptApiState = "unknown";
+  let chatGptApiInFlight = false;
+  let chatGptApiLastAttempt = 0;
+  let chatGptApiConversationUrl = "";
+  const apiSentContent = new Map();
 
   const diagnostic = (stage, detail, extra = {}) => {
     try {
@@ -75,6 +81,116 @@
   // PyreCrawl-inspired extraction ladder: precise provider selectors first,
   // then conservative semantic/test-id fallbacks. Keep extraction in the live
   // WebView2 session so the user's existing sign-in cookies remain available.
+  function extractApiMessageText(content) {
+    if (!content || typeof content !== "object") return "";
+    const parts = Array.isArray(content.parts) ? content.parts : [];
+    const textParts = parts.map(part => {
+      if (typeof part === "string") return part;
+      if (part && typeof part === "object") {
+        if (typeof part.text === "string") return part.text;
+        if (typeof part.content === "string") return part.content;
+      }
+      return "";
+    }).filter(Boolean);
+    if (!textParts.length && typeof content.text === "string") textParts.push(content.text);
+    return textParts.join("\n").replace(/\u00a0/g, " ").trim();
+  }
+
+  async function captureChatGptConversationApi() {
+    if (location.hostname.toLowerCase() !== "chatgpt.com") return;
+    const match = location.pathname.match(/^\\/c\\/([^/]+)/);
+    if (!match) return;
+    const conversationId = match[1];
+    const conversationUrl = location.origin + "/c/" + conversationId;
+    if (conversationUrl !== chatGptApiConversationUrl) {
+      chatGptApiConversationUrl = conversationUrl;
+      chatGptApiState = "unknown";
+      chatGptApiLastAttempt = 0;
+      apiSentContent.clear();
+    }
+    if (chatGptApiInFlight || Date.now() - chatGptApiLastAttempt < 8000) return;
+    chatGptApiLastAttempt = Date.now();
+    chatGptApiInFlight = true;
+    try {
+      const response = await fetch(location.origin + "/backend-api/conversation/" + encodeURIComponent(conversationId), {
+        method: "GET",
+        credentials: "include",
+        headers: { "Accept": "application/json" },
+        cache: "no-store"
+      });
+      if (!response.ok) {
+        chatGptApiState = "unavailable";
+        diagnostic("api-capture", "ChatGPT conversation endpoint вернул HTTP " + response.status, {
+          apiStatus: response.status, conversationId
+        });
+        return;
+      }
+      const payload = await response.json();
+      const mapping = payload && payload.mapping && typeof payload.mapping === "object" ? payload.mapping : null;
+      if (!mapping) {
+        chatGptApiState = "unavailable";
+        diagnostic("api-capture", "Ответ endpoint не содержит mapping; переключаюсь на DOM", { conversationId });
+        return;
+      }
+
+      const ordered = [];
+      const visited = new Set();
+      let cursor = payload.current_node;
+      while (cursor && mapping[cursor] && !visited.has(cursor)) {
+        visited.add(cursor);
+        const node = mapping[cursor];
+        ordered.push(node);
+        cursor = node.parent || null;
+      }
+      ordered.reverse();
+      if (!ordered.length) {
+        Object.values(mapping).filter(node => node && node.message)
+          .sort((a, b) => (a.message.create_time || 0) - (b.message.create_time || 0))
+          .forEach(node => ordered.push(node));
+      }
+
+      let captured = 0;
+      for (const node of ordered) {
+        const message = node && node.message;
+        if (!message || !message.author) continue;
+        const role = message.author.role;
+        if (role !== "user" && role !== "assistant") continue;
+        if (message.metadata?.is_visually_hidden_from_conversation === true) continue;
+        if (role === "assistant" && message.recipient && message.recipient !== "all") continue;
+        const contentType = message.content?.content_type || "";
+        if (contentType !== "text" && contentType !== "multimodal_text") continue;
+        const text = extractApiMessageText(message.content);
+        if (!text || text.length < 2) continue;
+        const messageKey = message.id || node.id;
+        if (!messageKey) continue;
+        if (apiSentContent.get(messageKey) === text) continue;
+        apiSentContent.set(messageKey, text);
+        window.chrome.webview.postMessage(JSON.stringify({
+          type: "aihub-message",
+          providerHost: "chatgpt.com",
+          url: location.href,
+          role,
+          messageKey,
+          text,
+          capturedAt: new Date().toISOString(),
+          extractionStrategy: "chatgpt-conversation-api"
+        }));
+        captured++;
+      }
+      chatGptApiState = "ready";
+      diagnostic("api-capture", "История ChatGPT прочитана из авторизованной сессии", {
+        conversationId, pathNodes: ordered.length, messagesSent: captured, apiStatus: response.status
+      });
+    } catch (error) {
+      chatGptApiState = "unavailable";
+      diagnostic("api-capture", "Не удалось прочитать conversation API; использую DOM fallback", {
+        error: String(error).slice(0, 180), conversationId
+      });
+    } finally {
+      chatGptApiInFlight = false;
+    }
+  }
+
   function identifyMessages() {
     const host = location.hostname.toLowerCase();
     const adapter = adapterForHost(host);
@@ -92,16 +208,38 @@
       }
       if (custom.length) return custom;
     }
-    if (host.includes("chatgpt.com") || host.includes("openai.com")) {
+    if (host === "chatgpt.com" || host.endsWith(".openai.com")) {
+      const timeline = document.querySelector('[data-app-action-timeline-scroll][role="region"]');
+      const scope = timeline || document;
+      const modern = [...scope.querySelectorAll(
+        '[data-content-search-unit-key$=":user"], [data-content-search-unit-key$=":assistant"], ' +
+        '[data-chatgpt-search-unit-key$=":user"], [data-chatgpt-search-unit-key$=":assistant"], ' +
+        '[data-user-message-bubble="true"]'
+      )].map(el => {
+        const unitKey = el.getAttribute("data-content-search-unit-key") ||
+          el.getAttribute("data-chatgpt-search-unit-key") || "";
+        const role = unitKey.endsWith(":user") || el.getAttribute("data-user-message-bubble") === "true"
+          ? "user" : unitKey.endsWith(":assistant") ? "assistant" : "";
+        return role ? { el, role, strategy: "chatgpt-app-shell-dom" } : null;
+      }).filter(Boolean);
+      if (modern.length) {
+        const units = new Set(modern.filter(x =>
+          x.el.hasAttribute("data-content-search-unit-key") || x.el.hasAttribute("data-chatgpt-search-unit-key")
+        ).map(x => x.el));
+        return modern.filter(x => x.el.getAttribute("data-user-message-bubble") !== "true" ||
+          ![...x.el.parentElement?.closest?.("[data-content-search-unit-key], [data-chatgpt-search-unit-key]") ? [x.el.parentElement.closest("[data-content-search-unit-key], [data-chatgpt-search-unit-key]")] : []].some(parent => units.has(parent)));
+      }
+
       const exact = [...document.querySelectorAll("[data-message-author-role]")].map(el => ({
-        el, role: el.getAttribute("data-message-author-role"), strategy: "provider"
-      }));
+        el, role: el.getAttribute("data-message-author-role"), strategy: "provider-legacy"
+      })).filter(x => x.role === "user" || x.role === "assistant");
       if (exact.length) return exact;
       const fallback = [...document.querySelectorAll(
-        '[data-testid*="conversation-turn"], [data-testid*="message"], [data-turn], [aria-label*="message" i]'
+        '[data-testid*="conversation-turn"], [data-testid*="message"], [data-test-id*="message"], [data-turn], [aria-label*="message" i]'
       )].map(el => {
         const hint = [
           el.getAttribute("data-testid") || "",
+          el.getAttribute("data-test-id") || "",
           el.getAttribute("data-turn") || "",
           el.getAttribute("aria-label") || "",
           el.getAttribute("data-message-author-role") || ""
@@ -112,8 +250,6 @@
           : /(^|[^a-z])(assistant|model|response|answer)([^a-z]|$)/.test(hint) ? "assistant" : "";
         return role ? { el, role, strategy: "semantic-fallback" } : null;
       }).filter(Boolean);
-      // Do not stop at an empty provider-specific fallback: let the shared
-      // semantic recognizer inspect the remaining supported role attributes.
       if (fallback.length) return fallback;
     }
     if (host.includes("claude.ai")) {
@@ -192,6 +328,13 @@
       "contenteditable=" + count("[contenteditable='true']"),
       "openShadowRoots=" + shadowRoots,
       "main=" + count("main"),
+      "timeline-region=" + count('[data-app-action-timeline-scroll][role="region"]'),
+      "user-bubble=" + count('[data-user-message-bubble="true"]'),
+      "content-unit-user=" + count('[data-content-search-unit-key$=":user"]'),
+      "content-unit-assistant=" + count('[data-content-search-unit-key$=":assistant"]'),
+      "search-unit=" + count("[data-chatgpt-search-unit-key]"),
+      "turn-key=" + count("[data-turn-key]"),
+      "test-id-hyphen=" + count("[data-test-id]"),
       "article=" + count("article"),
       "role=article=" + count('[role="article"]'),
       "data-testid=" + count("[data-testid]"),
@@ -206,10 +349,13 @@
   function scan() {
     scans++;
     // Refresh the structural probe after hydration; the first document-created\n    // scan often sees only the application shell. Never include message text.\n    if (scans === 1 || scans % 20 === 0) diagnostic("dom-probe", describeDomShape(), { scanCount: scans });
-    const found = identifyMessages();
     const host = location.hostname.toLowerCase();
+    const isChatGpt = host === "chatgpt.com";
+    if (isChatGpt) void captureChatGptConversationApi();
+    const found = isChatGpt && chatGptApiState !== "unavailable" ? [] : identifyMessages();
     const detection = detectAdapter();
-    const supported = Boolean(detection.adapter) || found.some(item => item.strategy === "semantic-fallback");
+    const supported = Boolean(detection.adapter) || found.some(item => item.strategy === "semantic-fallback") ||
+      (isChatGpt && chatGptApiState === "ready");
 
     if (found.length !== lastFoundCount || scans === 1 || scans % 20 === 0) {
       lastFoundCount = found.length;
@@ -261,7 +407,7 @@
   };
 
   const start = () => {
-    diagnostic("script-start", "CaptureScript запущен");
+    diagnostic("script-start", "CaptureScript запущен", { scriptVersion });
     scan();
     if (!document.documentElement) {
       diagnostic("dom-missing", "document.documentElement пока отсутствует");
