@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="AIHub Studio WebView2 Capture Prototype"
+    Manufacturer="FastForsage"
+    Version="0.1.0"
+    UpgradeCode="D2A6C6F1-7C2D-4E9A-9B1E-5F7C3A8D2041"
+    Scope="perMachine">
+    <SummaryInformation Description="AIHub Studio WebView2 Capture Prototype for Windows x64" Manufacturer="FastForsage" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of the WebView2 Capture Prototype is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Feature Id="MainFeature" Title="WebView2 Capture Prototype" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="StartMenuShortcuts" />
+    </Feature>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="AIHub Studio WebView2 Capture Prototype" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="AIHub Studio WebView2 Capture Prototype" />
+    </StandardDirectory>
+  </Package>
+  <Fragment>
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="..\\..\\publish\\**" />
+    </ComponentGroup>
+    <ComponentGroup Id="StartMenuShortcuts" Directory="ApplicationProgramsFolder">
+      <Component Id="StartMenuShortcutComponent" Guid="*">
+        <Shortcut
+          Id="StartMenuShortcut"
+          Name="AIHub Studio WebView2 Capture Prototype"
+          Target="[INSTALLFOLDER]AIHub.WebView2Capture.exe"
+          WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\\FastForsage\\AIHubStudioWebView2Capture" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
