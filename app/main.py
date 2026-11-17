@@ -136,6 +136,7 @@ def load_cfg():
     cfg["gpu_agent_token"] = profiles[active].get("gpu_agent_token", cfg.get("gpu_agent_token", ""))
     secrets = load_secret_store()
     cfg["proxy_url"] = secrets.get("proxy_url", cfg.get("proxy_url", ""))
+    cfg["service_last_urls"] = secrets.get("service_last_urls", cfg.get("service_last_urls", {}))
     for profile_name, profile_data in cfg["connection_profiles"].items():
         profile_data["gpu_agent_token"] = secrets.get("gpu_agent_tokens", {}).get(profile_name, profile_data.get("gpu_agent_token", ""))
     cfg["gpu_agent_token"] = cfg["connection_profiles"][active].get("gpu_agent_token", cfg.get("gpu_agent_token", ""))
@@ -195,7 +196,7 @@ class CatalogFetchWorker(QRunnable):
             self.signals.finished.emit([], str(exc))
 
 def save_cfg(cfg):
-    clean = json.loads(json.dumps({k: v for k, v in cfg.items() if k not in ("dockhand_url", "gpu_agent_url", "gpu_agent_token", "proxy_url")}))
+    clean = json.loads(json.dumps({k: v for k, v in cfg.items() if k not in ("dockhand_url", "gpu_agent_url", "gpu_agent_token", "proxy_url", "service_last_urls")}))
     clean["ai_services"] = [x for x in clean.get("ai_services", []) if x.get("name", "").lower() != "open webui"]
     active = clean.get("active_connection_profile", "Локальная сеть")
     profiles = clean.setdefault("connection_profiles", {})
@@ -205,7 +206,7 @@ def save_cfg(cfg):
         token = profile_data.get("gpu_agent_token", "")
         if token: token_secrets[profile_name] = token
         profile_data.pop("gpu_agent_token", None)
-    save_secret_store({"proxy_url": cfg.get("proxy_url", ""), "gpu_agent_tokens": token_secrets})
+    save_secret_store({"proxy_url": cfg.get("proxy_url", ""), "gpu_agent_tokens": token_secrets, "service_last_urls": cfg.get("service_last_urls", {})})
     clean["proxy_configured"] = bool(cfg.get("proxy_url", ""))
     CFG.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -411,7 +412,7 @@ class Main(QMainWindow):
         self.chat_view.setPage(QWebEnginePage(self.web_profile, self.chat_view))
         self.chat_view.setFocusPolicy(Qt.ClickFocus)
         self.chat_view.urlChanged.connect(lambda qurl: self.update_ai_address_for(self.chat_view, qurl))
-        self.chat_view.loadStarted.connect(lambda: logger.info("Загрузка страницы: %s", self.chat_view.url().toString()))
+        self.chat_view.loadStarted.connect(lambda: logger.info("Загрузка страницы: %s", self.chat_view.url().host()))
         self.chat_view.loadFinished.connect(lambda ok: logger.info("Загрузка завершена: %s", "успешно" if ok else "ошибка"))
         self.openwebui_view = self.chat_view
         self.dock = self.chat_view
