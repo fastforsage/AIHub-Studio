@@ -21,7 +21,7 @@ internal sealed class AdapterRegistry
 {
     private static readonly HashSet<string> AllowedStrategies = new(StringComparer.OrdinalIgnoreCase)
     {
-        "provider_dom", "semantic_dom", "clipboard"
+        "provider_dom", "semantic_dom"
     };
 
     private readonly string _connectionString;
