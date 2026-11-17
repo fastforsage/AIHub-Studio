@@ -211,27 +211,23 @@
     if (host === "chatgpt.com" || host.endsWith(".openai.com")) {
       const timeline = document.querySelector('[data-app-action-timeline-scroll][role="region"]');
       const scope = timeline || document;
-      const modern = [...scope.querySelectorAll(
-        '[data-content-search-unit-key$=":user"], [data-content-search-unit-key$=":assistant"], ' +
-        '[data-chatgpt-search-unit-key$=":user"], [data-chatgpt-search-unit-key$=":assistant"], ' +
-        '[data-user-message-bubble="true"]'
-      )].map(el => {
+      let modernNodes = [...scope.querySelectorAll(
+        '[data-content-search-unit-key$=":user"], [data-content-search-unit-key$=":assistant"]'
+      )];
+      if (!modernNodes.length) {
+        modernNodes = [...scope.querySelectorAll(
+          '[data-chatgpt-search-unit-key$=":user"], [data-chatgpt-search-unit-key$=":assistant"]'
+        )];
+      }
+      if (!modernNodes.length) modernNodes = [...scope.querySelectorAll('[data-user-message-bubble="true"]')];
+      const modern = modernNodes.map(el => {
         const unitKey = el.getAttribute("data-content-search-unit-key") ||
           el.getAttribute("data-chatgpt-search-unit-key") || "";
         const role = unitKey.endsWith(":user") || el.getAttribute("data-user-message-bubble") === "true"
           ? "user" : unitKey.endsWith(":assistant") ? "assistant" : "";
         return role ? { el, role, strategy: "chatgpt-app-shell-dom" } : null;
       }).filter(Boolean);
-      if (modern.length) {
-        const units = new Set(modern.filter(x =>
-          x.el.hasAttribute("data-content-search-unit-key") || x.el.hasAttribute("data-chatgpt-search-unit-key")
-        ).map(x => x.el));
-        return modern.filter(x => {
-          if (x.el.getAttribute("data-user-message-bubble") !== "true") return true;
-          const parentUnit = x.el.parentElement?.closest("[data-content-search-unit-key], [data-chatgpt-search-unit-key]");
-          return !parentUnit || !units.has(parentUnit);
-        });
-      }
+      if (modern.length) return modern;
 
       const exact = [...document.querySelectorAll("[data-message-author-role]")].map(el => ({
         el, role: el.getAttribute("data-message-author-role"), strategy: "provider-legacy"
