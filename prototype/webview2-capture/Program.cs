@@ -291,11 +291,15 @@ internal sealed class CaptureForm : Form
 
         if (stage == "dom-probe")
             _domProbeDiagnostic = $"JS [dom-probe]: {detail}";
-        var extra = stage == "scan"
-            ? $" | provider={GetString(root, "providerHost")} | adapter={GetString(root, "adapterId")} | confidence={GetString(root, "detectionConfidence")} | strategy={GetString(root, "strategy")} | найдено={_domFound} | scans={_scanCount}"
-            : stage == "message-sent"
-                ? $" | role={GetString(root, "role")} | chars={GetInt(root, "textLength")}"
-                : "";
+        var extra = stage == "script-start"
+            ? $" | version={GetString(root, "scriptVersion", "unknown")}"
+            : stage == "scan"
+                ? $" | provider={GetString(root, "providerHost")} | adapter={GetString(root, "adapterId")} | confidence={GetString(root, "detectionConfidence")} | strategy={GetString(root, "strategy")} | найдено={_domFound} | scans={_scanCount}"
+                : stage == "message-sent"
+                    ? $" | role={GetString(root, "role")} | chars={GetInt(root, "textLength")}"
+                    : stage == "api-capture"
+                        ? $" | messagesSent={GetInt(root, "messagesSent")} | apiStatus={GetInt(root, "apiStatus")}"
+                        : "";
         UpdateDiagnostics($"JS [{stage}]: {detail}{extra} | {url}");
     }
 
