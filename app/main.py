@@ -135,7 +135,7 @@ class CatalogFetchWorker(QRunnable):
             self.signals.finished.emit([], str(exc))
 
 def save_cfg(cfg):
-    clean = {k: v for k, v in cfg.items() if k not in ("dockhand_url", "gpu_agent_url", "gpu_agent_token", "proxy_url")}
+    clean = json.loads(json.dumps({k: v for k, v in cfg.items() if k not in ("dockhand_url", "gpu_agent_url", "gpu_agent_token", "proxy_url")}))
     clean["ai_services"] = [x for x in clean.get("ai_services", []) if x.get("name", "").lower() != "open webui"]
     active = clean.get("active_connection_profile", "Локальная сеть")
     profiles = clean.setdefault("connection_profiles", {})
@@ -292,6 +292,7 @@ class Main(QMainWindow):
         self.tabs.addTab(ai_hub, "AI Hub")
         self.openwebui_view = QWebEngineView()
         self.openwebui_view.setPage(QWebEnginePage(self.web_profile, self.openwebui_view))
+        self.openwebui_view.urlChanged.connect(lambda qurl, v=self.openwebui_view: self.update_ai_address_for(v, qurl))
         self.ai_tabs.addTab(self.openwebui_view, "Open WebUI")
         available = {x["name"]: x for x in self.ai_catalog}
         available.update({x["name"]: x for x in self.cfg["ai_services"] if x.get("name") and x.get("url")})
@@ -736,19 +737,27 @@ class Main(QMainWindow):
 
 app = QApplication(sys.argv)
 app.setStyleSheet("""
-QWidget { background:#10141c; color:#e7edf7; font-size:13px; }
-QMainWindow { background:#0b0f16; }
-QTabWidget::pane { border:1px solid #263244; }
-QTabBar::tab { background:#171e2b; padding:12px 18px; margin:2px; }
-QTabBar::tab:selected { background:#26364d; }
-QFrame#metric, QGroupBox { background:#171f2d; border:1px solid #29384d; border-radius:10px; padding:12px; }
-QFrame#metric { min-height:90px; }
-QLabel#metricValue { font-size:22px; font-weight:600; color:#79d6bd; }
-QLabel#heading { font-size:20px; font-weight:700; }
-QLabel#info { background:#171f2d; border-radius:10px; padding:18px; font-size:15px; }
-QLineEdit, QComboBox { background:#171f2d; border:1px solid #34445b; padding:9px; border-radius:6px; }
-QPushButton { background:#315d85; border:0; padding:10px 16px; border-radius:6px; }
-QPushButton:hover { background:#4076a6; }
+QWidget { background:#11151d; color:#e8edf5; font-family:"Segoe UI"; font-size:13px; }
+QMainWindow { background:#0b0e14; }
+QTabWidget::pane { border:1px solid #252d3b; border-radius:12px; top:-1px; background:#111722; }
+QTabBar::tab { background:#171e2a; color:#aeb9c9; padding:12px 20px; margin:3px 3px 0 0; border-top-left-radius:9px; border-top-right-radius:9px; }
+QTabBar::tab:selected { background:#26364b; color:#ffffff; }
+QTabBar::tab:hover:!selected { background:#202b3a; }
+QFrame#metric, QGroupBox { background:#171f2c; border:1px solid #2b3749; border-radius:14px; padding:14px; }
+QFrame#metric { min-height:105px; }
+QLabel#metricValue { font-size:25px; font-weight:700; color:#79dfc3; }
+QLabel#heading { font-size:22px; font-weight:700; color:#f2f5fa; }
+QLabel#info { background:#171f2c; border:1px solid #2b3749; border-radius:14px; padding:22px; font-size:15px; }
+QLineEdit, QComboBox { background:#0f1520; border:1px solid #344257; padding:10px 12px; border-radius:8px; selection-background-color:#426b91; }
+QLineEdit:focus, QComboBox:focus { border:1px solid #68a9d8; }
+QListWidget { background:#121925; border:1px solid #29364a; border-radius:12px; padding:8px; }
+QListWidget::item { padding:10px; border-radius:7px; }
+QListWidget::item:selected { background:#29415b; }
+QPushButton { background:#2e638e; border:1px solid #3d79a8; padding:10px 16px; border-radius:8px; font-weight:600; }
+QPushButton:hover { background:#397bab; }
+QPushButton:pressed { background:#234e72; }
+QScrollArea { border:0; }
+QGroupBox::title { subcontrol-origin:margin; left:12px; padding:0 6px; color:#91b9d7; font-weight:600; }
 """)
 window = Main()
 window.show()
