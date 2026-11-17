@@ -14,6 +14,6 @@
   <ItemGroup>
     <Content Include="CaptureScript.js" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="adapter-definition.schema.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="adapters\\**\\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="adapters/**/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
