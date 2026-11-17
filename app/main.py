@@ -282,8 +282,18 @@ class Main(QMainWindow):
         self.catalog_search.textChanged.connect(self.populate_ai_catalog)
         self.catalog_category = QComboBox()
         self.catalog_category.currentTextChanged.connect(self.populate_ai_catalog)
+        self.catalog_pricing = QComboBox()
+        self.catalog_pricing.currentTextChanged.connect(self.populate_ai_catalog)
+        self.catalog_privacy = QComboBox()
+        self.catalog_privacy.currentTextChanged.connect(self.populate_ai_catalog)
+        self.catalog_login = QComboBox()
+        self.catalog_login.addItems(["Любой доступ", "Требуется вход", "Без входа"])
+        self.catalog_login.currentTextChanged.connect(self.populate_ai_catalog)
         filters.addWidget(self.catalog_search, 2)
         filters.addWidget(self.catalog_category, 1)
+        filters.addWidget(self.catalog_pricing, 1)
+        filters.addWidget(self.catalog_privacy, 1)
+        filters.addWidget(self.catalog_login, 1)
         layout.addLayout(filters)
 
         self.catalog_list = QListWidget()
@@ -319,16 +329,26 @@ class Main(QMainWindow):
     def populate_ai_catalog(self, *_):
         if not hasattr(self, "catalog_list"):
             return
+        def refill(combo, options, default):
+            current = combo.currentText() if combo.count() else default
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItems(options)
+            combo.setCurrentText(current if current in options else default)
+            combo.blockSignals(False)
+
         categories = ["Все категории"] + sorted({x["category"] for x in self.ai_catalog})
-        current = self.catalog_category.currentText() if self.catalog_category.count() else "Все категории"
-        self.catalog_category.blockSignals(True)
-        self.catalog_category.clear()
-        self.catalog_category.addItems(categories)
-        self.catalog_category.setCurrentText(current if current in categories else "Все категории")
-        self.catalog_category.blockSignals(False)
+        prices = ["Любая цена"] + sorted({x["pricing"] for x in self.ai_catalog})
+        privacy_values = ["Любая приватность"] + sorted({x["privacy"] for x in self.ai_catalog})
+        refill(self.catalog_category, categories, "Все категории")
+        refill(self.catalog_pricing, prices, "Любая цена")
+        refill(self.catalog_privacy, privacy_values, "Любая приватность")
 
         query = self.catalog_search.text().strip().casefold()
         category = self.catalog_category.currentText()
+        pricing = self.catalog_pricing.currentText()
+        privacy = self.catalog_privacy.currentText()
+        login = self.catalog_login.currentText()
         enabled = set(self.cfg.get("enabled_ai_services", []))
         self.catalog_list.blockSignals(True)
         self.catalog_list.clear()
@@ -338,7 +358,15 @@ class Main(QMainWindow):
                 continue
             if category != "Все категории" and service["category"] != category:
                 continue
-            label = f'{service["name"]}  ·  {service["category"]}  ·  {service["pricing"]}  ·  privacy: {service["privacy"]}'
+            if pricing != "Любая цена" and service["pricing"] != pricing:
+                continue
+            if privacy != "Любая приватность" and service["privacy"] != privacy:
+                continue
+            if login == "Требуется вход" and not service["login_required"]:
+                continue
+            if login == "Без входа" and service["login_required"]:
+                continue
+            label = f'{service["name"]}  ·  {service["category"]}  ·  {service["pricing"]}  ·  privacy: {service["privacy"]}  ·  login: {"yes" if service["login_required"] else "no"}'
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, service)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
