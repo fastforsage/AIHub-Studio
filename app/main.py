@@ -28,7 +28,7 @@ DEFAULTS = {
         {"name": "Gemini", "url": "https://gemini.google.com"},
         {"name": "OpenRouter", "url": "https://openrouter.ai"}
     ],
-    "enabled_ai_services": []
+    "enabled_ai_services": ["ChatGPT", "Claude", "Gemini", "OpenRouter"]
 }
 
 def split_legacy_url(value, default_scheme, default_port):
@@ -80,30 +80,29 @@ def load_ai_catalog_cache():
         return []
 
 def normalize_ai_catalog(raw):
-    if not isinstance(raw, dict):
-        raise ValueError("Каталог должен быть JSON-объектом с категориями.")
     result, seen = [], set()
-    for category, entries in raw.items():
-        if not isinstance(entries, list):
+    if isinstance(raw, list):
+        entries = [(str(item.get("category", "other")), item, "url") for item in raw if isinstance(item, dict)]
+    elif isinstance(raw, dict):
+        entries = [(str(category), item, "website") for category, items in raw.items() if isinstance(items, list) for item in items if isinstance(item, dict)]
+    else:
+        raise ValueError("Каталог должен быть JSON-объектом с категориями или нормализованным списком.")
+    for category, item, url_key in entries:
+        name = str(item.get("name", "")).strip()
+        url = str(item.get(url_key, "")).strip()
+        if not name or not url.startswith(("https://", "http://")):
             continue
-        for item in entries:
-            if not isinstance(item, dict):
-                continue
-            name = str(item.get("name", "")).strip()
-            url = str(item.get("website", "")).strip()
-            if not name or not url.startswith(("https://", "http://")):
-                continue
-            key = name.casefold()
-            if key in seen:
-                continue
-            seen.add(key)
-            result.append({
-                "name": name, "url": url, "category": str(category),
-                "pricing": str(item.get("pricing", "unknown")),
-                "privacy": str(item.get("privacy", "unknown")),
-                "login_required": bool(item.get("login_required", False)),
-                "best_for": item.get("best_for", []) if isinstance(item.get("best_for", []), list) else []
-            })
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({
+            "name": name, "url": url, "category": category,
+            "pricing": str(item.get("pricing", "unknown")),
+            "privacy": str(item.get("privacy", "unknown")),
+            "login_required": bool(item.get("login_required", False)),
+            "best_for": item.get("best_for", []) if isinstance(item.get("best_for", []), list) else []
+        })
     return result
 
 class CatalogFetchSignals(QObject):
