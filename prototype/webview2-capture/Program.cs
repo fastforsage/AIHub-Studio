@@ -102,7 +102,7 @@ internal sealed class CaptureForm : Form
         _diagnostics.Text =
             $"Браузер: {(_web.CoreWebView2 is null ? "не готов" : "готов")} | Скрипт зарегистрирован: {_captureScriptRegistered}\r\n" +
             $"DOM: найдено {_domFound} | сканирований {_scanCount} | Получено событий: {_receivedCount} | Записей/обновлений SQLite: {_savedEvents}\r\n" +
-            $"URL: {_web.Source?.ToString() ?? "(нет)"}\r\n{_domProbeDiagnostic}\r\n{_lastDiagnostic}";
+            $"URL: {_web.Source?.ToString() ?? "(нет)"}\r\nЛог: {_logPath}\\r\\n{_domProbeDiagnostic}\r\n{_lastDiagnostic}";
     }
 
     private async Task InitializeBrowserAsync()
