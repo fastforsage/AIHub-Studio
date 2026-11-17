@@ -570,7 +570,7 @@ class Main(QMainWindow):
             return
         button.setEnabled(False)
         status.setText("Проверяем…")
-        worker = ConnectionCheck(url, token, self.proxy_map())
+        worker = ConnectionCheck(url, token, {})
         self.check_workers.append(worker)
         def done(message, b=button, st=status, w=worker):
             st.setText(message)
@@ -726,7 +726,7 @@ class Main(QMainWindow):
             return
         if self.agent_worker_active: return
         self.agent_worker_active = True
-        worker = AgentFetchWorker(gpu_url, self.cfg.get("gpu_agent_token", ""), self.proxy_map())
+        worker = AgentFetchWorker(gpu_url, self.cfg.get("gpu_agent_token", ""), {})
         self.agent_worker = worker
         worker.signals.finished.connect(self.on_agent_result)
         self.thread_pool.start(worker)
