@@ -98,7 +98,7 @@
 
   async function captureChatGptConversationApi() {
     if (location.hostname.toLowerCase() !== "chatgpt.com") return;
-    const match = location.pathname.match(/^\\/c\\/([^/]+)/);
+    const match = location.pathname.match(/^\/c\/([^/]+)/);
     if (!match) return;
     const conversationId = match[1];
     const conversationUrl = location.origin + "/c/" + conversationId;
