@@ -20,6 +20,12 @@ def _dpapi_transform(data, decrypt=False):
     target = DATA_BLOB()
     crypt = ctypes.windll.crypt32
     kernel = ctypes.windll.kernel32
+    crypt.CryptProtectData.argtypes = [ctypes.POINTER(DATA_BLOB), ctypes.c_wchar_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(DATA_BLOB)]
+    crypt.CryptProtectData.restype = ctypes.c_int
+    crypt.CryptUnprotectData.argtypes = [ctypes.POINTER(DATA_BLOB), ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(DATA_BLOB)]
+    crypt.CryptUnprotectData.restype = ctypes.c_int
+    kernel.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel.LocalFree.restype = ctypes.c_void_p
     if decrypt:
         ok = crypt.CryptUnprotectData(ctypes.byref(source), None, None, None, None, 0, ctypes.byref(target))
     else:
@@ -29,7 +35,7 @@ def _dpapi_transform(data, decrypt=False):
     try:
         return ctypes.string_at(target.pbData, target.cbData)
     finally:
-        kernel.LocalFree(target.pbData)
+        kernel.LocalFree(ctypes.cast(target.pbData, ctypes.c_void_p))
 
 def load_secret_store():
     path = CONFIG_DIR / "secrets.dpapi"
@@ -299,6 +305,7 @@ class Main(QMainWindow):
         self.thread_pool = QThreadPool.globalInstance()
         self.check_workers = []
         self.agent_worker_active = False
+        self.last_agent_error = None
         self.current_service = "Open WebUI"
         self.web_profile = QWebEngineProfile("AIHubStudio", self)
         web_data = CONFIG_DIR / "web-profile"
@@ -562,7 +569,8 @@ class Main(QMainWindow):
         available.update({x["name"]: x for x in self.cfg.get("ai_services", []) if x.get("name") and x.get("url")})
         enabled = list(dict.fromkeys(self.cfg.get("enabled_ai_services", [])))
         order = self.cfg.get("service_order", [])
-        enabled.sort(key=lambda name: order.index(name) if name in order else len(order) + enabled.index(name))
+        original_positions = {name: index for index, name in enumerate(enabled)}
+        enabled.sort(key=lambda name: order.index(name) if name in order else len(order) + original_positions[name])
         self.ai_services_by_name = {name: available[name] for name in enabled if name in available}
         self.ai_views = self.ai_services_by_name
         self.cfg["ai_services"] = list(self.ai_services_by_name.values())
@@ -572,6 +580,7 @@ class Main(QMainWindow):
         self.service_list.clear()
         open_item = QListWidgetItem("⌂   Open WebUI")
         open_item.setData(Qt.UserRole, {"kind": "openwebui"})
+        open_item.setFlags(open_item.flags() & ~Qt.ItemIsDragEnabled)
         self.service_list.addItem(open_item)
         heading = QListWidgetItem("ОБЛАЧНЫЕ LLM")
         heading.setFlags(Qt.NoItemFlags)
@@ -692,7 +701,7 @@ class Main(QMainWindow):
         def reload_log():
             try:
                 viewer.setPlainText(LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else "Журнал пока пуст.")
-                viewer.moveCursor(viewer.textCursor().End)
+                viewer.verticalScrollBar().setValue(viewer.verticalScrollBar().maximum())
             except Exception as exc:
                 viewer.setPlainText("Не удалось прочитать журнал: " + str(exc))
         actions = QHBoxLayout()
@@ -821,6 +830,7 @@ class Main(QMainWindow):
             QMessageBox.critical(self, "Ошибка сохранения", str(exc))
             return
         self.apply_server_urls()
+        if self.current_service == "Open WebUI": self.select_openwebui()
         QMessageBox.information(self, "AIHub Studio", "Настройки сохранены. Если изменён прокси, перезапустите приложение.")
 
     def add_ai_tab(self, name, url):
@@ -942,14 +952,16 @@ class Main(QMainWindow):
             self.agent.set("Нет подключения")
             self.gpu_info.setText("Удалённый агент недоступен. Проверьте адрес, токен и соединение LAN/VPN.")
             self.status.setText("Ошибка связи с GPU Agent")
-            logger.warning("Удалённый GPU Agent недоступен: %s", error)
+            if error != self.last_agent_error: logger.warning("Удалённый GPU Agent недоступен: %s", error)
+            self.last_agent_error = error
             return
         devices = payload.get("devices", []) if isinstance(payload, dict) else []
         self.agent.set(f"{len(devices)} AMD GPU" if devices else "Агент доступен · нет метрик")
         info = [f"AMD GPU {d.get('index', '—')}: загрузка {d.get('gpu_percent', '—')}% · VRAM {d.get('vram_percent', '—')}% · температура {d.get('temperature_c', '—')}°C · мощность {d.get('power_w', '—')} W" for d in devices]
         self.gpu_info.setText("\\n".join(info) if info else "Агент отвечает, но не вернул данные GPU.")
         self.status.setText("Данные получены от удалённого ROCm Agent")
-        logger.info("Получены метрики удалённого GPU Agent: %d устройств", len(devices))
+        if self.last_agent_error is not None: logger.info("Связь с удалённым GPU Agent восстановлена")
+        self.last_agent_error = None
 
 # Read the proxy before Chromium starts; QtWebEngine reads this at process startup.
 try:
@@ -964,6 +976,23 @@ except Exception:
 app = QApplication(sys.argv)
 app.setStyleSheet("""
 QWidget { background:#11151d; color:#e8edf5; font-family:"Segoe UI"; font-size:13px; }
+QFrame#sidebar { background:#101722; border-right:1px solid #263244; }
+QLabel#brand { color:#f3f6fb; font-size:19px; font-weight:700; padding:4px 2px 14px 2px; }
+QLabel#sideCaption { color:#8190a4; font-size:10px; font-weight:700; letter-spacing:1px; padding:8px 4px; }
+QFrame#toolbar { background:#141c28; border-bottom:1px solid #273448; }
+QLabel#pageTitle { color:#f3f6fb; font-size:17px; font-weight:650; padding-left:10px; }
+QLineEdit#addressBar { background:#0d131d; border:1px solid #2b3a50; border-radius:9px; padding:9px 12px; }
+QListWidget#serviceList { background:transparent; border:0; padding:2px; outline:0; }
+QListWidget#serviceList::item { color:#c0cada; padding:12px 12px; border-radius:9px; margin:1px 0; }
+QListWidget#serviceList::item:selected { background:#263d56; color:#ffffff; font-weight:600; }
+QListWidget#serviceList::item:hover:!selected { background:#1a2635; }
+QPushButton#sideNav { text-align:left; background:transparent; border:0; color:#aab7c8; padding:12px 14px; border-radius:9px; font-weight:500; }
+QPushButton#sideNav:hover { background:#1a2635; color:#ffffff; }
+QPushButton#sideNav:checked { background:#223c55; color:#ffffff; border:1px solid #345777; }
+QPushButton#toolButton { background:#1b293a; border:1px solid #2c4058; padding:8px 12px; border-radius:8px; }
+QPushButton#toolButton:hover { background:#2a4058; }
+QFrame#sideDivider { color:#273448; max-height:1px; }
+
 QMainWindow { background:#0b0e14; }
 QTabWidget::pane { border:1px solid #252d3b; border-radius:12px; top:-1px; background:#111722; }
 QTabBar::tab { background:#171e2a; color:#aeb9c9; padding:12px 20px; margin:3px 3px 0 0; border-top-left-radius:9px; border-top-right-radius:9px; }
