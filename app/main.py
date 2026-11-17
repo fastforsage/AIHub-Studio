@@ -554,6 +554,15 @@ class Main(QMainWindow):
         filters.addWidget(self.catalog_status, 1)
         layout.addLayout(filters)
 
+        bulk_row = QHBoxLayout()
+        select_visible = QPushButton("Выбрать все показанные")
+        select_visible.clicked.connect(lambda: self.set_visible_catalog_selection(True))
+        clear_visible = QPushButton("Снять выбор с показанных")
+        clear_visible.clicked.connect(lambda: self.set_visible_catalog_selection(False))
+        bulk_row.addWidget(select_visible)
+        bulk_row.addWidget(clear_visible)
+        bulk_row.addStretch()
+        layout.addLayout(bulk_row)
         self.catalog_list = QListWidget()
         self.catalog_list.itemChanged.connect(self.on_catalog_item_changed)
         layout.addWidget(self.catalog_list, 1)
@@ -686,6 +695,26 @@ class Main(QMainWindow):
         if hasattr(self, "catalog_count"):
             self.catalog_count.setText(f"В каталоге: {len(self.ai_catalog)} · показано: {self.catalog_list.count()}")
 
+    def set_visible_catalog_selection(self, enabled):
+        names = []
+        self.catalog_list.blockSignals(True)
+        for row in range(self.catalog_list.count()):
+            item = self.catalog_list.item(row)
+            service = item.data(Qt.UserRole)
+            if isinstance(service, dict):
+                item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
+                names.append(service.get("name", ""))
+        self.catalog_list.blockSignals(False)
+        current = set(self.cfg.get("enabled_ai_services", []))
+        if enabled:
+            current.update(names)
+        else:
+            current.difference_update(names)
+        self.cfg["enabled_ai_services"] = sorted(current)
+        self.sync_ai_tabs()
+        save_cfg(self.cfg)
+        self.catalog_count.setText(f"Включено сервисов: {len(current)}")
+
     def on_catalog_item_changed(self, item):
         service = item.data(Qt.UserRole)
         if not isinstance(service, dict):
@@ -721,12 +750,24 @@ class Main(QMainWindow):
         open_item.setData(Qt.UserRole, {"kind": "openwebui"})
         open_item.setFlags(open_item.flags() & ~Qt.ItemIsDragEnabled)
         self.service_list.addItem(open_item)
-        heading = QListWidgetItem("ОБЛАЧНЫЕ LLM")
-        heading.setFlags(Qt.NoItemFlags)
-        heading.setData(Qt.UserRole, {"kind": "heading"})
-        self.service_list.addItem(heading)
+        favorite_heading = QListWidgetItem("★  ИЗБРАННОЕ")
+        favorite_heading.setFlags(Qt.NoItemFlags)
+        favorite_heading.setData(Qt.UserRole, {"kind": "heading"})
+        self.service_list.addItem(favorite_heading)
+        hidden = set(self.cfg.get("hidden_ai_services", []))
         for name, service in self.ai_services_by_name.items():
-            item = QListWidgetItem(("★   " if name in favorites else "✦   ") + name)
+            if name not in favorites or name in hidden: continue
+            item = QListWidgetItem("★   " + name)
+            item.setData(Qt.UserRole, {"kind": "service", "name": name, "url": service["url"]})
+            self.service_list.addItem(item)
+            if name == selected: item.setSelected(True)
+        all_heading = QListWidgetItem("ВСЕ AI")
+        all_heading.setFlags(Qt.NoItemFlags)
+        all_heading.setData(Qt.UserRole, {"kind": "heading"})
+        self.service_list.addItem(all_heading)
+        for name, service in self.ai_services_by_name.items():
+            if name in favorites or name in hidden: continue
+            item = QListWidgetItem("✦   " + name)
             item.setData(Qt.UserRole, {"kind": "service", "name": name, "url": service["url"]})
             self.service_list.addItem(item)
             if name == selected: item.setSelected(True)
@@ -767,13 +808,26 @@ class Main(QMainWindow):
         name = data.get("name", "")
         favorites = set(self.cfg.get("favorite_services", []))
         menu = QMenu(self)
-        action = menu.addAction("Убрать из избранного" if name in favorites else "В избранное")
-        if menu.exec(self.service_list.mapToGlobal(position)) == action:
+        favorite_action = menu.addAction("Убрать из избранного" if name in favorites else "В избранное")
+        hidden = set(self.cfg.get("hidden_ai_services", []))
+        menu.addSeparator()
+        hide_action = menu.addAction("Вернуть в список" if name in hidden else "Убрать из списка")
+        chosen = menu.exec(self.service_list.mapToGlobal(position))
+        if chosen == favorite_action:
             if name in favorites: favorites.remove(name)
             else: favorites.add(name)
             self.cfg["favorite_services"] = sorted(favorites)
-            self.sync_ai_tabs()
-            save_cfg(self.cfg)
+        elif chosen == hide_action:
+            if name in hidden: hidden.remove(name)
+            else: hidden.add(name)
+            self.cfg["hidden_ai_services"] = sorted(hidden)
+            if name == self.current_service and name in hidden:
+                self.current_service = ""
+                self.select_openwebui()
+        else:
+            return
+        self.sync_ai_tabs()
+        save_cfg(self.cfg)
 
     def make_dashboard(self):
         widget = QWidget()
