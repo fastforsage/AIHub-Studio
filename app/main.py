@@ -4,6 +4,8 @@ from urllib.parse import urlsplit
 
 import requests
 import keyring
+from keyring.backends.Windows import WinVaultKeyring
+keyring.set_keyring(WinVaultKeyring())
 from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal, Qt
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QTabWidget, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -734,6 +736,16 @@ class Main(QMainWindow):
         info = [f"AMD GPU {d.get('index', '—')}: загрузка {d.get('gpu_percent', '—')}% · VRAM {d.get('vram_percent', '—')}% · температура {d.get('temperature_c', '—')}°C · мощность {d.get('power_w', '—')} W" for d in devices]
         self.gpu_info.setText("\\n".join(info) if info else "Агент отвечает, но не вернул данные GPU.")
         self.status.setText("Данные получены от удалённого ROCm Agent")
+
+# Read the proxy before Chromium starts; QtWebEngine reads this at process startup.
+try:
+    _bootstrap_cfg = load_cfg()
+    _bootstrap_proxy = _bootstrap_cfg.get("proxy_url", "").strip()
+    if _bootstrap_proxy:
+        _existing_flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "").strip()
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (_existing_flags + " --proxy-server=" + _bootstrap_proxy).strip()
+except Exception:
+    pass
 
 app = QApplication(sys.argv)
 app.setStyleSheet("""
