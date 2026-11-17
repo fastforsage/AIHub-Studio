@@ -11,7 +11,7 @@
   const elementKeys = new WeakMap();
   const sentContent = new WeakMap();
   const candidateDebugState = new WeakMap();
-  const scriptVersion = "2026.11.17-chatgpt-api-dom-v3";
+  const scriptVersion = "2026.11.17-chatgpt-api-dom-v4";
   let chatGptApiState = "unknown";
   let chatGptApiInFlight = false;
   let chatGptApiLastAttempt = 0;
@@ -267,7 +267,7 @@
           el.getAttribute("data-chatgpt-search-unit-key") || "";
         const role = unitKey.endsWith(":user") || el.getAttribute("data-user-message-bubble") === "true"
           ? "user" : unitKey.endsWith(":assistant") ? "assistant" : "";
-        return role ? { el, role, strategy: "chatgpt-app-shell-dom" } : null;
+        return role ? { el, role, strategy: "chatgpt-app-shell-dom", stableKey: unitKey } : null;
       }).filter(Boolean);
       if (modern.length) return modern;
 
@@ -408,9 +408,9 @@
           strategy: found[0]?.strategy || "none" });
     }
 
-    found.forEach(({ el, role, strategy }, index) => {
+    found.forEach(({ el, role, strategy, stableKey }, index) => {
       const text = cleanText(el);
-      const stableDomKey = el.getAttribute("data-content-search-unit-key") ||
+      const stableDomKey = stableKey || el.getAttribute("data-content-search-unit-key") ||
         el.getAttribute("data-chatgpt-search-unit-key") || el.getAttribute("data-turn-key") || "";
       const candidateSignature = [role, strategy || "unknown", text.length, hash(text), stableDomKey].join("|");
       if (candidateDebugState.get(el) !== candidateSignature) {
@@ -430,7 +430,11 @@
       let key = elementKeys.get(el);
       if (!key) {
         sequence += 1;
-        key = stableDomKey || (role + "-" + index + "-" + hash(text.slice(0, 64)) + "-" + sequence);
+        key = stableDomKey || ("dom-" + role + "-" + index + "-" + hash(text) + "-" + sequence);
+        diagnostic("message-key", "Сформирован идентификатор DOM-сообщения", {
+          role, strategy: strategy || "unknown", keySource: stableDomKey ? "provider-stable-key" : "dom-fallback",
+          messageKey: key, index, contentHash: hash(text)
+        });
         elementKeys.set(el, key);
       }
       if (sentContent.get(el) === text) return;
