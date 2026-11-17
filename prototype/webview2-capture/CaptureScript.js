@@ -178,8 +178,19 @@
       .map(el => el.tagName.toLowerCase())
       .filter(tag => tag.includes("-")))].slice(0, 25);
     const roles = [...new Set([...document.querySelectorAll("[role]")].map(el => el.getAttribute("role")).filter(Boolean))].slice(0, 20);
+    const allElements = [...document.querySelectorAll("*")];
+    const shadowRoots = allElements.filter(el => el.shadowRoot).length;
+    const bodyTextLength = document.body ? (document.body.innerText || "").length : 0;
     return [
       "DOM-probe (без текста переписки):",
+      "readyState=" + document.readyState,
+      "topFrame=" + (window.top === window),
+      "body=" + count("body"),
+      "bodyChildren=" + (document.body?.children.length || 0),
+      "bodyTextLength=" + bodyTextLength,
+      "iframe=" + count("iframe,frame"),
+      "contenteditable=" + count("[contenteditable='true']"),
+      "openShadowRoots=" + shadowRoots,
       "main=" + count("main"),
       "article=" + count("article"),
       "role=article=" + count('[role="article"]'),
@@ -194,7 +205,7 @@
 
   function scan() {
     scans++;
-    if (scans === 1) diagnostic("dom-probe", describeDomShape());
+    // Refresh the structural probe after hydration; the first document-created\n    // scan often sees only the application shell. Never include message text.\n    if (scans === 1 || scans % 20 === 0) diagnostic("dom-probe", describeDomShape(), { scanCount: scans });
     const found = identifyMessages();
     const host = location.hostname.toLowerCase();
     const detection = detectAdapter();
