@@ -70,6 +70,51 @@ internal sealed class AdapterRegistry
         foreach (var json in BuiltInAdapters.All)
             await ImportIfMissingAsync(db, json);
 
+        await LoadEnabledAsync(db);
+    }
+
+    public async Task ImportAdapterAsync(string json)
+    {
+        var adapter = ParseAndValidate(json);
+        await using var db = new SqliteConnection(_connectionString);
+        await db.OpenAsync();
+        var now = DateTime.UtcNow.ToString("O");
+        var command = db.CreateCommand();
+        command.CommandText = """
+            INSERT INTO adapter_definitions(adapter_id,name,version,enabled,definition_json,updated_utc)
+            VALUES($id,$name,$version,$enabled,$json,$now)
+            ON CONFLICT(adapter_id) DO UPDATE SET
+                name=excluded.name, version=excluded.version, enabled=excluded.enabled,
+                definition_json=excluded.definition_json, updated_utc=excluded.updated_utc
+            WHERE excluded.version > adapter_definitions.version;
+            INSERT OR IGNORE INTO adapter_versions(adapter_id,version,definition_json,imported_utc)
+            VALUES($id,$version,$json,$now);
+            """;
+        command.Parameters.AddWithValue("$id", adapter.Id);
+        command.Parameters.AddWithValue("$name", adapter.Name);
+        command.Parameters.AddWithValue("$version", adapter.Version);
+        command.Parameters.AddWithValue("$enabled", adapter.Enabled ? 1 : 0);
+        command.Parameters.AddWithValue("$json", json);
+        command.Parameters.AddWithValue("$now", now);
+        await command.ExecuteNonQueryAsync();
+        await ReloadAsync(db);
+    }
+
+    private async Task ReloadAsync(SqliteConnection? existing = null)
+    {
+        _adapters.Clear();
+        if (existing is null)
+        {
+            await using var db = new SqliteConnection(_connectionString);
+            await db.OpenAsync();
+            await LoadEnabledAsync(db);
+            return;
+        }
+        await LoadEnabledAsync(existing);
+    }
+
+    private async Task LoadEnabledAsync(SqliteConnection db)
+    {
         var read = db.CreateCommand();
         read.CommandText = "SELECT definition_json FROM adapter_definitions WHERE enabled=1;";
         await using var reader = await read.ExecuteReaderAsync();
