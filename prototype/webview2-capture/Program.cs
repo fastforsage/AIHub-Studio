@@ -231,7 +231,9 @@ internal sealed class CaptureForm : Form
             _receivedCount++;
             var url = GetString(root, "url");
             var provider = _adapterRegistry.ResolveProvider(url);
-            await _adapterRegistry.RecordDetectionAsync(url, provider, provider == "unknown" ? 0.0 : 1.0);
+            var confidence = provider == "unknown" ? 0.65 : 1.0;
+            if (provider == "unknown") provider = "generic-chat";
+            await _adapterRegistry.RecordDetectionAsync(url, provider, confidence);
             var conversationKey = GetConversationKey(url);
             var role = GetString(root, "role", "unknown");
             var content = GetString(root, "text");
@@ -337,6 +339,19 @@ internal sealed class CaptureForm : Form
         command.Parameters.AddWithValue("$url", url);
         command.Parameters.AddWithValue("$now", now);
         await command.ExecuteNonQueryAsync();
+
+        var stats = db.CreateCommand();
+        stats.CommandText = """
+            INSERT INTO adapter_extraction_stats(adapter_id, detections, extracted_messages, failures, updated_utc)
+            VALUES($provider, 1, 1, 0, $now)
+            ON CONFLICT(adapter_id) DO UPDATE SET
+                detections=adapter_extraction_stats.detections+1,
+                extracted_messages=adapter_extraction_stats.extracted_messages+1,
+                updated_utc=excluded.updated_utc;
+            """;
+        stats.Parameters.AddWithValue("$provider", provider);
+        stats.Parameters.AddWithValue("$now", now);
+        await stats.ExecuteNonQueryAsync();
     }
 
     private static string GetConversationKey(string url)
