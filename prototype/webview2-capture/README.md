@@ -1,0 +1,44 @@
+# WebView2 chat capture prototype
+
+Isolated proof of concept for the `feature/webview2-local-chat-archive` branch. It does not modify or replace the existing PySide6 application.
+
+## Requirements
+
+- Windows 10/11 x64
+- .NET 8 SDK
+- Microsoft Edge WebView2 Runtime (Evergreen)
+
+## Run
+
+From this directory:
+
+```powershell
+dotnet restore
+dotnet run
+```
+
+The first launch creates a separate WebView2 profile and SQLite database under:
+
+`%LOCALAPPDATA%\AIHubStudio\WebView2CapturePrototype\`
+
+Sign in to ChatGPT, Claude, or Gemini in the prototype window and open a conversation. The capture script watches supported message containers and sends text updates to the host; SQLite upserts updates so a streaming answer is revised in place instead of creating a row for every token.
+
+## Current capture support
+
+- ChatGPT: elements carrying `data-message-author-role`
+- Claude: user message test id and assistant message class selectors
+- Gemini: `user-query` and `model-response` elements
+
+This is a selector-level prototype, not a guarantee of complete transcript capture. Sites change their DOM, virtualize older messages, and may render some content outside these selectors. Unknown sites are intentionally ignored instead of scraping arbitrary page text.
+
+## Database
+
+SQLite file: `conversations.db`; table: `messages`. Fields include provider, conversation key (host + URL path), message key, role, text, source URL, and timestamps.
+
+## Security and limitations
+
+- The WebView2 browser profile is separate from Qt WebEngine; existing Qt cookies/sessions are not migrated.
+- Content is stored locally as plain text in this prototype. Do not use it on shared Windows accounts or untrusted machines.
+- This prototype does not capture attachments, images, audio, tool calls, or hidden/virtualized messages.
+- DOM capture can miss or duplicate messages when providers change their page structure. Validate each provider before relying on it as an archive.
+- No API keys or provider APIs are used.
