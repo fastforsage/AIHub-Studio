@@ -67,8 +67,15 @@ internal sealed class AdapterRegistry
             """;
         await schema.ExecuteNonQueryAsync();
 
-        foreach (var json in BuiltInAdapters.All)
-            await ImportIfMissingAsync(db, json);
+        var catalogPath = Path.Combine(AppContext.BaseDirectory, "adapters", "catalog.json");
+        if (File.Exists(catalogPath))
+        {
+            using var catalog = JsonDocument.Parse(await File.ReadAllTextAsync(catalogPath));
+            if (catalog.RootElement.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException("The bundled adapter catalog must be a JSON array.");
+            foreach (var item in catalog.RootElement.EnumerateArray())
+                await ImportIfMissingAsync(db, item.GetRawText());
+        }
 
         await LoadEnabledAsync(db);
     }
@@ -233,29 +240,3 @@ internal sealed class AdapterRegistry
             : [];
 }
 
-internal static class BuiltInAdapters
-{
-    public static readonly string[] All =
-    [
-        Definition("chatgpt", "ChatGPT", "OpenAI", ["chatgpt.com", "openai.com"], ["[data-message-author-role]"], ["provider_dom", "semantic_dom", "clipboard"]),
-        Definition("claude", "Claude", "Anthropic", ["claude.ai"], ["[data-testid='user-message']", ".font-claude-message"], ["provider_dom", "semantic_dom", "clipboard"]),
-        Definition("gemini", "Gemini", "Google", ["gemini.google.com"], ["user-query", "model-response"], ["provider_dom", "semantic_dom", "clipboard"]),
-        Definition("qwen", "Qwen", "Alibaba", ["qwen.ai"], ["[data-testid*='message']", "[class*='chat-message']"], ["semantic_dom", "clipboard"]),
-        Definition("deepseek", "DeepSeek", "DeepSeek", ["deepseek.com"], ["[data-testid*='message']", "[class*='message']"], ["semantic_dom", "clipboard"]),
-        Definition("kimi", "Kimi", "Moonshot AI", ["kimi.com"], ["[data-testid*='message']"], ["semantic_dom", "clipboard"]),
-        Definition("glm", "GLM", "Zhipu AI", ["chat.z.ai", "chatglm.cn"], ["[data-testid*='message']"], ["semantic_dom", "clipboard"]),
-        Definition("doubao", "Doubao", "ByteDance", ["doubao.com"], ["[data-testid*='message']"], ["semantic_dom", "clipboard"]),
-        Definition("yuanbao", "Yuanbao", "Tencent", ["yuanbao.tencent.com"], ["[data-testid*='message']"], ["semantic_dom", "clipboard"]),
-        Definition("ernie", "ERNIE", "Baidu", ["yiyan.baidu.com"], ["[data-testid*='message']"], ["semantic_dom", "clipboard"]),
-        Definition("copilot", "Copilot", "Microsoft", ["copilot.microsoft.com"], ["[data-testid*='message']"], ["semantic_dom", "clipboard"]),
-        Definition("perplexity", "Perplexity", "Perplexity AI", ["perplexity.ai"], ["[data-testid*='message']"], ["semantic_dom", "clipboard"]),
-        Definition("grok", "Grok", "xAI", ["grok.com", "x.com"], ["[data-testid*='message']"], ["semantic_dom", "clipboard"])
-    ];
-
-    private static string Definition(string id, string name, string vendor, string[] domains, string[] signatures, string[] strategies) =>
-        JsonSerializer.Serialize(new {
-            id, name, vendor, version = 1, enabled = true, domains,
-            detection = new { minimum_confidence = 0.75, dom_signatures = signatures },
-            extraction = new { strategies, role_mapping = new { user = "user", assistant = "assistant" } }
-        });
-}
