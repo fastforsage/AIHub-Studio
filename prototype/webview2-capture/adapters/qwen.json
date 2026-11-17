@@ -4,10 +4,15 @@
   "vendor": "Alibaba",
   "version": 1,
   "enabled": true,
-  "domains": ["qwen.ai"],
+  "domains": [
+    "qwen.ai"
+  ],
   "detection": {
     "minimum_confidence": 0.75,
-    "dom_signatures": ["[data-testid*='message']", "[class*='chat-message']"]
+    "dom_signatures": [
+      "[data-testid*='message']",
+      "[class*='chat-message']"
+    ]
   },
   "capabilities": {
     "text": true,
@@ -18,8 +23,13 @@
     "conversation_history": true
   },
   "extraction": {
-    "strategies": ["semantic_dom", "clipboard"],
+    "strategies": [
+      "semantic_dom"
+    ],
     "message_selectors": [],
-    "role_mapping": { "user": "user", "assistant": "assistant" }
+    "role_mapping": {
+      "user": "user",
+      "assistant": "assistant"
+    }
   }
 }
