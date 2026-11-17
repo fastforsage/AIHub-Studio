@@ -4,13 +4,15 @@ from urllib.parse import urlsplit
 
 import psutil
 import requests
-from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QTabWidget, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea
+from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal, Qt
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QTabWidget, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "AIHubStudio"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CFG = CONFIG_DIR / "settings.json"
+AI_CATALOG_URL = "https://silentcoderhere.github.io/aihub-config-data/ais.json"
+AI_CATALOG_CACHE = CONFIG_DIR / "ais.json"
 DEFAULTS = {
     "servers": {
         "dockhand": {"scheme": "https", "host": "", "port": 443, "path": ""},
@@ -25,7 +27,8 @@ DEFAULTS = {
         {"name": "Claude", "url": "https://claude.ai"},
         {"name": "Gemini", "url": "https://gemini.google.com"},
         {"name": "OpenRouter", "url": "https://openrouter.ai"}
-    ]
+    ],
+    "enabled_ai_services": []
 }
 
 def split_legacy_url(value, default_scheme, default_port):
@@ -52,6 +55,8 @@ def load_cfg():
             for key, defaults in DEFAULTS["servers"].items():
                 cfg["servers"].setdefault(key, defaults.copy())
         cfg["ai_services"] = [x for x in cfg.get("ai_services", []) if x.get("name", "").lower() != "open webui"]
+        if "enabled_ai_services" not in saved:
+            cfg["enabled_ai_services"] = [x.get("name", "") for x in cfg["ai_services"] if x.get("name")]
     except Exception:
         pass
     profiles = cfg.get("connection_profiles") or {}
@@ -66,6 +71,58 @@ def load_cfg():
     cfg["servers"] = profiles[active].get("servers", cfg["servers"])
     cfg["gpu_agent_token"] = profiles[active].get("gpu_agent_token", cfg.get("gpu_agent_token", ""))
     return cfg
+
+def load_ai_catalog_cache():
+    try:
+        raw = json.loads(AI_CATALOG_CACHE.read_text(encoding="utf-8"))
+        return normalize_ai_catalog(raw)
+    except Exception:
+        return []
+
+def normalize_ai_catalog(raw):
+    if not isinstance(raw, dict):
+        raise ValueError("Каталог должен быть JSON-объектом с категориями.")
+    result, seen = [], set()
+    for category, entries in raw.items():
+        if not isinstance(entries, list):
+            continue
+        for item in entries:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "")).strip()
+            url = str(item.get("website", "")).strip()
+            if not name or not url.startswith(("https://", "http://")):
+                continue
+            key = name.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append({
+                "name": name, "url": url, "category": str(category),
+                "pricing": str(item.get("pricing", "unknown")),
+                "privacy": str(item.get("privacy", "unknown")),
+                "login_required": bool(item.get("login_required", False)),
+                "best_for": item.get("best_for", []) if isinstance(item.get("best_for", []), list) else []
+            })
+    return result
+
+class CatalogFetchSignals(QObject):
+    finished = Signal(object, str)
+
+class CatalogFetchWorker(QRunnable):
+    def __init__(self):
+        super().__init__()
+        self.signals = CatalogFetchSignals()
+    def run(self):
+        try:
+            response = requests.get(AI_CATALOG_URL, timeout=(5, 15))
+            response.raise_for_status()
+            services = normalize_ai_catalog(response.json())
+            if not services:
+                raise ValueError("В удалённом каталоге не найдено сервисов.")
+            self.signals.finished.emit(services, "")
+        except Exception as exc:
+            self.signals.finished.emit([], str(exc))
 
 def save_cfg(cfg):
     clean = {k: v for k, v in cfg.items() if k not in ("dockhand_url", "gpu_agent_url")}
@@ -176,6 +233,8 @@ class Main(QMainWindow):
         self.cfg = load_cfg()
         self.thread_pool = QThreadPool.globalInstance()
         self.check_workers = []
+        self.ai_catalog = load_ai_catalog_cache()
+        self.ai_views = {}
         self.setWindowTitle("AIHub Studio")
         self.resize(1440, 900)
         self.tabs = QTabWidget()
@@ -185,16 +244,142 @@ class Main(QMainWindow):
         self.tabs.addTab(self.ai_tabs, "AI Hub")
         self.openwebui_view = QWebEngineView()
         self.ai_tabs.addTab(self.openwebui_view, "Open WebUI")
-        for item in self.cfg["ai_services"]:
-            self.add_ai_tab(item["name"], item["url"])
+        available = {x["name"]: x for x in self.ai_catalog}
+        available.update({x["name"]: x for x in self.cfg["ai_services"] if x.get("name") and x.get("url")})
+        enabled = self.cfg.get("enabled_ai_services") or [x["name"] for x in self.cfg["ai_services"]]
+        for name in enabled:
+            item = available.get(name)
+            if item:
+                self.add_ai_tab(item["name"], item["url"])
+        self.catalog_widget = self.make_ai_catalog()
+        self.tabs.addTab(self.catalog_widget, "Каталог AI")
         self.dock = QWebEngineView()
         self.tabs.addTab(self.dock, "Docker · Dockhand")
         self.tabs.addTab(self.make_settings(), "Настройки")
         self.apply_server_urls()
+        self.start_catalog_fetch()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(3000)
         self.refresh()
+
+    def make_ai_catalog(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        header = QHBoxLayout()
+        title = QLabel("Каталог AI-сервисов")
+        title.setObjectName("heading")
+        header.addWidget(title)
+        self.catalog_count = QLabel("Загружаем локальный каталог…")
+        header.addWidget(self.catalog_count)
+        refresh = QPushButton("Обновить каталог")
+        refresh.clicked.connect(self.start_catalog_fetch)
+        header.addWidget(refresh)
+        layout.addLayout(header)
+
+        filters = QHBoxLayout()
+        self.catalog_search = QLineEdit()
+        self.catalog_search.setPlaceholderText("Поиск по названию и назначению…")
+        self.catalog_search.textChanged.connect(self.populate_ai_catalog)
+        self.catalog_category = QComboBox()
+        self.catalog_category.currentTextChanged.connect(self.populate_ai_catalog)
+        filters.addWidget(self.catalog_search, 2)
+        filters.addWidget(self.catalog_category, 1)
+        layout.addLayout(filters)
+
+        self.catalog_list = QListWidget()
+        self.catalog_list.itemChanged.connect(self.on_catalog_item_changed)
+        layout.addWidget(self.catalog_list, 1)
+        hint = QLabel("Отметьте нужные сервисы — они появятся вкладками в разделе «AI Hub». Полный каталог загружается из публичного репозитория проекта.")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.populate_ai_catalog()
+        return widget
+
+    def start_catalog_fetch(self):
+        self.catalog_count.setText("Обновляем каталог…") if hasattr(self, "catalog_count") else None
+        worker = CatalogFetchWorker()
+        self.catalog_worker = worker
+        worker.signals.finished.connect(self.on_catalog_loaded)
+        self.thread_pool.start(worker)
+
+    def on_catalog_loaded(self, services, error):
+        if error:
+            count = len(self.ai_catalog)
+            self.catalog_count.setText(f"Кэш: {count} сервисов · ошибка обновления") if hasattr(self, "catalog_count") else None
+            return
+        self.ai_catalog = services
+        try:
+            AI_CATALOG_CACHE.write_text(json.dumps(services, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+        self.populate_ai_catalog()
+        self.sync_ai_tabs()
+        self.catalog_count.setText(f"Загружено: {len(services)} сервисов")
+
+    def populate_ai_catalog(self, *_):
+        if not hasattr(self, "catalog_list"):
+            return
+        categories = ["Все категории"] + sorted({x["category"] for x in self.ai_catalog})
+        current = self.catalog_category.currentText() if self.catalog_category.count() else "Все категории"
+        self.catalog_category.blockSignals(True)
+        self.catalog_category.clear()
+        self.catalog_category.addItems(categories)
+        self.catalog_category.setCurrentText(current if current in categories else "Все категории")
+        self.catalog_category.blockSignals(False)
+
+        query = self.catalog_search.text().strip().casefold()
+        category = self.catalog_category.currentText()
+        enabled = set(self.cfg.get("enabled_ai_services", []))
+        self.catalog_list.blockSignals(True)
+        self.catalog_list.clear()
+        for service in self.ai_catalog:
+            searchable = " ".join([service["name"], service["category"], *service.get("best_for", [])]).casefold()
+            if query and query not in searchable:
+                continue
+            if category != "Все категории" and service["category"] != category:
+                continue
+            label = f'{service["name"]}  ·  {service["category"]}  ·  {service["pricing"]}  ·  privacy: {service["privacy"]}'
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, service)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if service["name"] in enabled else Qt.Unchecked)
+            self.catalog_list.addItem(item)
+        self.catalog_list.blockSignals(False)
+        if hasattr(self, "catalog_count"):
+            self.catalog_count.setText(f"В каталоге: {len(self.ai_catalog)} · показано: {self.catalog_list.count()}")
+
+    def on_catalog_item_changed(self, item):
+        service = item.data(Qt.UserRole)
+        if not isinstance(service, dict):
+            return
+        enabled = list(self.cfg.get("enabled_ai_services", []))
+        name = service["name"]
+        if item.checkState() == Qt.Checked:
+            if name not in enabled:
+                enabled.append(name)
+        else:
+            enabled = [x for x in enabled if x != name]
+        self.cfg["enabled_ai_services"] = enabled
+        self.sync_ai_tabs()
+        save_cfg(self.cfg)
+
+    def sync_ai_tabs(self):
+        available = {x["name"]: x for x in self.ai_catalog}
+        available.update({x["name"]: x for x in self.cfg.get("ai_services", []) if x.get("name") and x.get("url")})
+        enabled = self.cfg.get("enabled_ai_services", [])
+        for name, view in list(self.ai_views.items()):
+            if name not in enabled:
+                index = self.ai_tabs.indexOf(view)
+                if index >= 0:
+                    self.ai_tabs.removeTab(index)
+                view.deleteLater()
+                self.ai_views.pop(name, None)
+        for name in enabled:
+            service = available.get(name)
+            if service and name not in self.ai_views:
+                self.add_ai_tab(name, service.get("url", service.get("website", "")))
+        self.cfg["ai_services"] = [available[name] for name in enabled if name in available]
 
     def make_dashboard(self):
         widget = QWidget()
@@ -372,18 +557,26 @@ class Main(QMainWindow):
         QMessageBox.information(self, "AIHub Studio", "Настройки сохранены.")
 
     def add_ai_tab(self, name, url):
+        if not name or not url or name in self.ai_views:
+            return
         view = QWebEngineView()
         view.setUrl(QUrl(url))
         self.ai_tabs.addTab(view, name)
+        self.ai_views[name] = view
 
     def add_service_dialog(self):
         name, ok = QInputDialog.getText(self, "AI-сервис", "Название:")
         if not ok or not name.strip(): return
         url, ok = QInputDialog.getText(self, "AI-сервис", "URL:", text="https://")
         if not ok or not url.startswith(("https://", "http://")): return
-        self.cfg["ai_services"].append({"name": name.strip(), "url": url.strip()})
+        service = {"name": name.strip(), "url": url.strip(), "category": "custom", "pricing": "unknown", "privacy": "unknown", "best_for": []}
+        self.ai_catalog.append(service)
+        enabled = self.cfg.setdefault("enabled_ai_services", [])
+        if service["name"] not in enabled:
+            enabled.append(service["name"])
+        self.sync_ai_tabs()
+        self.populate_ai_catalog()
         save_cfg(self.cfg)
-        self.add_ai_tab(name.strip(), url.strip())
 
     def refresh(self):
         self.cpu.set(f"{psutil.cpu_percent():.0f}%")
