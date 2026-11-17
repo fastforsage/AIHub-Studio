@@ -17,8 +17,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Restore
-        run: dotnet restore prototype/webview2-capture/AIHub.WebView2Capture.csproj
+      - name: Restore win-x64 dependencies
+        run: dotnet restore prototype/webview2-capture/AIHub.WebView2Capture.csproj --runtime win-x64
       - name: Publish self-contained x64 application
         run: dotnet publish prototype/webview2-capture/AIHub.WebView2Capture.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output publish
       - name: Install pinned WiX Toolset v5
