@@ -54,3 +54,13 @@ When troubleshooting, open a supported chat, sign in, and open a conversation wi
 - `message-sent`: JavaScript sent a message to the desktop host.
 - `SQLite OK`: the host saved or updated a row.
 - `post-error`, `bridge-missing`, or `ОШИБКА`: inspect the accompanying error text.
+
+
+### PyreCrawl-inspired extraction strategy
+
+The capture script uses a small fallback ladder while staying inside the existing WebView2 profile:
+1. Provider-specific DOM selectors (preferred).
+2. Conservative semantic fallbacks based on message-related test IDs and accessible labels, with role inference only when the label identifies user/assistant/model/response.
+3. If neither strategy finds messages, diagnostics report `strategy=none`; no speculative page-wide text scraping is performed.
+
+This borrows PyreCrawl's fast-first/fallback approach and its emphasis on waiting for live JavaScript-rendered DOM, without launching a second browser or attempting to transfer authentication cookies. Fallback selectors are best-effort and may need updates when provider markup changes.
