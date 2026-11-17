@@ -37,24 +37,47 @@
     return (h >>> 0).toString(16);
   };
 
+  // PyreCrawl-inspired extraction ladder: precise provider selectors first,
+  // then conservative semantic/test-id fallbacks. Keep extraction in the live
+  // WebView2 session so the user's existing sign-in cookies remain available.
   function identifyMessages() {
     const host = location.hostname.toLowerCase();
     if (host.includes("chatgpt.com") || host.includes("openai.com")) {
-      return [...document.querySelectorAll("[data-message-author-role]")].map(el => ({
-        el, role: el.getAttribute("data-message-author-role")
+      const exact = [...document.querySelectorAll("[data-message-author-role]")].map(el => ({
+        el, role: el.getAttribute("data-message-author-role"), strategy: "provider"
       }));
+      if (exact.length) return exact;
+      const fallback = [...document.querySelectorAll('[data-testid*="conversation-turn"], [data-testid*="message"]')]
+        .map(el => {
+          const hint = ((el.getAttribute("data-testid") || "") + " " + (el.getAttribute("aria-label") || "")).toLowerCase();
+          const role = hint.includes("user") ? "user" : hint.includes("assistant") || hint.includes("model") ? "assistant" : "";
+          return role ? { el, role, strategy: "semantic-fallback" } : null;
+        }).filter(Boolean);
+      return fallback;
     }
     if (host.includes("claude.ai")) {
-      const items = [];
-      document.querySelectorAll('[data-testid="user-message"]').forEach(el => items.push({ el, role: "user" }));
-      document.querySelectorAll(".font-claude-message").forEach(el => items.push({ el, role: "assistant" }));
-      return items;
+      const exact = [];
+      document.querySelectorAll('[data-testid="user-message"]').forEach(el => exact.push({ el, role: "user", strategy: "provider" }));
+      document.querySelectorAll(".font-claude-message").forEach(el => exact.push({ el, role: "assistant", strategy: "provider" }));
+      if (exact.length) return exact;
+      return [...document.querySelectorAll('[data-testid*="message"], [aria-label*="message" i]')]
+        .map(el => {
+          const hint = ((el.getAttribute("data-testid") || "") + " " + (el.getAttribute("aria-label") || "")).toLowerCase();
+          const role = hint.includes("user") ? "user" : hint.includes("assistant") || hint.includes("response") ? "assistant" : "";
+          return role ? { el, role, strategy: "semantic-fallback" } : null;
+        }).filter(Boolean);
     }
     if (host.includes("gemini.google.com")) {
-      const items = [];
-      document.querySelectorAll("user-query").forEach(el => items.push({ el, role: "user" }));
-      document.querySelectorAll("model-response").forEach(el => items.push({ el, role: "assistant" }));
-      return items;
+      const exact = [];
+      document.querySelectorAll("user-query").forEach(el => exact.push({ el, role: "user", strategy: "provider" }));
+      document.querySelectorAll("model-response").forEach(el => exact.push({ el, role: "assistant", strategy: "provider" }));
+      if (exact.length) return exact;
+      return [...document.querySelectorAll('[data-testid*="message"], [data-test-id*="message"], [aria-label*="message" i]')]
+        .map(el => {
+          const hint = ((el.getAttribute("data-testid") || el.getAttribute("data-test-id") || "") + " " + (el.getAttribute("aria-label") || "")).toLowerCase();
+          const role = hint.includes("user") ? "user" : hint.includes("model") || hint.includes("assistant") || hint.includes("response") ? "assistant" : "";
+          return role ? { el, role, strategy: "semantic-fallback" } : null;
+        }).filter(Boolean);
     }
     return [];
   }
@@ -71,7 +94,7 @@
       diagnostic("scan", found.length
         ? "DOM-селекторы нашли элементы сообщений"
         : (supported ? "Поддерживаемый сайт открыт, но селекторы не нашли сообщения" : "Сайт пока не поддерживается"),
-        { providerHost: host, foundCount: found.length, scanCount: scans, supported });
+        { providerHost: host, foundCount: found.length, scanCount: scans, supported, strategy: found[0]?.strategy || "none" });
     }
 
     found.forEach(({ el, role }, index) => {
