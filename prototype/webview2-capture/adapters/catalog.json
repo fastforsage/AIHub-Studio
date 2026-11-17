@@ -26,8 +26,7 @@
     "extraction": {
       "strategies": [
         "provider_dom",
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -63,8 +62,7 @@
     "extraction": {
       "strategies": [
         "provider_dom",
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -100,8 +98,7 @@
     "extraction": {
       "strategies": [
         "provider_dom",
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -136,8 +133,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -172,8 +168,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -208,8 +203,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -244,8 +238,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -279,8 +272,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -314,8 +306,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -349,8 +340,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -384,8 +374,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -419,8 +408,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -454,8 +442,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -489,8 +476,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
@@ -525,8 +511,7 @@
     },
     "extraction": {
       "strategies": [
-        "semantic_dom",
-        "clipboard"
+        "semantic_dom"
       ],
       "message_selectors": [],
       "role_mapping": {
