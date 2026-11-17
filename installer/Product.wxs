@@ -12,12 +12,14 @@
     <StandardDirectory Id="ProgramMenuFolder"><Directory Id="ApplicationProgramsFolder" Name="AIHub Studio" /></StandardDirectory>
   </Package>
   <Fragment>
-    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER"><Files Include="publish\\**" /></ComponentGroup>
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="publish\**" />
+    </ComponentGroup>
     <ComponentGroup Id="StartMenuShortcuts" Directory="ApplicationProgramsFolder">
       <Component Id="StartMenuShortcutComponent" Guid="*">
         <Shortcut Id="StartMenuShortcut" Name="AIHub Studio" Target="[INSTALLFOLDER]AIHubStudio.exe" WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
-        <RegistryValue Root="HKLM" Key="Software\\FastForsage\\AIHubStudio" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\FastForsage\AIHubStudio" Name="installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </ComponentGroup>
   </Fragment>
