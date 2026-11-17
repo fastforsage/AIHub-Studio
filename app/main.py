@@ -218,6 +218,16 @@ class Main(QMainWindow):
         self.cfg = load_cfg()
         self.thread_pool = QThreadPool.globalInstance()
         self.check_workers = []
+        self.agent_worker_active = False
+        self.web_profile = QWebEngineProfile("AIHubStudio", self)
+        web_data = CONFIG_DIR / "web-profile"
+        web_cache = CONFIG_DIR / "web-cache"
+        web_data.mkdir(parents=True, exist_ok=True)
+        web_cache.mkdir(parents=True, exist_ok=True)
+        self.web_profile.setPersistentStoragePath(str(web_data))
+        self.web_profile.setCachePath(str(web_cache))
+        self.web_profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
+        self.web_profile.setHttpCacheType(QWebEngineProfile.DiskHttpCache)
         self.ai_catalog = load_ai_catalog_cache()
         self.ai_views = {}
         self.setWindowTitle("AIHub Studio")
@@ -225,9 +235,32 @@ class Main(QMainWindow):
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
         self.tabs.addTab(self.make_dashboard(), "Обзор")
+        ai_hub = QWidget()
+        ai_layout = QVBoxLayout(ai_hub)
+        ai_layout.setContentsMargins(10, 10, 10, 10)
+        nav = QHBoxLayout()
+        self.ai_back = QPushButton("←")
+        self.ai_forward = QPushButton("→")
+        self.ai_reload = QPushButton("↻")
+        self.ai_address = QLineEdit()
+        self.ai_address.setPlaceholderText("Адрес текущего чата")
+        self.ai_go = QPushButton("Перейти")
+        for control in (self.ai_back, self.ai_forward, self.ai_reload, self.ai_address, self.ai_go): nav.addWidget(control)
+        ai_layout.addLayout(nav)
         self.ai_tabs = QTabWidget()
-        self.tabs.addTab(self.ai_tabs, "AI Hub")
+        self.ai_tabs.setDocumentMode(True)
+        self.ai_tabs.setTabsClosable(True)
+        self.ai_tabs.tabCloseRequested.connect(self.close_ai_tab)
+        ai_layout.addWidget(self.ai_tabs, 1)
+        self.ai_back.clicked.connect(lambda: self.current_ai_view() and self.current_ai_view().back())
+        self.ai_forward.clicked.connect(lambda: self.current_ai_view() and self.current_ai_view().forward())
+        self.ai_reload.clicked.connect(lambda: self.current_ai_view() and self.current_ai_view().reload())
+        self.ai_go.clicked.connect(self.navigate_ai_address)
+        self.ai_address.returnPressed.connect(self.navigate_ai_address)
+        self.ai_tabs.currentChanged.connect(self.update_ai_address)
+        self.tabs.addTab(ai_hub, "AI Hub")
         self.openwebui_view = QWebEngineView()
+        self.openwebui_view.setPage(QWebEnginePage(self.web_profile, self.openwebui_view))
         self.ai_tabs.addTab(self.openwebui_view, "Open WebUI")
         available = {x["name"]: x for x in self.ai_catalog}
         available.update({x["name"]: x for x in self.cfg["ai_services"] if x.get("name") and x.get("url")})
@@ -245,7 +278,7 @@ class Main(QMainWindow):
         self.start_catalog_fetch()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
-        self.timer.start(3000)
+        self.timer.start(5000)
         self.refresh()
 
     def make_ai_catalog(self):
@@ -293,7 +326,7 @@ class Main(QMainWindow):
 
     def start_catalog_fetch(self):
         self.catalog_count.setText("Обновляем каталог…") if hasattr(self, "catalog_count") else None
-        worker = CatalogFetchWorker()
+        worker = CatalogFetchWorker(self.proxy_map())
         self.catalog_worker = worker
         worker.signals.finished.connect(self.on_catalog_loaded)
         self.thread_pool.start(worker)
@@ -438,7 +471,7 @@ class Main(QMainWindow):
         layout.addWidget(QLabel("Для каждого сервиса укажите протокол, DNS/IP и порт."))
         self.dock_fields = ServerFields("Dockhand", self.cfg["servers"]["dockhand"])
         self.webui_fields = ServerFields("Open WebUI", self.cfg["servers"]["openwebui"])
-        self.gpu_fields = ServerFields("GPU мониторинг · Linux ROCm Agent", self.cfg["servers"]["gpu"])
+        self.gpu_fields = ServerFields("Удалённый GPU мониторинг · Linux ROCm Agent", self.cfg["servers"]["gpu"])
         layout.addWidget(self.server_check_row(self.dock_fields, "dockhand", "Dockhand"))
         layout.addWidget(self.server_check_row(self.webui_fields, "openwebui", "Open WebUI"))
         layout.addWidget(self.server_check_row(self.gpu_fields, "gpu", "GPU Agent"))
@@ -448,6 +481,15 @@ class Main(QMainWindow):
         self.token.setPlaceholderText("Bearer token для GPU Agent")
         token_form.addRow("GPU Agent token", self.token)
         layout.addLayout(token_form)
+        proxy_group = QGroupBox("Прокси для AI-сайтов и сетевых запросов")
+        proxy_form = QFormLayout(proxy_group)
+        self.proxy_url = QLineEdit(self.cfg.get("proxy_url", ""))
+        self.proxy_url.setPlaceholderText("http://host:port или socks5://host:port")
+        proxy_form.addRow("Proxy URL", self.proxy_url)
+        proxy_hint = QLabel("Изменение прокси для встроенных браузеров вступит в силу после перезапуска приложения. Для прокси с авторизацией используйте локальный прокси-клиент без пароля в URL.")
+        proxy_hint.setWordWrap(True)
+        proxy_form.addRow(proxy_hint)
+        layout.addWidget(proxy_group)
         save_button = QPushButton("Сохранить подключения")
         save_button.clicked.connect(self.save_settings)
         layout.addWidget(save_button)
@@ -491,7 +533,7 @@ class Main(QMainWindow):
             return
         button.setEnabled(False)
         status.setText("Проверяем…")
-        worker = ConnectionCheck(url, token)
+        worker = ConnectionCheck(url, token, self.proxy_map())
         self.check_workers.append(worker)
         def done(message, b=button, st=status, w=worker):
             st.setText(message)
@@ -562,18 +604,29 @@ class Main(QMainWindow):
         except ValueError as exc:
             QMessageBox.warning(self, "Проверьте настройки", str(exc))
             return
+        proxy_url = self.proxy_url.text().strip()
+        if proxy_url and not proxy_url.startswith(("http://", "https://", "socks5://")):
+            QMessageBox.warning(self, "Прокси", "Укажите URL прокси с протоколом http://, https:// или socks5://.")
+            return
         self.cfg["gpu_agent_token"] = self.token.text().strip()
+        self.cfg["proxy_url"] = proxy_url
         self.cfg["active_connection_profile"] = self.profile_combo.currentText()
         self.cfg["connection_profiles"][self.cfg["active_connection_profile"]] = {"servers": self.cfg["servers"], "gpu_agent_token": self.cfg["gpu_agent_token"]}
-        save_cfg(self.cfg)
+        try:
+            save_cfg(self.cfg)
+        except Exception as exc:
+            QMessageBox.critical(self, "Хранилище учётных данных", str(exc))
+            return
         self.apply_server_urls()
-        QMessageBox.information(self, "AIHub Studio", "Настройки сохранены.")
+        QMessageBox.information(self, "AIHub Studio", "Настройки сохранены. Если изменён прокси, перезапустите приложение.")
 
     def add_ai_tab(self, name, url):
         if not name or not url or name in self.ai_views:
             return
         view = QWebEngineView()
+        view.setPage(QWebEnginePage(self.web_profile, view))
         view.setUrl(QUrl(url))
+        view.urlChanged.connect(lambda qurl, v=view: self.update_ai_address_for(v, qurl))
         self.ai_tabs.addTab(view, name)
         self.ai_views[name] = view
 
