@@ -97,13 +97,24 @@
         el, role: el.getAttribute("data-message-author-role"), strategy: "provider"
       }));
       if (exact.length) return exact;
-      const fallback = [...document.querySelectorAll('[data-testid*="conversation-turn"], [data-testid*="message"]')]
-        .map(el => {
-          const hint = ((el.getAttribute("data-testid") || "") + " " + (el.getAttribute("aria-label") || "")).toLowerCase();
-          const role = hint.includes("user") ? "user" : hint.includes("assistant") || hint.includes("model") ? "assistant" : "";
-          return role ? { el, role, strategy: "semantic-fallback" } : null;
-        }).filter(Boolean);
-      return fallback;
+      const fallback = [...document.querySelectorAll(
+        '[data-testid*="conversation-turn"], [data-testid*="message"], [data-turn], [aria-label*="message" i]'
+      )].map(el => {
+        const hint = [
+          el.getAttribute("data-testid") || "",
+          el.getAttribute("data-turn") || "",
+          el.getAttribute("aria-label") || "",
+          el.getAttribute("data-message-author-role") || ""
+        ].join(" ").toLowerCase();
+        const explicit = (el.getAttribute("data-message-author-role") || "").toLowerCase();
+        const role = explicit === "user" || explicit === "assistant" ? explicit
+          : /(^|[^a-z])(user|human|prompt|question)([^a-z]|$)/.test(hint) ? "user"
+          : /(^|[^a-z])(assistant|model|response|answer)([^a-z]|$)/.test(hint) ? "assistant" : "";
+        return role ? { el, role, strategy: "semantic-fallback" } : null;
+      }).filter(Boolean);
+      // Do not stop at an empty provider-specific fallback: let the shared
+      // semantic recognizer inspect the remaining supported role attributes.
+      if (fallback.length) return fallback;
     }
     if (host.includes("claude.ai")) {
       const exact = [];
@@ -139,14 +150,21 @@
         el.getAttribute("data-testid") || "",
         el.getAttribute("data-turn") || "",
         el.getAttribute("aria-label") || "",
-        el.getAttribute("data-message-author-role") || ""
+        el.getAttribute("data-message-author-role") || "",
+        el.getAttribute("data-author") || "",
+        el.getAttribute("data-role") || ""
       ].join(" ").toLowerCase();
       const role = explicit === "user" || explicit === "assistant" ? explicit
-        : /user|human|prompt|question/.test(hint) ? "user"
-        : /assistant|model|response|answer/.test(hint) ? "assistant" : "";
+        : /(^|[^a-z])(user|human|prompt|question)([^a-z]|$)/.test(hint) ? "user"
+        : /(^|[^a-z])(assistant|model|response|answer)([^a-z]|$)/.test(hint) ? "assistant" : "";
       return role ? { el, role, strategy: "semantic-fallback" } : null;
     }).filter(Boolean);
-    return semantic;
+    // Prefer leaf-most candidates to avoid saving a turn wrapper and its nested
+    // message body as duplicate messages.
+    const candidateSet = new Set(semantic.map(item => item.el));
+    return semantic.filter(item => ![...item.el.querySelectorAll(
+      "[data-message-author-role], [data-testid*='message'], [data-testid*='turn'], [data-turn], [aria-label*='message' i]"
+    )].some(child => candidateSet.has(child)));
   }
 
   function describeDomShape() {
