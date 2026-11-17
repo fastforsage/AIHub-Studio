@@ -22,6 +22,7 @@ internal sealed class CaptureForm : Form
     private readonly Button _go = new() { Text = "Открыть", AutoSize = true };
     private readonly Button _importAdapter = new() { Text = "Импорт адаптера JSON", AutoSize = true };
     private readonly Button _openLogs = new() { Text = "Открыть debug-логи", AutoSize = true };
+    private readonly Button _collectDiagnostics = new() { Text = "Собрать диагностику", AutoSize = true };
     private readonly Label _status = new() { AutoSize = true, Text = "Инициализация WebView2…" };
     private readonly Label _count = new() { AutoSize = true, Text = "В БД: 0 сообщений" };
     private readonly TextBox _diagnostics = new()
@@ -57,7 +58,7 @@ internal sealed class CaptureForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 4, Padding = new Padding(8) };
+        var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 5, Padding = new Padding(8) };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -65,6 +66,7 @@ internal sealed class CaptureForm : Form
         toolbar.Controls.Add(_go, 1, 0);
         toolbar.Controls.Add(_importAdapter, 2, 0);
         toolbar.Controls.Add(_openLogs, 3, 0);
+        toolbar.Controls.Add(_collectDiagnostics, 4, 0);
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         var info = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8, 2, 8, 6) };
         info.Controls.Add(_status);
@@ -89,6 +91,7 @@ internal sealed class CaptureForm : Form
         _go.Click += (_, _) => Navigate();
         _importAdapter.Click += async (_, _) => await ImportAdapterFromFileAsync();
         _openLogs.Click += (_, _) => OpenLogDirectory();
+        _collectDiagnostics.Click += async (_, _) => await CollectDiagnosticsAsync();
         _address.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { Navigate(); e.SuppressKeyPress = true; } };
         Shown += async (_, _) => await InitializeBrowserAsync();
         WriteDebugLog("INFO", "app-start", $"Application started; logFile={_logPath}; scriptFile={_scriptPath}");
