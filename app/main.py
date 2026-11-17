@@ -555,21 +555,40 @@ class Main(QMainWindow):
         save_cfg(self.cfg)
 
     def sync_ai_tabs(self):
-        available = {x["name"]: x for x in self.ai_catalog}
+        available = {x["name"]: x for x in self.ai_catalog if x.get("name") and x.get("url")}
         available.update({x["name"]: x for x in self.cfg.get("ai_services", []) if x.get("name") and x.get("url")})
-        enabled = self.cfg.get("enabled_ai_services", [])
-        for name, view in list(self.ai_views.items()):
-            if name not in enabled:
-                index = self.ai_tabs.indexOf(view)
-                if index >= 0:
-                    self.ai_tabs.removeTab(index)
-                view.deleteLater()
-                self.ai_views.pop(name, None)
-        for name in enabled:
-            service = available.get(name)
-            if service and name not in self.ai_views:
-                self.add_ai_tab(name, service.get("url", service.get("website", "")))
-        self.cfg["ai_services"] = [available[name] for name in enabled if name in available]
+        enabled = list(dict.fromkeys(self.cfg.get("enabled_ai_services", [])))
+        order = self.cfg.get("service_order", [])
+        enabled.sort(key=lambda name: order.index(name) if name in order else len(order) + enabled.index(name))
+        self.ai_services_by_name = {name: available[name] for name in enabled if name in available}
+        self.ai_views = self.ai_services_by_name
+        self.cfg["ai_services"] = list(self.ai_services_by_name.values())
+        if not hasattr(self, "service_list"): return
+        selected = self.current_service
+        self.service_list.blockSignals(True)
+        self.service_list.clear()
+        open_item = QListWidgetItem("⌂   Open WebUI")
+        open_item.setData(Qt.UserRole, {"kind": "openwebui"})
+        self.service_list.addItem(open_item)
+        heading = QListWidgetItem("ОБЛАЧНЫЕ LLM")
+        heading.setFlags(Qt.NoItemFlags)
+        heading.setData(Qt.UserRole, {"kind": "heading"})
+        self.service_list.addItem(heading)
+        for name, service in self.ai_services_by_name.items():
+            item = QListWidgetItem("✦   " + name)
+            item.setData(Qt.UserRole, {"kind": "service", "name": name, "url": service["url"]})
+            self.service_list.addItem(item)
+            if name == selected: item.setSelected(True)
+        if selected == "Open WebUI": self.service_list.setCurrentItem(open_item)
+        elif selected in self.ai_services_by_name:
+            for row in range(self.service_list.count()):
+                item = self.service_list.item(row)
+                data = item.data(Qt.UserRole) or {}
+                if data.get("name") == selected: self.service_list.setCurrentItem(item); break
+        else:
+            self.service_list.setCurrentItem(open_item)
+            self.current_service = "Open WebUI"
+        self.service_list.blockSignals(False)
 
     def make_dashboard(self):
         widget = QWidget()
@@ -739,10 +758,8 @@ class Main(QMainWindow):
         save_cfg(self.cfg)
 
     def apply_server_urls(self):
-        dock_url = server_url(self.cfg["servers"]["dockhand"])
-        webui_url = server_url(self.cfg["servers"]["openwebui"])
-        self.dock.setUrl(QUrl(dock_url or "about:blank"))
-        self.openwebui_view.setUrl(QUrl(webui_url or "about:blank"))
+        # URLs are loaded only after an explicit selection; do not spawn background browser pages.
+        return
 
     def save_settings(self):
         try:
@@ -767,14 +784,8 @@ class Main(QMainWindow):
         QMessageBox.information(self, "AIHub Studio", "Настройки сохранены. Если изменён прокси, перезапустите приложение.")
 
     def add_ai_tab(self, name, url):
-        if not name or not url or name in self.ai_views:
-            return
-        view = QWebEngineView()
-        view.setPage(QWebEnginePage(self.web_profile, view))
-        view.setUrl(QUrl(url))
-        view.urlChanged.connect(lambda qurl, v=view: self.update_ai_address_for(v, qurl))
-        self.ai_tabs.addTab(view, name)
-        self.ai_views[name] = view
+        if name and url:
+            self.ai_services_by_name[name] = {"name": name, "url": url}
 
     def add_service_dialog(self):
         name, ok = QInputDialog.getText(self, "AI-сервис", "Название:")
@@ -795,34 +806,79 @@ class Main(QMainWindow):
         return {"http": proxy, "https": proxy} if proxy else {}
 
     def current_ai_view(self):
-        view = self.ai_tabs.currentWidget()
-        return view if isinstance(view, QWebEngineView) else None
+        return self.chat_view if self.stack.currentWidget() is self.chat_view else None
 
     def navigate_ai_address(self):
-        view = self.current_ai_view()
-        if not view: return
+        if self.current_ai_view() is None: return
         value = self.ai_address.text().strip()
         if value and not value.startswith(("http://", "https://")): value = "https://" + value
-        if value: view.setUrl(QUrl(value))
+        if value: self.chat_view.setUrl(QUrl(value))
 
     def update_ai_address_for(self, view, url):
-        if view is self.current_ai_view(): self.ai_address.setText(url.toString())
+        if view is self.chat_view and self.stack.currentWidget() is self.chat_view:
+            self.ai_address.setText(url.toString())
 
     def update_ai_address(self, *_):
-        view = self.current_ai_view()
-        self.ai_address.setText(view.url().toString() if view else "")
+        self.ai_address.setText(self.chat_view.url().toString())
 
-    def close_ai_tab(self, index):
-        view = self.ai_tabs.widget(index)
-        if view is self.openwebui_view: return
-        name = self.ai_tabs.tabText(index)
-        self.ai_tabs.removeTab(index)
-        if name in self.ai_views:
-            self.ai_views.pop(name, None)
-            view.deleteLater()
-            self.cfg["enabled_ai_services"] = [x for x in self.cfg.get("enabled_ai_services", []) if x != name]
-            self.cfg["ai_services"] = [x for x in self.cfg.get("ai_services", []) if x.get("name") != name]
-            save_cfg(self.cfg)
+    def on_service_selected(self, item):
+        data = item.data(Qt.UserRole) or {}
+        kind = data.get("kind")
+        if kind == "heading": return
+        self.show_page("chat")
+        self.current_service = "Open WebUI" if kind == "openwebui" else data.get("name", "")
+        if kind == "openwebui":
+            url = server_url(self.cfg["servers"]["openwebui"])
+        else:
+            url = data.get("url", "")
+        self.page_title.setText(self.current_service or "AIHub Studio")
+        self.ai_address.setText(url)
+        self.chat_view.setUrl(QUrl(url or "about:blank"))
+        logger.info("Выбран сервис: %s", self.current_service)
+
+    def select_openwebui(self):
+        for row in range(self.service_list.count()):
+            item = self.service_list.item(row)
+            if (item.data(Qt.UserRole) or {}).get("kind") == "openwebui":
+                self.service_list.setCurrentItem(item)
+                self.on_service_selected(item)
+                return
+
+    def show_page(self, page):
+        indexes = {"chat": 0, "overview": 1, "catalog": 2, "settings": 3}
+        if page == "dockhand":
+            self.stack.setCurrentWidget(self.chat_view)
+            url = server_url(self.cfg["servers"]["dockhand"])
+            self.current_service = "Dockhand"
+            self.page_title.setText("Dockhand")
+            self.ai_address.setText(url)
+            self.chat_view.setUrl(QUrl(url or "about:blank"))
+        elif page in indexes:
+            self.stack.setCurrentIndex(indexes[page])
+            titles = {"chat": self.current_service, "overview": "Обзор ресурсов", "catalog": "Каталог AI", "settings": "Настройки"}
+            self.page_title.setText(titles[page])
+            self.ai_address.setVisible(page == "chat")
+            self.ai_go.setVisible(page == "chat")
+            self.ai_back.setEnabled(page == "chat")
+            self.ai_forward.setEnabled(page == "chat")
+            self.ai_reload.setEnabled(page == "chat")
+        for key, button in self.nav_buttons.items():
+            button.setChecked(key == page)
+        if page != "chat":
+            self.ai_address.setVisible(False)
+            self.ai_go.setVisible(False)
+        else:
+            self.ai_address.setVisible(True)
+            self.ai_go.setVisible(True)
+
+    def on_service_order_changed(self, *_):
+        ordered = []
+        for row in range(self.service_list.count()):
+            data = self.service_list.item(row).data(Qt.UserRole) or {}
+            if data.get("kind") == "service": ordered.append(data.get("name"))
+        self.cfg["service_order"] = ordered
+        save_cfg(self.cfg)
+        logger.info("Порядок AI-сервисов сохранён")
 
     def refresh(self):
         self.cpu.set(f"{psutil.cpu_percent():.0f}%")
