@@ -926,12 +926,16 @@ class Main(QMainWindow):
         data = item.data(Qt.UserRole) or {}
         kind = data.get("kind")
         if kind == "heading": return
+        requested_name = "Open WebUI" if kind == "openwebui" else data.get("name", "")
+        if requested_name == self.current_service:
+            self.show_page("chat")
+            return
         old_name = self.current_service
         current_url = self.chat_view.url()
-        if old_name and old_name != "Dockhand" and old_name != ("Open WebUI" if kind == "openwebui" else data.get("name", "")) and current_url.scheme() in ("http", "https"):
+        if old_name and old_name != "Dockhand" and old_name != requested_name and current_url.scheme() in ("http", "https"):
             self.cfg.setdefault("service_last_urls", {})[old_name] = current_url.toString()
         self.show_page("chat")
-        self.current_service = "Open WebUI" if kind == "openwebui" else data.get("name", "")
+        self.current_service = requested_name
         if kind == "openwebui":
             base_url = server_url(self.cfg["servers"]["openwebui"])
         else:
