@@ -113,7 +113,16 @@ internal sealed class CaptureForm : Form
             _web.CoreWebView2.NavigationCompleted += async (_, e) =>
             {
                 _status.Text = e.IsSuccess ? "Страница загружена. Войдите и откройте диалог." : $"Ошибка загрузки: {e.WebErrorStatus}";
-                UpdateDiagnostics(e.IsSuccess ? "Навигация завершена успешно." : $"Навигация завершилась ошибкой: {e.WebErrorStatus}");
+                if (e.IsSuccess)
+                {
+                    var adapterId = _adapterRegistry.ResolveProvider(e.Uri);
+                    await _adapterRegistry.RecordDetectionAsync(e.Uri, adapterId, adapterId == "unknown" ? 0.0 : 1.0);
+                    UpdateDiagnostics($"Навигация завершена. Detector: {adapterId}.");
+                }
+                else
+                {
+                    UpdateDiagnostics($"Навигация завершилась ошибкой: {e.WebErrorStatus}");
+                }
                 await InstallCaptureScriptAsync();
                 await RefreshDatabaseCountAsync();
             };
