@@ -1,12 +1,26 @@
 {
-  "dockhand_url": "https://dh.forsage.netcraze.link",
-  "gpu_agent_url": "http://SERVER_VPN_IP:8765",
-  "gpu_agent_token": "SET_A_LONG_RANDOM_TOKEN",
-  "ai_services": [
-    {
-      "name": "Open WebUI",
-      "url": "https://ai.forsage.netcraze.link/"
+  "servers": {
+    "dockhand": {
+      "scheme": "https",
+      "host": "",
+      "port": 443,
+      "path": ""
     },
+    "openwebui": {
+      "scheme": "https",
+      "host": "",
+      "port": 443,
+      "path": ""
+    },
+    "gpu": {
+      "scheme": "http",
+      "host": "",
+      "port": 8765,
+      "path": ""
+    }
+  },
+  "gpu_agent_token": "",
+  "ai_services": [
     {
       "name": "ChatGPT",
       "url": "https://chatgpt.com"
