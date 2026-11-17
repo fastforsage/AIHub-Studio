@@ -226,8 +226,11 @@
         const units = new Set(modern.filter(x =>
           x.el.hasAttribute("data-content-search-unit-key") || x.el.hasAttribute("data-chatgpt-search-unit-key")
         ).map(x => x.el));
-        return modern.filter(x => x.el.getAttribute("data-user-message-bubble") !== "true" ||
-          ![...x.el.parentElement?.closest?.("[data-content-search-unit-key], [data-chatgpt-search-unit-key]") ? [x.el.parentElement.closest("[data-content-search-unit-key], [data-chatgpt-search-unit-key]")] : []].some(parent => units.has(parent)));
+        return modern.filter(x => {
+          if (x.el.getAttribute("data-user-message-bubble") !== "true") return true;
+          const parentUnit = x.el.parentElement?.closest("[data-content-search-unit-key], [data-chatgpt-search-unit-key]");
+          return !parentUnit || !units.has(parentUnit);
+        });
       }
 
       const exact = [...document.querySelectorAll("[data-message-author-role]")].map(el => ({
