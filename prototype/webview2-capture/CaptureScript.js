@@ -189,7 +189,7 @@
           error: String(error).slice(0, 160), endpointPath: "/backend-api/conversation/{id}"
         }));
       } else if (match && !response.ok) {
-        const currentMatch = location.pathname.match(/^\\/c\\/([^/]+)/);
+        const currentMatch = location.pathname.match(/^\/c\/([^/]+)/);
         if (location.hostname.toLowerCase() === "chatgpt.com" && currentMatch && currentMatch[1] === match[1]) {
           chatGptApiState = "unavailable";
           diagnostic("api-native-response", "Нативный запрос истории вернул ошибочный HTTP-ответ; использую DOM fallback", {
@@ -207,7 +207,7 @@
 
   function captureChatGptConversationApi() {
     if (location.hostname.toLowerCase() !== "chatgpt.com") return;
-    const match = location.pathname.match(/^\\/c\\/([^/]+)/);
+    const match = location.pathname.match(/^\/c\/([^/]+)/);
     if (!match) return;
     const conversationUrl = location.origin + "/c/" + match[1];
     if (conversationUrl !== chatGptApiConversationUrl) {
