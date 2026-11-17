@@ -39,6 +39,7 @@ internal sealed class CaptureForm : Form
     private bool _captureScriptRegistered;
     private bool _adapterConfigRegistered;
     private string _lastDiagnostic = "Диагностика ещё не получена.";
+    private string _domProbeDiagnostic = "DOM-probe ещё не получен.";
 
     public CaptureForm()
     {
@@ -89,7 +90,7 @@ internal sealed class CaptureForm : Form
         _diagnostics.Text =
             $"Браузер: {(_web.CoreWebView2 is null ? "не готов" : "готов")} | Скрипт зарегистрирован: {_captureScriptRegistered}\r\n" +
             $"DOM: найдено {_domFound} | сканирований {_scanCount} | Получено событий: {_receivedCount} | Записей/обновлений SQLite: {_savedEvents}\r\n" +
-            $"URL: {_web.Source?.ToString() ?? "(нет)"}\r\n{_lastDiagnostic}";
+            $"URL: {_web.Source?.ToString() ?? "(нет)"}\r\n{_domProbeDiagnostic}\r\n{_lastDiagnostic}";
     }
 
     private async Task InitializeBrowserAsync()
@@ -288,8 +289,10 @@ internal sealed class CaptureForm : Form
         if (root.TryGetProperty("foundCount", out var found) && found.TryGetInt32(out var foundCount))
             _domFound = foundCount;
 
+        if (stage == "dom-probe")
+            _domProbeDiagnostic = $"JS [dom-probe]: {detail}";
         var extra = stage == "scan"
-            ? $" | provider={GetString(root, "providerHost")} | найдено={_domFound} | scans={_scanCount}"
+            ? $" | provider={GetString(root, "providerHost")} | adapter={GetString(root, "adapterId")} | confidence={GetString(root, "detectionConfidence")} | strategy={GetString(root, "strategy")} | найдено={_domFound} | scans={_scanCount}"
             : stage == "message-sent"
                 ? $" | role={GetString(root, "role")} | chars={GetInt(root, "textLength")}"
                 : "";
