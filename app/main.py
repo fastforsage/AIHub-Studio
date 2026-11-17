@@ -56,7 +56,8 @@ def load_cfg():
         pass
     profiles = cfg.get("connection_profiles") or {}
     if not profiles:
-        profiles = {"Локальная сеть": {"servers": cfg["servers"], "gpu_agent_token": cfg.get("gpu_agent_token", "")}}
+        profiles = {"Локальная сеть": {"servers": cfg["servers"], "gpu_agent_token": cfg.get("gpu_agent_token", "")}, "Частное облако": {"servers": json.loads(json.dumps(DEFAULTS["servers"])), "gpu_agent_token": ""}}
+    profiles.setdefault("Частное облако", {"servers": json.loads(json.dumps(DEFAULTS["servers"])), "gpu_agent_token": ""})
     cfg["connection_profiles"] = profiles
     active = cfg.get("active_connection_profile", "Локальная сеть")
     if active not in profiles:
@@ -304,7 +305,7 @@ class Main(QMainWindow):
     def switch_connection_profile(self, name):
         if not name: return
         old = self.cfg.get("active_connection_profile", "")
-        if old and hasattr(self, "dock_fields"):
+        if old and old in self.cfg["connection_profiles"] and hasattr(self, "dock_fields"):
             try:
                 self.cfg["connection_profiles"][old] = {"servers": {"dockhand": self.dock_fields.values(), "openwebui": self.webui_fields.values(), "gpu": self.gpu_fields.values()}, "gpu_agent_token": self.token.text().strip()}
             except (ValueError, AttributeError): pass
