@@ -1,0 +1,23 @@
+name: Build WebView2 Capture Prototype
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/webview2-local-chat-archive
+    paths:
+      - 'prototype/webview2-capture/**'
+      - '.github/workflows/build-webview2-prototype.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore prototype/webview2-capture/AIHub.WebView2Capture.csproj
+      - name: Build
+        run: dotnet build prototype/webview2-capture/AIHub.WebView2Capture.csproj --configuration Release --no-restore
