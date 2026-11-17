@@ -10,6 +10,9 @@
   let lastFoundCount = -1;
   const elementKeys = new WeakMap();
   const sentContent = new WeakMap();
+  const pendingContent = new WeakMap();
+  const pendingTimers = new WeakMap();
+  const pendingPreviousKeys = new WeakMap();
   const candidateDebugState = new WeakMap();
   const scriptVersion = "2026.11.17-chatgpt-api-dom-v4";
   let chatGptApiState = "unknown";
@@ -428,6 +431,7 @@
         return;
       }
       let key = elementKeys.get(el);
+      let previousKey = "";
       if (!key) {
         sequence += 1;
         key = stableDomKey || ("dom-" + role + "-" + index + "-" + hash(text) + "-" + sequence);
@@ -436,30 +440,46 @@
           messageKey: key, index, contentHash: hash(text)
         });
         elementKeys.set(el, key);
-      }
-      if (sentContent.get(el) === text) return;
-      sentContent.set(el, text);
-      try {
-        if (!window.chrome || !window.chrome.webview) {
-          diagnostic("bridge-missing", "Объект window.chrome.webview недоступен");
-          return;
-        }
-        window.chrome.webview.postMessage(JSON.stringify({
-          type: "aihub-message",
-          providerHost: host,
-          url: location.href,
-          role,
-          messageKey: key,
-          text,
-          extractionStrategy: strategy || "semantic-dom",
-          capturedAt: new Date().toISOString()
-        }));
-        diagnostic("message-sent", "Сообщение отправлено в приложение", {
-          role, textLength: text.length, messageKey: key, strategy: strategy || "semantic-dom", contentHash: hash(text)
+      } else if (stableDomKey && key !== stableDomKey) {
+        previousKey = key;
+        key = stableDomKey;
+        elementKeys.set(el, key);
+        pendingPreviousKeys.set(el, previousKey);
+        diagnostic("message-key-upgraded", "Временный ключ заменён стабильным ключом провайдера", {
+          role, previousMessageKey: previousKey, messageKey: key, strategy: strategy || "unknown"
         });
-      } catch (error) {
-        diagnostic("post-error", String(error));
       }
+      if (sentContent.get(el) === text && !previousKey) return;
+      if (pendingContent.get(el) === text && !previousKey) return;
+      pendingContent.set(el, text);
+      const existingTimer = pendingTimers.get(el);
+      if (existingTimer) clearTimeout(existingTimer);
+      if (previousKey) pendingPreviousKeys.set(el, previousKey);
+      const timer = setTimeout(() => {
+        pendingTimers.delete(el);
+        const latestText = pendingContent.get(el);
+        const latestKey = elementKeys.get(el);
+        const oldKey = pendingPreviousKeys.get(el) || "";
+        pendingPreviousKeys.delete(el);
+        if (!latestText || !latestKey || (sentContent.get(el) === latestText && !oldKey)) return;
+        try {
+          if (!window.chrome || !window.chrome.webview) {
+            diagnostic("bridge-missing", "Объект window.chrome.webview недоступен");
+            return;
+          }
+          window.chrome.webview.postMessage(JSON.stringify({
+            type: "aihub-message", providerHost: host, url: location.href, role,
+            messageKey: latestKey, previousMessageKey: oldKey, text: latestText,
+            extractionStrategy: strategy || "semantic-dom", capturedAt: new Date().toISOString()
+          }));
+          sentContent.set(el, latestText);
+          diagnostic("message-sent", "Сообщение отправлено в приложение после debounce", {
+            role, textLength: latestText.length, messageKey: latestKey, previousMessageKey: oldKey,
+            strategy: strategy || "semantic-dom", contentHash: hash(latestText)
+          });
+        } catch (error) { diagnostic("post-error", String(error)); }
+      }, 1200);
+      pendingTimers.set(el, timer);
     });
   }
 
