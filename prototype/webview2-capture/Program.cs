@@ -116,8 +116,9 @@ internal sealed class CaptureForm : Form
                 _status.Text = e.IsSuccess ? "Страница загружена. Войдите и откройте диалог." : $"Ошибка загрузки: {e.WebErrorStatus}";
                 if (e.IsSuccess)
                 {
-                    var adapterId = _adapterRegistry.ResolveProvider(e.Uri);
-                    await _adapterRegistry.RecordDetectionAsync(e.Uri, adapterId, adapterId == "unknown" ? 0.0 : 1.0);
+                    var currentUrl = _web.Source?.ToString() ?? "";
+                    var adapterId = _adapterRegistry.ResolveProvider(currentUrl);
+                    await _adapterRegistry.RecordDetectionAsync(currentUrl, adapterId, adapterId == "unknown" ? 0.0 : 1.0);
                     UpdateDiagnostics($"Навигация завершена. Detector: {adapterId}.");
                 }
                 else
