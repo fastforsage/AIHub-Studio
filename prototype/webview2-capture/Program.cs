@@ -29,6 +29,7 @@ internal sealed class CaptureForm : Form
     };
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill };
     private readonly string _dbPath;
+    private readonly AdapterRegistry _adapterRegistry;
     private readonly string _scriptPath;
     private int _receivedCount;
     private int _savedEvents;
@@ -68,6 +69,7 @@ internal sealed class CaptureForm : Form
         var dataDir = Path.Combine(local, "AIHubStudio", "WebView2CapturePrototype");
         Directory.CreateDirectory(dataDir);
         _dbPath = Path.Combine(dataDir, "conversations.db");
+        _adapterRegistry = new AdapterRegistry(_dbPath);
         _scriptPath = Path.Combine(AppContext.BaseDirectory, "CaptureScript.js");
 
         _go.Click += (_, _) => Navigate();
@@ -89,7 +91,8 @@ internal sealed class CaptureForm : Form
     {
         try
         {
-            UpdateDiagnostics("Создаю профиль WebView2…");
+            await _adapterRegistry.InitializeAsync();
+            UpdateDiagnostics("Каталог адаптеров загружен из SQLite. Создаю профиль WebView2…");
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var userData = Path.Combine(local, "AIHubStudio", "WebView2CapturePrototype", "BrowserData");
             Directory.CreateDirectory(userData);
@@ -190,7 +193,8 @@ internal sealed class CaptureForm : Form
 
             _receivedCount++;
             var url = GetString(root, "url");
-            var provider = GetProvider(url);
+            var provider = _adapterRegistry.ResolveProvider(url);
+            await _adapterRegistry.RecordDetectionAsync(url, provider, provider == "unknown" ? 0.0 : 1.0);
             var conversationKey = GetConversationKey(url);
             var role = GetString(root, "role", "unknown");
             var content = GetString(root, "text");
@@ -296,16 +300,6 @@ internal sealed class CaptureForm : Form
         command.Parameters.AddWithValue("$url", url);
         command.Parameters.AddWithValue("$now", now);
         await command.ExecuteNonQueryAsync();
-    }
-
-    private static string GetProvider(string url)
-    {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return "unknown";
-        var host = uri.Host.ToLowerInvariant();
-        if (host.Contains("chatgpt.com") || host.Contains("openai.com")) return "ChatGPT";
-        if (host.Contains("claude.ai")) return "Claude";
-        if (host.Contains("gemini.google.com")) return "Gemini";
-        return host;
     }
 
     private static string GetConversationKey(string url)
