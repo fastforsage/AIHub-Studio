@@ -345,7 +345,6 @@ class Main(QMainWindow):
         if QMessageBox.question(self, "Удалить профиль", "Удалить профиль «" + name + "»?") != QMessageBox.Yes: return
         self.cfg["connection_profiles"].pop(name, None)
         next_name = next(iter(self.cfg["connection_profiles"]))
-        self.cfg["active_connection_profile"] = next_name
         self.profile_combo.blockSignals(True)
         self.profile_combo.removeItem(self.profile_combo.currentIndex())
         self.profile_combo.setCurrentText(next_name)
@@ -356,8 +355,8 @@ class Main(QMainWindow):
     def apply_server_urls(self):
         dock_url = server_url(self.cfg["servers"]["dockhand"])
         webui_url = server_url(self.cfg["servers"]["openwebui"])
-        if dock_url: self.dock.setUrl(QUrl(dock_url))
-        if webui_url: self.openwebui_view.setUrl(QUrl(webui_url))
+        self.dock.setUrl(QUrl(dock_url or "about:blank"))
+        self.openwebui_view.setUrl(QUrl(webui_url or "about:blank"))
 
     def save_settings(self):
         try:
