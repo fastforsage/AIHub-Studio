@@ -13,7 +13,7 @@
   </Package>
   <Fragment>
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-      <Files Include="publish\\**" />
+      <Files Include="..\\publish\\**" />
     </ComponentGroup>
     <ComponentGroup Id="StartMenuShortcuts" Directory="ApplicationProgramsFolder">
       <Component Id="StartMenuShortcutComponent" Guid="*">
