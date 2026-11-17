@@ -10,6 +10,7 @@
   let lastFoundCount = -1;
   const elementKeys = new WeakMap();
   const sentContent = new WeakMap();
+  const candidateDebugState = new WeakMap();
   const scriptVersion = "2026.11.17-chatgpt-api-dom-v3";
   let chatGptApiState = "unknown";
   let chatGptApiInFlight = false;
@@ -137,7 +138,7 @@
           const trimmed = body.trim();
           if (trimmed.startsWith("<")) {
             bodyKind = "html";
-            const title = trimmed.match(/<title[^>]*>([^<]{0,160})<\\/title>/i);
+            const title = trimmed.match(new RegExp("<title[^>]*>([^<]{0,160})</title>", "i"));
             bodyTitle = title ? title[1].replace(/\\s+/g, " ").trim() : "";
           } else if (trimmed) {
             try { const parsed = JSON.parse(trimmed); bodyKind = "json"; bodyTitle = Object.keys(parsed).slice(0, 12).join(","); }
@@ -411,11 +412,15 @@
       const text = cleanText(el);
       const stableDomKey = el.getAttribute("data-content-search-unit-key") ||
         el.getAttribute("data-chatgpt-search-unit-key") || el.getAttribute("data-turn-key") || "";
-      diagnostic("dom-candidate", "Обнаружен DOM-кандидат сообщения", {
-        role, strategy: strategy || "unknown", index, textLength: text.length,
-        stableKeyPresent: Boolean(stableDomKey), stableKey: stableDomKey.slice(0, 120),
-        visible: Boolean(el.getClientRects().length), tagName: el.tagName.toLowerCase()
-      });
+      const candidateSignature = [role, strategy || "unknown", text.length, hash(text), stableDomKey].join("|");
+      if (candidateDebugState.get(el) !== candidateSignature) {
+        candidateDebugState.set(el, candidateSignature);
+        diagnostic("dom-candidate", "Обнаружен или изменился DOM-кандидат сообщения", {
+          role, strategy: strategy || "unknown", index, textLength: text.length, contentHash: hash(text),
+          stableKeyPresent: Boolean(stableDomKey), stableKey: stableDomKey.slice(0, 120),
+          visible: Boolean(el.getClientRects().length), tagName: el.tagName.toLowerCase()
+        });
+      }
       if (!text || text.length < 2) {
         diagnostic("dom-skip", "DOM-кандидат пропущен: пустой или слишком короткий текст", {
           role, strategy: strategy || "unknown", index, textLength: text.length
