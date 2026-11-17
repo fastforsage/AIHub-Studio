@@ -12,6 +12,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-2022
+    env:
+      APP_VERSION: 0.1.2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -30,11 +32,11 @@ jobs:
           .\\.wix\\wix.exe --version
       - name: Build x64 MSI
         shell: pwsh
-        run: .\\.wix\\wix.exe build prototype/webview2-capture/Installer.wxs -arch x64 -out WebView2-Capture-Prototype-x64.msi
+        run: .\\.wix\\wix.exe build prototype/webview2-capture/Installer.wxs -arch x64 -out AIHub-WebView2-Capture-Prototype-v0.1.2-x64.msi
       - name: Upload test MSI
         uses: actions/upload-artifact@v4
         with:
-          name: WebView2-Capture-Prototype-Windows-x64-MSI
-          path: WebView2-Capture-Prototype-x64.msi
+          name: AIHub-WebView2-Capture-v0.1.2-Windows-x64
+          path: AIHub-WebView2-Capture-Prototype-v0.1.2-x64.msi
           if-no-files-found: error
           retention-days: 14

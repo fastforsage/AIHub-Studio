@@ -10,7 +10,7 @@
   let lastFoundCount = -1;
   const elementKeys = new WeakMap();
   const sentContent = new WeakMap();
-  const scriptVersion = "2026.11.17-chatgpt-api-dom-v2";
+  const scriptVersion = "2026.11.17-chatgpt-api-dom-v3";
   let chatGptApiState = "unknown";
   let chatGptApiInFlight = false;
   let chatGptApiLastAttempt = 0;
@@ -111,27 +111,67 @@
     if (chatGptApiInFlight || Date.now() - chatGptApiLastAttempt < 8000) return;
     chatGptApiLastAttempt = Date.now();
     chatGptApiInFlight = true;
+    const endpoint = location.origin + "/backend-api/conversation/" + encodeURIComponent(conversationId);
+    const startedAt = Date.now();
+    diagnostic("api-request", "Отправляю запрос истории ChatGPT", {
+      conversationId, endpointPath: "/backend-api/conversation/{id}", method: "GET", credentials: "include",
+      readyState: document.readyState, pageOrigin: location.origin
+    });
     try {
-      const response = await fetch(location.origin + "/backend-api/conversation/" + encodeURIComponent(conversationId), {
+      const response = await fetch(endpoint, {
         method: "GET",
         credentials: "include",
         headers: { "Accept": "application/json" },
         cache: "no-store"
       });
+      const contentType = response.headers.get("content-type") || "";
+      const requestId = response.headers.get("x-request-id") || response.headers.get("oai-request-id") || "";
+      const cfRay = response.headers.get("cf-ray") || "";
       if (!response.ok) {
+        let bodyLength = 0;
+        let bodyKind = "empty";
+        let bodyTitle = "";
+        try {
+          const body = await response.clone().text();
+          bodyLength = body.length;
+          const trimmed = body.trim();
+          if (trimmed.startsWith("<")) {
+            bodyKind = "html";
+            const title = trimmed.match(/<title[^>]*>([^<]{0,160})<\\/title>/i);
+            bodyTitle = title ? title[1].replace(/\\s+/g, " ").trim() : "";
+          } else if (trimmed) {
+            try { const parsed = JSON.parse(trimmed); bodyKind = "json"; bodyTitle = Object.keys(parsed).slice(0, 12).join(","); }
+            catch (_) { bodyKind = "text"; }
+          }
+        } catch (_) { bodyKind = "unreadable"; }
         chatGptApiState = "unavailable";
-        diagnostic("api-capture", "ChatGPT conversation endpoint вернул HTTP " + response.status, {
-          apiStatus: response.status, conversationId
+        diagnostic("api-response", "API вернул ошибочный HTTP-ответ", {
+          apiStatus: response.status, contentType, redirected: response.redirected, responseUrl: response.url,
+          elapsedMs: Date.now() - startedAt, bodyLength, bodyKind, bodyTitle, requestId, cfRay, conversationId
+        });
+        diagnostic("api-capture", "ChatGPT conversation endpoint вернул HTTP " + response.status + "; DOM fallback активирован", {
+          apiStatus: response.status, conversationId, elapsedMs: Date.now() - startedAt
         });
         return;
       }
+      diagnostic("api-response", "API вернул успешный HTTP-ответ", {
+        apiStatus: response.status, contentType, redirected: response.redirected,
+        elapsedMs: Date.now() - startedAt, requestId, cfRay, conversationId
+      });
       const payload = await response.json();
       const mapping = payload && payload.mapping && typeof payload.mapping === "object" ? payload.mapping : null;
       if (!mapping) {
         chatGptApiState = "unavailable";
+        diagnostic("api-payload", "HTTP успешен, но ожидаемая структура mapping отсутствует", {
+          conversationId, topLevelKeys: Object.keys(payload || {}).slice(0, 30),
+          hasCurrentNode: Boolean(payload && payload.current_node), hasMapping: Boolean(payload && payload.mapping)
+        });
         diagnostic("api-capture", "Ответ endpoint не содержит mapping; переключаюсь на DOM", { conversationId });
         return;
       }
+      diagnostic("api-payload", "Структура conversation API распознана", {
+        conversationId, mappingNodes: Object.keys(mapping).length, currentNodePresent: Boolean(payload.current_node)
+      });
 
       const ordered = [];
       const visited = new Set();
@@ -179,7 +219,8 @@
       }
       chatGptApiState = "ready";
       diagnostic("api-capture", "История ChatGPT прочитана из авторизованной сессии", {
-        conversationId, pathNodes: ordered.length, messagesSent: captured, apiStatus: response.status
+        conversationId, pathNodes: ordered.length, mappingNodes: Object.keys(mapping).length,
+        messagesSent: captured, apiStatus: response.status, elapsedMs: Date.now() - startedAt
       });
     } catch (error) {
       chatGptApiState = "unavailable";
@@ -366,13 +407,25 @@
           strategy: found[0]?.strategy || "none" });
     }
 
-    found.forEach(({ el, role }, index) => {
+    found.forEach(({ el, role, strategy }, index) => {
       const text = cleanText(el);
-      if (!text || text.length < 2) return;
+      const stableDomKey = el.getAttribute("data-content-search-unit-key") ||
+        el.getAttribute("data-chatgpt-search-unit-key") || el.getAttribute("data-turn-key") || "";
+      diagnostic("dom-candidate", "Обнаружен DOM-кандидат сообщения", {
+        role, strategy: strategy || "unknown", index, textLength: text.length,
+        stableKeyPresent: Boolean(stableDomKey), stableKey: stableDomKey.slice(0, 120),
+        visible: Boolean(el.getClientRects().length), tagName: el.tagName.toLowerCase()
+      });
+      if (!text || text.length < 2) {
+        diagnostic("dom-skip", "DOM-кандидат пропущен: пустой или слишком короткий текст", {
+          role, strategy: strategy || "unknown", index, textLength: text.length
+        });
+        return;
+      }
       let key = elementKeys.get(el);
       if (!key) {
         sequence += 1;
-        key = role + "-" + index + "-" + hash(text.slice(0, 64)) + "-" + sequence;
+        key = stableDomKey || (role + "-" + index + "-" + hash(text.slice(0, 64)) + "-" + sequence);
         elementKeys.set(el, key);
       }
       if (sentContent.get(el) === text) return;
@@ -389,9 +442,12 @@
           role,
           messageKey: key,
           text,
+          extractionStrategy: strategy || "semantic-dom",
           capturedAt: new Date().toISOString()
         }));
-        diagnostic("message-sent", "Сообщение отправлено в приложение", { role, textLength: text.length });
+        diagnostic("message-sent", "Сообщение отправлено в приложение", {
+          role, textLength: text.length, messageKey: key, strategy: strategy || "semantic-dom", contentHash: hash(text)
+        });
       } catch (error) {
         diagnostic("post-error", String(error));
       }

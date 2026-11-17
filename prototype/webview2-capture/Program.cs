@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -20,6 +21,7 @@ internal sealed class CaptureForm : Form
     private readonly TextBox _address = new() { Dock = DockStyle.Fill, Text = "https://chatgpt.com" };
     private readonly Button _go = new() { Text = "Открыть", AutoSize = true };
     private readonly Button _importAdapter = new() { Text = "Импорт адаптера JSON", AutoSize = true };
+    private readonly Button _openLogs = new() { Text = "Открыть debug-логи", AutoSize = true };
     private readonly Label _status = new() { AutoSize = true, Text = "Инициализация WebView2…" };
     private readonly Label _count = new() { AutoSize = true, Text = "В БД: 0 сообщений" };
     private readonly TextBox _diagnostics = new()
@@ -32,6 +34,8 @@ internal sealed class CaptureForm : Form
     private readonly string _dbPath;
     private readonly AdapterRegistry _adapterRegistry;
     private readonly string _scriptPath;
+    private readonly string _logDirectory;
+    private readonly string _logPath;
     private int _receivedCount;
     private int _savedEvents;
     private int _scanCount;
@@ -53,13 +57,15 @@ internal sealed class CaptureForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Padding = new Padding(8) };
+        var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 4, Padding = new Padding(8) };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         toolbar.Controls.Add(_address, 0, 0);
         toolbar.Controls.Add(_go, 1, 0);
         toolbar.Controls.Add(_importAdapter, 2, 0);
+        toolbar.Controls.Add(_openLogs, 3, 0);
+        toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         var info = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8, 2, 8, 6) };
         info.Controls.Add(_status);
         info.Controls.Add(new Label { Text = "   •   ", AutoSize = true });
@@ -76,16 +82,22 @@ internal sealed class CaptureForm : Form
         _dbPath = Path.Combine(dataDir, "conversations.db");
         _adapterRegistry = new AdapterRegistry(_dbPath);
         _scriptPath = Path.Combine(AppContext.BaseDirectory, "CaptureScript.js");
+        _logDirectory = Path.Combine(dataDir, "Logs");
+        Directory.CreateDirectory(_logDirectory);
+        _logPath = Path.Combine(_logDirectory, $"capture-debug-{DateTime.Now:yyyyMMdd}.log");
 
         _go.Click += (_, _) => Navigate();
         _importAdapter.Click += async (_, _) => await ImportAdapterFromFileAsync();
+        _openLogs.Click += (_, _) => OpenLogDirectory();
         _address.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { Navigate(); e.SuppressKeyPress = true; } };
         Shown += async (_, _) => await InitializeBrowserAsync();
+        WriteDebugLog("INFO", "app-start", $"Application started; logFile={_logPath}; scriptFile={_scriptPath}");
         UpdateDiagnostics("Приложение запущено. Ожидание WebView2.");
     }
 
     private void UpdateDiagnostics(string message)
     {
+        WriteDebugLog("INFO", "app", message);
         _lastDiagnostic = $"{DateTime.Now:HH:mm:ss}  {message}";
         _diagnostics.Text =
             $"Браузер: {(_web.CoreWebView2 is null ? "не готов" : "готов")} | Скрипт зарегистрирован: {_captureScriptRegistered}\r\n" +
@@ -259,13 +271,18 @@ internal sealed class CaptureForm : Form
             var role = GetString(root, "role", "unknown");
             var content = GetString(root, "text");
             var messageKey = GetString(root, "messageKey");
+            var strategy = GetString(root, "extractionStrategy", "unknown");
+            WriteDebugLog("INFO", "message-received", $"provider={provider}; role={role}; strategy={strategy}; key={messageKey}; chars={content.Length}; url={url}");
             if (string.IsNullOrWhiteSpace(content) || string.IsNullOrWhiteSpace(messageKey))
             {
                 UpdateDiagnostics($"Получено пустое сообщение (role={role}, key={messageKey.Length} символов).");
                 return;
             }
 
+            var saveStarted = System.Diagnostics.Stopwatch.StartNew();
             await SaveMessageAsync(provider, conversationKey, messageKey, role, content, url);
+            saveStarted.Stop();
+            WriteDebugLog("INFO", "sqlite-upsert", $"provider={provider}; role={role}; strategy={strategy}; key={messageKey}; chars={content.Length}; elapsedMs={saveStarted.ElapsedMilliseconds}");
             _savedEvents++;
             _count.Text = $"Записей/обновлений: {_savedEvents}";
             _status.Text = $"Захват: {provider} · {role}";
@@ -275,6 +292,7 @@ internal sealed class CaptureForm : Form
         catch (Exception ex)
         {
             _status.Text = "Ошибка обработки сообщения: " + ex.Message;
+            WriteDebugLog("ERROR", "message-handler-exception", ex.ToString());
             UpdateDiagnostics("ОШИБКА ПРИЁМА/СОХРАНЕНИЯ: " + ex);
         }
     }
@@ -291,6 +309,8 @@ internal sealed class CaptureForm : Form
 
         if (stage == "dom-probe")
             _domProbeDiagnostic = $"JS [dom-probe]: {detail}";
+        WriteDebugLog(stage == "post-error" || stage == "bridge-missing" ? "ERROR" : "DEBUG", "js-" + stage,
+            $"detail={detail}; payload={root.ToString()}");
         var extra = stage == "script-start"
             ? $" | version={GetString(root, "scriptVersion", "unknown")}"
             : stage == "scan"
@@ -299,8 +319,42 @@ internal sealed class CaptureForm : Form
                     ? $" | role={GetString(root, "role")} | chars={GetInt(root, "textLength")}"
                     : stage == "api-capture"
                         ? $" | messagesSent={GetInt(root, "messagesSent")} | apiStatus={GetInt(root, "apiStatus")}"
-                        : "";
+                        : stage == "api-response"
+                            ? $" | apiStatus={GetInt(root, "apiStatus")} | elapsedMs={GetInt(root, "elapsedMs")} | contentType={GetString(root, "contentType")} | bodyKind={GetString(root, "bodyKind")}"
+                            : stage == "dom-candidate"
+                                ? $" | role={GetString(root, "role")} | strategy={GetString(root, "strategy")} | chars={GetInt(root, "textLength")} | stableKey={GetString(root, "stableKeyPresent")}"
+                                : "";
         UpdateDiagnostics($"JS [{stage}]: {detail}{extra} | {url}");
+    }
+
+
+    private void WriteDebugLog(string level, string category, string message)
+    {
+        try
+        {
+            var line = $"{DateTimeOffset.Now:O} [{level}] [{category}] {message}{Environment.NewLine}";
+            File.AppendAllText(_logPath, line);
+        }
+        catch
+        {
+            // Logging must never interrupt message capture or SQLite persistence.
+        }
+    }
+
+    private void OpenLogDirectory()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _logDirectory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            UpdateDiagnostics("Не удалось открыть папку логов: " + ex.Message);
+        }
     }
 
     private async Task RefreshDatabaseCountAsync()
