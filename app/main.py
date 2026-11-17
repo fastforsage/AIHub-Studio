@@ -6,18 +6,10 @@ from urllib.parse import urlsplit
 import requests
 import psutil
 from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal, Qt
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem, QSplitter, QStackedWidget, QDialog, QTextEdit, QDialogButtonBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem, QSplitter, QStackedWidget, QAbstractItemView, QDialog, QTextEdit, QDialogButtonBox
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
-
-LOG_FILE = CONFIG_DIR / "AIHubStudio.log"
-logger = logging.getLogger("AIHubStudio")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    _handler = RotatingFileHandler(LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
-    _handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
-    logger.addHandler(_handler)
 
 def _dpapi_transform(data, decrypt=False):
     class DATA_BLOB(ctypes.Structure):
@@ -55,16 +47,23 @@ def save_secret_store(secrets):
     encrypted = _dpapi_transform(json.dumps(secrets, ensure_ascii=False).encode("utf-8"))
     (CONFIG_DIR / "secrets.dpapi").write_bytes(encrypted)
 
-def _log_uncaught(exc_type, exc_value, exc_tb):
-    logger.error("Необработанное исключение", exc_info=(exc_type, exc_value, exc_tb))
-sys.excepthook = _log_uncaught
-
-
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "AIHubStudio"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CFG = CONFIG_DIR / "settings.json"
 AI_CATALOG_URL = "https://silentcoderhere.github.io/aihub-config-data/ais.json"
 AI_CATALOG_CACHE = CONFIG_DIR / "ais.json"
+LOG_FILE = CONFIG_DIR / "AIHubStudio.log"
+logger = logging.getLogger("AIHubStudio")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = RotatingFileHandler(LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
+    _handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+    logger.addHandler(_handler)
+
+def _log_uncaught(exc_type, exc_value, exc_tb):
+    logger.error("Необработанное исключение", exc_info=(exc_type, exc_value, exc_tb))
+sys.excepthook = _log_uncaught
+
 DEFAULTS = {
     "servers": {
         "dockhand": {"scheme": "https", "host": "", "port": 443, "path": ""},
@@ -298,6 +297,7 @@ class Main(QMainWindow):
         self.thread_pool = QThreadPool.globalInstance()
         self.check_workers = []
         self.agent_worker_active = False
+        self.current_service = "Open WebUI"
         self.web_profile = QWebEngineProfile("AIHubStudio", self)
         web_data = CONFIG_DIR / "web-profile"
         web_cache = CONFIG_DIR / "web-cache"
@@ -308,58 +308,122 @@ class Main(QMainWindow):
         self.web_profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
         self.web_profile.setHttpCacheType(QWebEngineProfile.DiskHttpCache)
         self.ai_catalog = load_ai_catalog_cache()
-        self.ai_views = {}
+        self.ai_services_by_name = {}
         self.setWindowTitle("AIHub Studio")
-        self.resize(1440, 900)
-        self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
-        self.tabs.addTab(self.make_dashboard(), "Обзор")
-        ai_hub = QWidget()
-        ai_layout = QVBoxLayout(ai_hub)
-        ai_layout.setContentsMargins(10, 10, 10, 10)
-        nav = QHBoxLayout()
+        self.resize(1480, 920)
+        self.setMinimumSize(1050, 680)
+
+        root = QWidget()
+        root_layout = QHBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        self.setCentralWidget(root)
+
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(270)
+        side_layout = QVBoxLayout(sidebar)
+        side_layout.setContentsMargins(16, 22, 16, 16)
+        side_layout.setSpacing(10)
+        brand = QLabel("◈  AIHub Studio")
+        brand.setObjectName("brand")
+        side_layout.addWidget(brand)
+        side_caption = QLabel("ВАШИ AI-ПОМОЩНИКИ")
+        side_caption.setObjectName("sideCaption")
+        side_layout.addWidget(side_caption)
+
+        self.service_list = QListWidget()
+        self.service_list.setObjectName("serviceList")
+        self.service_list.setSpacing(4)
+        self.service_list.setDragDropMode(QAbstractItemView.InternalMove)
+        self.service_list.setDefaultDropAction(Qt.MoveAction)
+        self.service_list.model().rowsMoved.connect(self.on_service_order_changed)
+        self.service_list.itemClicked.connect(self.on_service_selected)
+        side_layout.addWidget(self.service_list, 1)
+
+        side_divider = QFrame()
+        side_divider.setFrameShape(QFrame.HLine)
+        side_divider.setObjectName("sideDivider")
+        side_layout.addWidget(side_divider)
+        self.nav_buttons = {}
+        for key, label in [("catalog", "＋  Каталог AI"), ("overview", "▦  Обзор"), ("dockhand", "▣  Dockhand"), ("settings", "⚙  Настройки")]:
+            button = QPushButton(label)
+            button.setObjectName("sideNav")
+            button.setCheckable(True)
+            button.clicked.connect(lambda checked=False, k=key: self.show_page(k))
+            side_layout.addWidget(button)
+            self.nav_buttons[key] = button
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(sidebar)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        toolbar = QFrame()
+        toolbar.setObjectName("toolbar")
+        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(18, 12, 18, 12)
         self.ai_back = QPushButton("←")
         self.ai_forward = QPushButton("→")
         self.ai_reload = QPushButton("↻")
+        for control in (self.ai_back, self.ai_forward, self.ai_reload):
+            control.setObjectName("toolButton")
+            control.setFixedWidth(42)
+            toolbar_layout.addWidget(control)
+        self.page_title = QLabel("Open WebUI")
+        self.page_title.setObjectName("pageTitle")
+        toolbar_layout.addWidget(self.page_title)
+        toolbar_layout.addStretch()
         self.ai_address = QLineEdit()
-        self.ai_address.setPlaceholderText("Адрес текущего чата")
-        self.ai_go = QPushButton("Перейти")
-        for control in (self.ai_back, self.ai_forward, self.ai_reload, self.ai_address, self.ai_go): nav.addWidget(control)
-        ai_layout.addLayout(nav)
-        self.ai_tabs = QTabWidget()
-        self.ai_tabs.setDocumentMode(True)
-        self.ai_tabs.setTabsClosable(True)
-        self.ai_tabs.tabCloseRequested.connect(self.close_ai_tab)
-        ai_layout.addWidget(self.ai_tabs, 1)
-        self.ai_back.clicked.connect(lambda: self.current_ai_view() and self.current_ai_view().back())
-        self.ai_forward.clicked.connect(lambda: self.current_ai_view() and self.current_ai_view().forward())
-        self.ai_reload.clicked.connect(lambda: self.current_ai_view() and self.current_ai_view().reload())
+        self.ai_address.setObjectName("addressBar")
+        self.ai_address.setPlaceholderText("Адрес текущего сервиса")
+        self.ai_address.setMinimumWidth(260)
+        toolbar_layout.addWidget(self.ai_address, 2)
+        self.ai_go = QPushButton("Открыть")
+        self.ai_go.setObjectName("toolButton")
+        toolbar_layout.addWidget(self.ai_go)
+        content_layout.addWidget(toolbar)
+
+        self.stack = QStackedWidget()
+        self.chat_view = QWebEngineView()
+        self.chat_view.setPage(QWebEnginePage(self.web_profile, self.chat_view))
+        self.chat_view.setFocusPolicy(Qt.StrongFocus)
+        self.chat_view.urlChanged.connect(lambda qurl: self.update_ai_address_for(self.chat_view, qurl))
+        self.chat_view.loadStarted.connect(lambda: logger.info("Загрузка страницы: %s", self.chat_view.url().toString()))
+        self.chat_view.loadFinished.connect(lambda ok: logger.info("Загрузка завершена: %s", "успешно" if ok else "ошибка"))
+        self.openwebui_view = self.chat_view
+        self.dock = self.chat_view
+        self.stack.addWidget(self.chat_view)
+        self.dashboard_widget = self.make_dashboard()
+        self.stack.addWidget(self.dashboard_widget)
+        self.catalog_widget = self.make_ai_catalog()
+        self.stack.addWidget(self.catalog_widget)
+        self.settings_widget = self.make_settings()
+        self.stack.addWidget(self.settings_widget)
+        content_layout.addWidget(self.stack, 1)
+        splitter.addWidget(content)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([270, 1210])
+        root_layout.addWidget(splitter, 1)
+
+        self.ai_back.clicked.connect(self.chat_view.back)
+        self.ai_forward.clicked.connect(self.chat_view.forward)
+        self.ai_reload.clicked.connect(self.chat_view.reload)
         self.ai_go.clicked.connect(self.navigate_ai_address)
         self.ai_address.returnPressed.connect(self.navigate_ai_address)
-        self.ai_tabs.currentChanged.connect(self.update_ai_address)
-        self.tabs.addTab(ai_hub, "AI Hub")
-        self.openwebui_view = QWebEngineView()
-        self.openwebui_view.setPage(QWebEnginePage(self.web_profile, self.openwebui_view))
-        self.openwebui_view.urlChanged.connect(lambda qurl, v=self.openwebui_view: self.update_ai_address_for(v, qurl))
-        self.ai_tabs.addTab(self.openwebui_view, "Open WebUI")
-        available = {x["name"]: x for x in self.ai_catalog}
-        available.update({x["name"]: x for x in self.cfg["ai_services"] if x.get("name") and x.get("url")})
-        enabled = self.cfg.get("enabled_ai_services") or [x["name"] for x in self.cfg["ai_services"]]
-        for name in enabled:
-            item = available.get(name)
-            if item:
-                self.add_ai_tab(item["name"], item["url"])
-        self.catalog_widget = self.make_ai_catalog()
-        self.tabs.addTab(self.catalog_widget, "Каталог AI")
-        self.dock = QWebEngineView()
-        self.tabs.addTab(self.dock, "Docker · Dockhand")
-        self.tabs.addTab(self.make_settings(), "Настройки")
+
+        self.sync_ai_tabs()
         self.apply_server_urls()
         self.start_catalog_fetch()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(5000)
         self.refresh()
+        logger.info("AIHub Studio запущен")
+        self.show_page("chat")
+        self.select_openwebui()
 
     def make_ai_catalog(self):
         widget = QWidget()
