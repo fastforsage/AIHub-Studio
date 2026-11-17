@@ -37,6 +37,7 @@ internal sealed class CaptureForm : Form
     private int _scanCount;
     private int _domFound;
     private bool _captureScriptRegistered;
+    private bool _adapterConfigRegistered;
     private string _lastDiagnostic = "Диагностика ещё не получена.";
 
     public CaptureForm()
@@ -153,18 +154,35 @@ internal sealed class CaptureForm : Form
                 return;
             }
             var script = await File.ReadAllTextAsync(_scriptPath);
+            var adapterConfig = _adapterRegistry.GetClientConfigJson();
+            if (!_adapterConfigRegistered)
+            {
+                await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    $"window.__aihubAdapterCatalog = {adapterConfig};");
+                _adapterConfigRegistered = true;
+            }
             if (!_captureScriptRegistered)
             {
                 await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
                 _captureScriptRegistered = true;
             }
+            await _web.CoreWebView2.ExecuteScriptAsync(
+                $"window.__aihubSetAdapterCatalog?.({adapterConfig});");
             await _web.CoreWebView2.ExecuteScriptAsync(script);
-            UpdateDiagnostics($"CaptureScript внедрён ({new FileInfo(_scriptPath).Length} байт).");
+            UpdateDiagnostics($"CaptureScript и каталог адаптеров внедрены ({new FileInfo(_scriptPath).Length} байт).");
         }
         catch (Exception ex)
         {
             UpdateDiagnostics("ОШИБКА ВНЕДРЕНИЯ СКРИПТА: " + ex);
         }
+    }
+
+    private async Task ApplyAdapterCatalogAsync()
+    {
+        if (_web.CoreWebView2 is null) return;
+        var config = _adapterRegistry.GetClientConfigJson();
+        await _web.CoreWebView2.ExecuteScriptAsync(
+            $"window.__aihubSetAdapterCatalog?.({config});");
     }
 
     private async Task ImportAdapterFromFileAsync()
@@ -179,6 +197,7 @@ internal sealed class CaptureForm : Form
         {
             var json = await File.ReadAllTextAsync(dialog.FileName);
             await _adapterRegistry.ImportAdapterAsync(json);
+            await ApplyAdapterCatalogAsync();
             UpdateDiagnostics($"JSON-адаптер импортирован и сохранён в SQLite: {Path.GetFileName(dialog.FileName)}");
             MessageBox.Show(this, "Адаптер проверен и сохранён в каталоге SQLite.", "AIHub Studio",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
