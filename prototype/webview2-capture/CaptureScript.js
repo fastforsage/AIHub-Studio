@@ -82,8 +82,34 @@
     return [];
   }
 
+  function describeDomShape() {
+    const count = selector => {
+      try { return document.querySelectorAll(selector).length; } catch (_) { return -1; }
+    };
+    const testIds = [...new Set([...document.querySelectorAll("[data-testid]")]
+      .map(el => el.getAttribute("data-testid"))
+      .filter(Boolean))].slice(0, 35);
+    const customTags = [...new Set([...document.querySelectorAll("*")]
+      .map(el => el.tagName.toLowerCase())
+      .filter(tag => tag.includes("-")))].slice(0, 25);
+    const roles = [...new Set([...document.querySelectorAll("[role]")].map(el => el.getAttribute("role")).filter(Boolean))].slice(0, 20);
+    return [
+      "DOM-probe (без текста переписки):",
+      "main=" + count("main"),
+      "article=" + count("article"),
+      "role=article=" + count('[role="article"]'),
+      "data-testid=" + count("[data-testid]"),
+      "data-message-author-role=" + count("[data-message-author-role]"),
+      "data-turn=" + count("[data-turn]"),
+      "testids=[" + testIds.join(", ") + "]",
+      "customTags=[" + customTags.join(", ") + "]",
+      "roles=[" + roles.join(", ") + "]"
+    ].join(" | ");
+  }
+
   function scan() {
     scans++;
+    if (scans === 1) diagnostic("dom-probe", describeDomShape());
     const found = identifyMessages();
     const host = location.hostname.toLowerCase();
     const supported = host.includes("chatgpt.com") || host.includes("openai.com") ||
