@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aihub-studio.local/adapter-definition.schema.json",
+  "title": "AIHub Studio adapter definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "version", "enabled", "domains", "detection", "extraction"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{1,63}$" },
+    "name": { "type": "string", "minLength": 1 },
+    "vendor": { "type": "string" },
+    "version": { "type": "integer", "minimum": 1 },
+    "enabled": { "type": "boolean" },
+    "domains": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "detection": {
+      "type": "object",
+      "required": ["minimum_confidence", "dom_signatures"],
+      "properties": {
+        "minimum_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "dom_signatures": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "capabilities": { "type": "object", "additionalProperties": { "type": "boolean" } },
+    "extraction": {
+      "type": "object",
+      "required": ["strategies"],
+      "properties": {
+        "strategies": {
+          "type": "array",
+          "items": { "enum": ["provider_dom", "semantic_dom", "clipboard"] }
+        },
+        "message_selectors": { "type": "array", "items": { "type": "string" } },
+        "role_mapping": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  }
+}
