@@ -1,16 +1,64 @@
-import sys, os, json
+import sys, os, json, logging, ctypes, traceback
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import requests
 import psutil
-import keyring
-from keyring.backends.Windows import WinVaultKeyring
-keyring.set_keyring(WinVaultKeyring())
 from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal, Qt
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QTabWidget, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem, QSplitter, QStackedWidget, QDialog, QTextEdit, QDialogButtonBox
+from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
+
+LOG_FILE = CONFIG_DIR / "AIHubStudio.log"
+logger = logging.getLogger("AIHubStudio")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = RotatingFileHandler(LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
+    _handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+    logger.addHandler(_handler)
+
+def _dpapi_transform(data, decrypt=False):
+    class DATA_BLOB(ctypes.Structure):
+        _fields_ = [("cbData", ctypes.c_uint), ("pbData", ctypes.POINTER(ctypes.c_ubyte))]
+    raw = bytes(data)
+    buffer = (ctypes.c_ubyte * len(raw)).from_buffer_copy(raw)
+    source = DATA_BLOB(len(raw), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte)))
+    target = DATA_BLOB()
+    crypt = ctypes.windll.crypt32
+    kernel = ctypes.windll.kernel32
+    if decrypt:
+        ok = crypt.CryptUnprotectData(ctypes.byref(source), None, None, None, None, 0, ctypes.byref(target))
+    else:
+        ok = crypt.CryptProtectData(ctypes.byref(source), "AIHub Studio", None, None, None, 0, ctypes.byref(target))
+    if not ok:
+        raise ctypes.WinError()
+    try:
+        return ctypes.string_at(target.pbData, target.cbData)
+    finally:
+        kernel.LocalFree(target.pbData)
+
+def load_secret_store():
+    path = CONFIG_DIR / "secrets.dpapi"
+    if not path.exists() or sys.platform != "win32":
+        return {}
+    try:
+        return json.loads(_dpapi_transform(path.read_bytes(), decrypt=True).decode("utf-8"))
+    except Exception:
+        logger.exception("Не удалось расшифровать локальное хранилище секретов")
+        return {}
+
+def save_secret_store(secrets):
+    if sys.platform != "win32":
+        return
+    encrypted = _dpapi_transform(json.dumps(secrets, ensure_ascii=False).encode("utf-8"))
+    (CONFIG_DIR / "secrets.dpapi").write_bytes(encrypted)
+
+def _log_uncaught(exc_type, exc_value, exc_tb):
+    logger.error("Необработанное исключение", exc_info=(exc_type, exc_value, exc_tb))
+sys.excepthook = _log_uncaught
+
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "AIHubStudio"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -75,14 +123,11 @@ def load_cfg():
     cfg["active_connection_profile"] = active
     cfg["servers"] = profiles[active].get("servers", cfg["servers"])
     cfg["gpu_agent_token"] = profiles[active].get("gpu_agent_token", cfg.get("gpu_agent_token", ""))
-    try:
-        secrets = json.loads(keyring.get_password("AIHubStudio", "secrets") or "{}")
-        cfg["proxy_url"] = secrets.get("proxy_url", cfg.get("proxy_url", ""))
-        for profile_name, profile_data in cfg["connection_profiles"].items():
-            profile_data["gpu_agent_token"] = secrets.get("gpu_agent_tokens", {}).get(profile_name, profile_data.get("gpu_agent_token", ""))
-        cfg["gpu_agent_token"] = cfg["connection_profiles"][active].get("gpu_agent_token", cfg.get("gpu_agent_token", ""))
-    except Exception:
-        pass
+    secrets = load_secret_store()
+    cfg["proxy_url"] = secrets.get("proxy_url", cfg.get("proxy_url", ""))
+    for profile_name, profile_data in cfg["connection_profiles"].items():
+        profile_data["gpu_agent_token"] = secrets.get("gpu_agent_tokens", {}).get(profile_name, profile_data.get("gpu_agent_token", ""))
+    cfg["gpu_agent_token"] = cfg["connection_profiles"][active].get("gpu_agent_token", cfg.get("gpu_agent_token", ""))
     return cfg
 
 def load_ai_catalog_cache():
@@ -148,7 +193,7 @@ def save_cfg(cfg):
         token = profile_data.get("gpu_agent_token", "")
         if token: token_secrets[profile_name] = token
         profile_data.pop("gpu_agent_token", None)
-    keyring.set_password("AIHubStudio", "secrets", json.dumps({"proxy_url": cfg.get("proxy_url", ""), "gpu_agent_tokens": token_secrets}, ensure_ascii=False))
+    save_secret_store({"proxy_url": cfg.get("proxy_url", ""), "gpu_agent_tokens": token_secrets})
     clean["proxy_configured"] = bool(cfg.get("proxy_url", ""))
     CFG.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
 
