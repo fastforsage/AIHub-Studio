@@ -344,6 +344,84 @@ internal sealed class CaptureForm : Form
         }
     }
 
+
+    private async Task CollectDiagnosticsAsync()
+    {
+        _collectDiagnostics.Enabled = false;
+        _collectDiagnostics.Text = "Сбор…";
+        try
+        {
+            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var reportPath = Path.Combine(_logDirectory, $"diagnostic-report-{timestamp}.log");
+            var scriptSnapshot = "{\"available\":false,\"reason\":\"WebView2 is not ready\"}";
+            if (_web.CoreWebView2 is not null)
+            {
+                var raw = await _web.CoreWebView2.ExecuteScriptAsync(
+                    "JSON.stringify(window.__aihubCollectDiagnostics?.() ?? { available: false, reason: 'diagnostic hook unavailable' })");
+                try
+                {
+                    using var parsed = JsonDocument.Parse(raw);
+                    scriptSnapshot = parsed.RootElement.ValueKind == JsonValueKind.String
+                        ? parsed.RootElement.GetString() ?? "{}"
+                        : parsed.RootElement.GetRawText();
+                }
+                catch { scriptSnapshot = raw; }
+            }
+
+            var report = new System.Text.StringBuilder();
+            report.AppendLine("AIHub Studio — WebView2 capture diagnostic report");
+            report.AppendLine($"Created: {DateTimeOffset.Now:O}");
+            report.AppendLine($"App version: {Application.ProductVersion}");
+            report.AppendLine($"OS: {Environment.OSVersion}");
+            report.AppendLine($"Process: {Environment.ProcessPath}");
+            report.AppendLine($"WebView2: {(_web.CoreWebView2 is null ? "not initialized" : _web.CoreWebView2.Environment.BrowserVersionString)}");
+            report.AppendLine($"Capture script registered: {_captureScriptRegistered}");
+            report.AppendLine($"Adapter config registered: {_adapterConfigRegistered}");
+            report.AppendLine($"Received events: {_receivedCount}; SQLite upsert events: {_savedEvents}; DOM scans: {_scanCount}; last found count: {_domFound}");
+            report.AppendLine($"Current URL: {RedactConversationUrl(_web.Source?.ToString() ?? "(none)")}");
+            report.AppendLine($"Database path: {_dbPath}");
+            report.AppendLine($"Debug log path: {_logPath}");
+            report.AppendLine();
+            report.AppendLine("=== WebView2 / DOM snapshot (message text intentionally excluded) ===");
+            report.AppendLine(scriptSnapshot);
+            report.AppendLine();
+            report.AppendLine("=== Recent application debug log (last 250 lines) ===");
+            if (File.Exists(_logPath))
+            {
+                var lines = await File.ReadAllLinesAsync(_logPath);
+                foreach (var line in lines.TakeLast(250)) report.AppendLine(line);
+            }
+            else report.AppendLine("(debug log not found)");
+
+            await File.WriteAllTextAsync(reportPath, report.ToString(), System.Text.Encoding.UTF8);
+            WriteDebugLog("INFO", "diagnostic-report", $"Separate report created: {Path.GetFileName(reportPath)}");
+            UpdateDiagnostics($"Диагностический отчёт сохранён: {reportPath}");
+            MessageBox.Show(this, $"Отчёт собран. Текст переписки в снимок DOM не включается.\n\n{reportPath}",
+                "Диагностика готова", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            WriteDebugLog("ERROR", "diagnostic-report-failed", ex.ToString());
+            UpdateDiagnostics("Не удалось собрать диагностику: " + ex.Message);
+            MessageBox.Show(this, ex.Message, "Ошибка сбора диагностики", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _collectDiagnostics.Enabled = true;
+            _collectDiagnostics.Text = "Собрать диагностику";
+        }
+    }
+
+    private static string RedactConversationUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return value;
+        var path = uri.AbsolutePath;
+        if (uri.Host.Equals("chatgpt.com", StringComparison.OrdinalIgnoreCase) &&
+            System.Text.RegularExpressions.Regex.IsMatch(path, @"^/c/[^/]+"))
+            path = "/c/{conversation-id}";
+        return uri.GetLeftPart(UriPartial.Authority) + path;
+    }
+
     private void OpenLogDirectory()
     {
         try
