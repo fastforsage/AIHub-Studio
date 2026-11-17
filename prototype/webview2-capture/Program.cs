@@ -185,8 +185,9 @@ internal sealed class CaptureForm : Form
             }
             await _web.CoreWebView2.ExecuteScriptAsync(
                 $"window.__aihubSetAdapterCatalog?.({adapterConfig});");
-            await _web.CoreWebView2.ExecuteScriptAsync(script);
-            UpdateDiagnostics($"CaptureScript и каталог адаптеров внедрены ({new FileInfo(_scriptPath).Length} байт).");
+            // The document-created registration installs the script once per document.
+            // Avoid executing it again after each navigation; the JS guard remains a safety net.
+            UpdateDiagnostics($"CaptureScript зарегистрирован для документов ({new FileInfo(_scriptPath).Length} байт).");
         }
         catch (Exception ex)
         {
@@ -274,6 +275,7 @@ internal sealed class CaptureForm : Form
             var role = GetString(root, "role", "unknown");
             var content = GetString(root, "text");
             var messageKey = GetString(root, "messageKey");
+            var previousMessageKey = GetString(root, "previousMessageKey");
             var strategy = GetString(root, "extractionStrategy", "unknown");
             WriteDebugLog("INFO", "message-received", $"provider={provider}; role={role}; strategy={strategy}; key={messageKey}; chars={content.Length}; url={url}");
             if (string.IsNullOrWhiteSpace(content) || string.IsNullOrWhiteSpace(messageKey))
@@ -283,7 +285,7 @@ internal sealed class CaptureForm : Form
             }
 
             var saveStarted = System.Diagnostics.Stopwatch.StartNew();
-            await SaveMessageAsync(provider, conversationKey, messageKey, role, content, url);
+            await SaveMessageAsync(provider, conversationKey, messageKey, previousMessageKey, role, content, url);
             saveStarted.Stop();
             WriteDebugLog("INFO", "sqlite-upsert", $"provider={provider}; role={role}; strategy={strategy}; key={messageKey}; chars={content.Length}; elapsedMs={saveStarted.ElapsedMilliseconds}");
             _savedEvents++;
@@ -463,7 +465,7 @@ internal sealed class CaptureForm : Form
     private static int GetInt(JsonElement root, string name)
         => root.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : 0;
 
-    private async Task SaveMessageAsync(string provider, string conversationKey, string messageKey, string role, string content, string url)
+    private async Task SaveMessageAsync(string provider, string conversationKey, string messageKey, string previousMessageKey, string role, string content, string url)
     {
         await using var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _dbPath }.ToString());
         await db.OpenAsync();
@@ -484,6 +486,27 @@ internal sealed class CaptureForm : Form
             CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(provider, conversation_key, id);
             """;
         await create.ExecuteNonQueryAsync();
+
+        if (!string.IsNullOrWhiteSpace(previousMessageKey) &&
+            !string.Equals(previousMessageKey, messageKey, StringComparison.Ordinal))
+        {
+            var promote = db.CreateCommand();
+            promote.CommandText = """
+                UPDATE messages
+                SET message_key=$newKey, updated_utc=$now
+                WHERE provider=$provider AND conversation_key=$conversation AND message_key=$oldKey
+                  AND NOT EXISTS (SELECT 1 FROM messages WHERE provider=$provider AND conversation_key=$conversation AND message_key=$newKey);
+                DELETE FROM messages
+                WHERE provider=$provider AND conversation_key=$conversation AND message_key=$oldKey
+                  AND EXISTS (SELECT 1 FROM messages WHERE provider=$provider AND conversation_key=$conversation AND message_key=$newKey);
+                """;
+            promote.Parameters.AddWithValue("$newKey", messageKey);
+            promote.Parameters.AddWithValue("$oldKey", previousMessageKey);
+            promote.Parameters.AddWithValue("$provider", provider);
+            promote.Parameters.AddWithValue("$conversation", conversationKey);
+            promote.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O"));
+            await promote.ExecuteNonQueryAsync();
+        }
 
         var command = db.CreateCommand();
         command.CommandText = """
