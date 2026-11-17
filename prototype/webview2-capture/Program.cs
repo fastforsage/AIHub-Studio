@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Web.WebView2.Core;
@@ -27,6 +25,7 @@ internal sealed class CaptureForm : Form
     private readonly string _dbPath;
     private readonly string _scriptPath;
     private int _savedCount;
+    private bool _captureScriptRegistered;
 
     public CaptureForm()
     {
@@ -91,7 +90,11 @@ internal sealed class CaptureForm : Form
     {
         if (_web.CoreWebView2 is null || !File.Exists(_scriptPath)) return;
         var script = await File.ReadAllTextAsync(_scriptPath);
-        await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
+        if (!_captureScriptRegistered)
+        {
+            await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
+            _captureScriptRegistered = true;
+        }
         await _web.CoreWebView2.ExecuteScriptAsync(script);
     }
 
