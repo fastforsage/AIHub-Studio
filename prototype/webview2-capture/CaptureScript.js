@@ -176,11 +176,11 @@
       const requestUrl = typeof input === "string" ? input
         : (input && typeof input.url === "string" ? input.url : "");
       const responseUrl = response.url || requestUrl;
-      const match = responseUrl.match(/^https?:\\/\\/[^/]+\\/backend-api\\/conversation\\/([0-9a-f-]{36})(?:[?#]|$)/i);
+      const match = responseUrl.match(/^https?:\/\/[^/]+\/backend-api\/conversation\/([0-9a-f-]{36})(?:[?#]|$)/i);
       if (match && response.ok) {
         const conversationId = match[1];
         response.clone().json().then(payload => {
-          const currentMatch = location.pathname.match(/^\\/c\\/([^/]+)/);
+          const currentMatch = location.pathname.match(/^\/c\/([^/]+)/);
           if (location.hostname.toLowerCase() === "chatgpt.com" &&
               currentMatch && currentMatch[1] === conversationId) {
             processChatGptMappingPayload(conversationId, payload, response.status);
