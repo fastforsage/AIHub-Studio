@@ -16,7 +16,7 @@ Early prototype. This is not yet a full IDE: code editor, integrated terminal, a
 - GPU agent: bind to VPN/private interface only; do not expose Docker API or unauthenticated telemetry to the public Internet.
 
 ## Build
-The Windows MSI is built by GitHub Actions on a Windows runner. See `.github/workflows/build-msi.yml`.
+The Windows MSI is built by GitHub Actions on a Windows runner. See `.github/workflows/build-windows-msi.yml` and [BUILD_MSI_RU.md](BUILD_MSI_RU.md).
 
 ## Configuration
 Copy `settings.example.json` to `settings.json` and set the private VPN URL for the GPU agent plus a strong bearer token. Do not commit secrets.
