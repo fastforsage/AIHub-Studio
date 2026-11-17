@@ -21,19 +21,32 @@ The first launch creates a separate WebView2 profile and SQLite database under:
 
 `%LOCALAPPDATA%\AIHubStudio\WebView2CapturePrototype\`
 
-Sign in to ChatGPT, Claude, or Gemini in the prototype window and open a conversation. The capture script watches supported message containers and sends text updates to the host; SQLite upserts updates so a streaming answer is revised in place instead of creating a row for every token.
+Sign in to a supported LLM site in the prototype window and open a conversation. The detector identifies known providers from the JSON registry; the capture script then tries provider-specific or conservative semantic DOM recognition. SQLite upserts updates so a streaming answer is revised in place instead of creating a row for every token. Use **Импорт адаптера JSON** to add or update an adapter without recompiling the application.
 
-## Current capture support
+## Adapter catalog and detection
 
-- ChatGPT: elements carrying `data-message-author-role`
-- Claude: user message test id and assistant message class selectors
-- Gemini: `user-query` and `model-response` elements
+Adapter definitions are JSON documents stored in SQLite. The initial catalog is shipped as `adapters/catalog.json` and imported into the database on first launch. The JSON Schema is `adapter-definition.schema.json`.
 
-This is a selector-level prototype, not a guarantee of complete transcript capture. Sites change their DOM, virtualize older messages, and may render some content outside these selectors. Unknown sites are intentionally ignored instead of scraping arbitrary page text.
+Initial provider identities include:
+
+- Western: ChatGPT, Claude, Gemini, Copilot, Perplexity, Grok.
+- Chinese: Qwen, DeepSeek, Kimi, GLM / 智谱清言, Doubao / 豆包, Yuanbao / 腾讯元宝, ERNIE / 文心一言, iFlytek Spark, MiniMax.
+
+The toolbar's **Импорт адаптера JSON** action validates and imports a JSON file into `adapter_definitions`. An imported definition replaces the active definition only when its version is higher. Previous versions are retained in `adapter_versions`. The app does not execute JavaScript or arbitrary code from adapter JSON; only allow-listed strategies (`provider_dom`, `semantic_dom`, `clipboard`) are accepted.
+
+The current detector resolves known providers by hostname/domain. The page script uses provider selectors where available and then a conservative semantic fallback: it only accepts elements whose own attributes identify a user or assistant/model role. Unknown sites that pass this semantic test are recorded as `generic-chat`; arbitrary page-wide text scraping is intentionally disabled.
+
+Current provider-specific DOM selectors are implemented for ChatGPT, Claude, and Gemini. Other catalog entries currently provide identity and strategy metadata, not verified provider-specific selectors or guaranteed extraction. Their semantic fallback is best-effort and must be validated against real conversations.
 
 ## Database
 
-SQLite file: `conversations.db`; table: `messages`. Fields include provider, conversation key (host + URL path), message key, role, text, source URL, and timestamps.
+SQLite file: `conversations.db`. Tables:
+
+- `messages`: captured message text and source metadata.
+- `adapter_definitions`: active JSON adapter definitions.
+- `adapter_versions`: imported definition history.
+- `adapter_detection_logs`: detected host, adapter ID, confidence and timestamp.
+- `adapter_extraction_stats`: per-adapter detection and extraction counters.
 
 ## Security and limitations
 
