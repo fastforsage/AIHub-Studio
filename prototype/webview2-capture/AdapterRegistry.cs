@@ -14,6 +14,7 @@ internal sealed record AdapterDefinition(
     double MinimumConfidence,
     string[] DomSignatures,
     string[] Strategies,
+    string[] MessageSelectors,
     Dictionary<string, string> RoleMapping);
 
 internal sealed class AdapterRegistry
@@ -137,6 +138,21 @@ internal sealed class AdapterRegistry
         }
     }
 
+    public string GetClientConfigJson()
+    {
+        var payload = _adapters.Values.Select(adapter => new
+        {
+            id = adapter.Id,
+            domains = adapter.Domains,
+            domSignatures = adapter.DomSignatures,
+            strategies = adapter.Strategies,
+            messageSelectors = adapter.MessageSelectors,
+            roleMapping = adapter.RoleMapping,
+            minimumConfidence = adapter.MinimumConfidence
+        });
+        return JsonSerializer.Serialize(payload);
+    }
+
     public string ResolveProvider(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return "unknown";
@@ -237,7 +253,7 @@ internal sealed class AdapterRegistry
             root.TryGetProperty("vendor", out var vendor) ? vendor.GetString() ?? "unknown" : "unknown",
             version, !root.TryGetProperty("enabled", out var enabled) || enabled.ValueKind != JsonValueKind.False,
             domains, confidence, StringArrayFrom(root, "detection", "dom_signatures"),
-            strategies, mapping);
+            strategies, StringArrayFrom(root, "extraction", "message_selectors"), mapping);
     }
 
     private static string[] StringArrayFrom(JsonElement root, string parent, string key) =>
