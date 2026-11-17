@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 
 import psutil
 import requests
-from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QTabWidget, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
@@ -18,6 +18,8 @@ DEFAULTS = {
         "gpu": {"scheme": "http", "host": "", "port": 8765, "path": ""}
     },
     "gpu_agent_token": "",
+    "active_connection_profile": "Локальная сеть",
+    "connection_profiles": {},
     "ai_services": [
         {"name": "ChatGPT", "url": "https://chatgpt.com"},
         {"name": "Claude", "url": "https://claude.ai"},
@@ -52,11 +54,24 @@ def load_cfg():
         cfg["ai_services"] = [x for x in cfg.get("ai_services", []) if x.get("name", "").lower() != "open webui"]
     except Exception:
         pass
+    profiles = cfg.get("connection_profiles") or {}
+    if not profiles:
+        profiles = {"Локальная сеть": {"servers": cfg["servers"], "gpu_agent_token": cfg.get("gpu_agent_token", "")}}
+    cfg["connection_profiles"] = profiles
+    active = cfg.get("active_connection_profile", "Локальная сеть")
+    if active not in profiles:
+        active = next(iter(profiles))
+    cfg["active_connection_profile"] = active
+    cfg["servers"] = profiles[active].get("servers", cfg["servers"])
+    cfg["gpu_agent_token"] = profiles[active].get("gpu_agent_token", cfg.get("gpu_agent_token", ""))
     return cfg
 
 def save_cfg(cfg):
     clean = {k: v for k, v in cfg.items() if k not in ("dockhand_url", "gpu_agent_url")}
     clean["ai_services"] = [x for x in clean.get("ai_services", []) if x.get("name", "").lower() != "open webui"]
+    active = clean.get("active_connection_profile", "Локальная сеть")
+    profiles = clean.setdefault("connection_profiles", {})
+    profiles[active] = {"servers": clean.get("servers", {}), "gpu_agent_token": clean.get("gpu_agent_token", "")}
     CFG.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def server_url(item):
@@ -116,6 +131,12 @@ class ServerFields(QGroupBox):
         form.addRow("DNS / IP", self.host)
         form.addRow("Порт", self.port)
         form.addRow("Путь (если нужен)", self.path)
+    def load_values(self, values):
+        self.scheme.setCurrentText(values.get("scheme", "https"))
+        self.host.setText(values.get("host", ""))
+        self.port.setText(str(values.get("port", 443)))
+        self.path.setText(values.get("path", ""))
+
     def values(self):
         host = self.host.text().strip()
         if host.startswith("http://") or host.startswith("https://"):
@@ -125,10 +146,35 @@ class ServerFields(QGroupBox):
             raise ValueError("Порт должен быть от 1 до 65535.")
         return {"scheme": self.scheme.currentText(), "host": host, "port": port, "path": self.path.text().strip().strip("/")}
 
+class CheckSignals(QObject):
+    finished = Signal(str)
+
+class ConnectionCheck(QRunnable):
+    def __init__(self, url, token=""):
+        super().__init__()
+        self.url, self.token = url, token
+        self.signals = CheckSignals()
+    def run(self):
+        try:
+            headers = {"Authorization": "Bearer " + self.token} if self.token else {}
+            response = requests.get(self.url, headers=headers, timeout=(3, 5), stream=True)
+            code = response.status_code
+            response.close()
+            if code in (401, 403): result = f"Сервер доступен · HTTP {code}, нужна авторизация"
+            elif code < 500: result = f"Подключение успешно · HTTP {code}"
+            else: result = f"Сервер ответил · HTTP {code}"
+        except requests.exceptions.SSLError: result = "Ошибка TLS/сертификата"
+        except requests.exceptions.ConnectionError: result = "Нет соединения: проверьте DNS/IP, порт и LAN/VPN"
+        except requests.exceptions.Timeout: result = "Тайм-аут: сервер не ответил"
+        except Exception as exc: result = f"Ошибка: {exc}"
+        self.signals.finished.emit(result)
+
 class Main(QMainWindow):
     def __init__(self):
         super().__init__()
         self.cfg = load_cfg()
+        self.thread_pool = QThreadPool.globalInstance()
+        self.check_workers = []
         self.setWindowTitle("AIHub Studio")
         self.resize(1440, 900)
         self.tabs = QTabWidget()
@@ -175,13 +221,28 @@ class Main(QMainWindow):
     def make_settings(self):
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.addWidget(QLabel("Для каждого сервиса отдельно укажите протокол, DNS/IP и порт."))
+        layout.addWidget(QLabel("Профили позволяют отдельно хранить настройки локальной сети, частного облака или другого сервера."))
+        profile_row = QHBoxLayout()
+        self.profile_combo = QComboBox()
+        self.profile_combo.addItems(list(self.cfg["connection_profiles"].keys()))
+        self.profile_combo.setCurrentText(self.cfg["active_connection_profile"])
+        self.profile_combo.currentTextChanged.connect(self.switch_connection_profile)
+        profile_row.addWidget(QLabel("Профиль подключения"))
+        profile_row.addWidget(self.profile_combo, 1)
+        add_profile = QPushButton("Новый профиль")
+        add_profile.clicked.connect(self.add_connection_profile)
+        profile_row.addWidget(add_profile)
+        remove_profile = QPushButton("Удалить профиль")
+        remove_profile.clicked.connect(self.remove_connection_profile)
+        profile_row.addWidget(remove_profile)
+        layout.addLayout(profile_row)
+        layout.addWidget(QLabel("Для каждого сервиса укажите протокол, DNS/IP и порт."))
         self.dock_fields = ServerFields("Dockhand", self.cfg["servers"]["dockhand"])
         self.webui_fields = ServerFields("Open WebUI", self.cfg["servers"]["openwebui"])
         self.gpu_fields = ServerFields("GPU мониторинг · Linux ROCm Agent", self.cfg["servers"]["gpu"])
-        layout.addWidget(self.dock_fields)
-        layout.addWidget(self.webui_fields)
-        layout.addWidget(self.gpu_fields)
+        layout.addWidget(self.server_check_row(self.dock_fields, "dockhand", "Dockhand"))
+        layout.addWidget(self.server_check_row(self.webui_fields, "openwebui", "Open WebUI"))
+        layout.addWidget(self.server_check_row(self.gpu_fields, "gpu", "GPU Agent"))
         token_form = QFormLayout()
         self.token = QLineEdit(self.cfg.get("gpu_agent_token", ""))
         self.token.setEchoMode(QLineEdit.Password)
@@ -203,6 +264,94 @@ class Main(QMainWindow):
         scroll.setWidget(content)
         return scroll
 
+    def server_check_row(self, fields, key, title):
+        wrap = QWidget()
+        row = QHBoxLayout(wrap)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(fields, 1)
+        button = QPushButton("Проверить")
+        status = QLabel("Не проверено")
+        status.setWordWrap(True)
+        button.clicked.connect(lambda checked=False, k=key, b=button, st=status: self.check_server(k, b, st))
+        row.addWidget(button)
+        row.addWidget(status, 1)
+        if not hasattr(self, "check_status"): self.check_status = {}
+        self.check_status[key] = status
+        return wrap
+
+    def check_server(self, key, button, status):
+        fields = {"dockhand": self.dock_fields, "openwebui": self.webui_fields, "gpu": self.gpu_fields}[key]
+        try: url = server_url(fields.values())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверьте настройки", str(exc))
+            return
+        token = self.token.text().strip() if key == "gpu" else ""
+        if key == "gpu" and url: url = url.rstrip("/") + "/gpu"
+        if not url:
+            status.setText("Укажите DNS/IP")
+            return
+        button.setEnabled(False)
+        status.setText("Проверяем…")
+        worker = ConnectionCheck(url, token)
+        self.check_workers.append(worker)
+        def done(message, b=button, st=status, w=worker):
+            st.setText(message)
+            b.setEnabled(True)
+            if w in self.check_workers: self.check_workers.remove(w)
+        worker.signals.finished.connect(done)
+        self.thread_pool.start(worker)
+
+    def switch_connection_profile(self, name):
+        if not name: return
+        old = self.cfg.get("active_connection_profile", "")
+        if old and hasattr(self, "dock_fields"):
+            try:
+                self.cfg["connection_profiles"][old] = {"servers": {"dockhand": self.dock_fields.values(), "openwebui": self.webui_fields.values(), "gpu": self.gpu_fields.values()}, "gpu_agent_token": self.token.text().strip()}
+            except (ValueError, AttributeError): pass
+        profile = self.cfg["connection_profiles"].get(name, {})
+        servers = profile.get("servers", DEFAULTS["servers"])
+        self.dock_fields.load_values(servers.get("dockhand", DEFAULTS["servers"]["dockhand"]))
+        self.webui_fields.load_values(servers.get("openwebui", DEFAULTS["servers"]["openwebui"]))
+        self.gpu_fields.load_values(servers.get("gpu", DEFAULTS["servers"]["gpu"]))
+        self.token.setText(profile.get("gpu_agent_token", ""))
+        self.cfg["active_connection_profile"] = name
+        self.cfg["servers"] = servers
+        self.cfg["gpu_agent_token"] = profile.get("gpu_agent_token", "")
+        self.apply_server_urls()
+
+    def add_connection_profile(self):
+        name, ok = QInputDialog.getText(self, "Новый профиль", "Название:")
+        name = name.strip()
+        if not ok or not name: return
+        if name in self.cfg["connection_profiles"]:
+            QMessageBox.warning(self, "Профиль", "Такой профиль уже существует.")
+            return
+        try:
+            profile = {"servers": {"dockhand": self.dock_fields.values(), "openwebui": self.webui_fields.values(), "gpu": self.gpu_fields.values()}, "gpu_agent_token": self.token.text().strip()}
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверьте настройки", str(exc))
+            return
+        self.cfg["connection_profiles"][name] = profile
+        self.profile_combo.addItem(name)
+        self.profile_combo.setCurrentText(name)
+        save_cfg(self.cfg)
+
+    def remove_connection_profile(self):
+        name = self.profile_combo.currentText()
+        if len(self.cfg["connection_profiles"]) <= 1:
+            QMessageBox.information(self, "Профили", "Нельзя удалить последний профиль.")
+            return
+        if QMessageBox.question(self, "Удалить профиль", "Удалить профиль «" + name + "»?") != QMessageBox.Yes: return
+        self.cfg["connection_profiles"].pop(name, None)
+        next_name = next(iter(self.cfg["connection_profiles"]))
+        self.cfg["active_connection_profile"] = next_name
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.removeItem(self.profile_combo.currentIndex())
+        self.profile_combo.setCurrentText(next_name)
+        self.profile_combo.blockSignals(False)
+        self.switch_connection_profile(next_name)
+        save_cfg(self.cfg)
+
     def apply_server_urls(self):
         dock_url = server_url(self.cfg["servers"]["dockhand"])
         webui_url = server_url(self.cfg["servers"]["openwebui"])
@@ -216,6 +365,8 @@ class Main(QMainWindow):
             QMessageBox.warning(self, "Проверьте настройки", str(exc))
             return
         self.cfg["gpu_agent_token"] = self.token.text().strip()
+        self.cfg["active_connection_profile"] = self.profile_combo.currentText()
+        self.cfg["connection_profiles"][self.cfg["active_connection_profile"]] = {"servers": self.cfg["servers"], "gpu_agent_token": self.cfg["gpu_agent_token"]}
         save_cfg(self.cfg)
         self.apply_server_urls()
         QMessageBox.information(self, "AIHub Studio", "Настройки сохранены.")
