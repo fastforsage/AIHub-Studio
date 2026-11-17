@@ -482,7 +482,7 @@
     });
     return {
       collectedAt: new Date().toISOString(), scriptVersion, href: location.origin +
-        (location.pathname.match(/^\\/c\\//) ? "/c/{conversation-id}" : location.pathname),
+        (location.pathname.startsWith("/c/") ? "/c/{conversation-id}" : location.pathname),
       readyState: document.readyState, providerHost: location.hostname,
       adapterId: detection.adapter?.id || "generic",
       detectionConfidence: detection.confidence, signatureMatches: detection.signatureMatches,
