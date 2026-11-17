@@ -1,0 +1,538 @@
+[
+  {
+    "id": "chatgpt",
+    "name": "ChatGPT",
+    "vendor": "OpenAI",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "chatgpt.com",
+      "openai.com"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-message-author-role]"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "provider_dom",
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "claude",
+    "name": "Claude",
+    "vendor": "Anthropic",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "claude.ai"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid='user-message']",
+        ".font-claude-message"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "provider_dom",
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "gemini",
+    "name": "Gemini",
+    "vendor": "Google",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "gemini.google.com"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "user-query",
+        "model-response"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "provider_dom",
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "qwen",
+    "name": "Qwen",
+    "vendor": "Alibaba",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "qwen.ai"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']",
+        "[class*='chat-message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "vendor": "DeepSeek",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "deepseek.com"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']",
+        "[class*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "kimi",
+    "name": "Kimi",
+    "vendor": "Moonshot AI",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "kimi.com",
+      "kimi.ai"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "glm",
+    "name": "GLM / 智谱清言",
+    "vendor": "Zhipu AI",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "chat.z.ai",
+      "chatglm.cn"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "doubao",
+    "name": "Doubao / 豆包",
+    "vendor": "ByteDance",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "doubao.com"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "yuanbao",
+    "name": "Yuanbao / 腾讯元宝",
+    "vendor": "Tencent",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "yuanbao.tencent.com"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "ernie",
+    "name": "ERNIE / 文心一言",
+    "vendor": "Baidu",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "yiyan.baidu.com"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "spark",
+    "name": "讯飞星火",
+    "vendor": "iFlytek",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "xinghuo.xfyun.cn"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "minimax",
+    "name": "MiniMax",
+    "vendor": "MiniMax",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "minimax.io"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "copilot",
+    "name": "Copilot",
+    "vendor": "Microsoft",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "copilot.microsoft.com"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "perplexity",
+    "name": "Perplexity",
+    "vendor": "Perplexity AI",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "perplexity.ai"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  },
+  {
+    "id": "grok",
+    "name": "Grok",
+    "vendor": "xAI",
+    "version": 1,
+    "enabled": true,
+    "domains": [
+      "grok.com",
+      "x.com"
+    ],
+    "detection": {
+      "minimum_confidence": 0.75,
+      "dom_signatures": [
+        "[data-testid*='message']"
+      ]
+    },
+    "capabilities": {
+      "text": true,
+      "attachments": false,
+      "images": false,
+      "audio": false,
+      "streaming": true,
+      "conversation_history": true
+    },
+    "extraction": {
+      "strategies": [
+        "semantic_dom",
+        "clipboard"
+      ],
+      "message_selectors": [],
+      "role_mapping": {
+        "user": "user",
+        "assistant": "assistant"
+      }
+    }
+  }
+]
