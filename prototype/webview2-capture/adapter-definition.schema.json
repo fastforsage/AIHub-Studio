@@ -28,7 +28,7 @@
       "properties": {
         "strategies": {
           "type": "array",
-          "items": { "enum": ["provider_dom", "semantic_dom", "clipboard"] }
+          "items": { "enum": ["provider_dom", "semantic_dom"] }
         },
         "message_selectors": { "type": "array", "items": { "type": "string" } },
         "role_mapping": { "type": "object", "additionalProperties": { "type": "string" } }
