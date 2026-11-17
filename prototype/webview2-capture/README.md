@@ -42,3 +42,15 @@ SQLite file: `conversations.db`; table: `messages`. Fields include provider, con
 - This prototype does not capture attachments, images, audio, tool calls, or hidden/virtualized messages.
 - DOM capture can miss or duplicate messages when providers change their page structure. Validate each provider before relying on it as an archive.
 - No API keys or provider APIs are used.
+
+
+## Live diagnostics
+
+The prototype window now shows a live diagnostics panel above the browser. It reports WebView2 initialization/navigation, whether `CaptureScript.js` was found and injected, JavaScript startup, MutationObserver status, DOM selector match count, scan count, messages sent to the host, and SQLite insert/update or error status. The database counter is the actual number of rows; the event counter counts capture/update events and may be higher because streaming responses are updated.
+
+When troubleshooting, open a supported chat, sign in, and open a conversation with visible messages. Read the latest line in the diagnostics panel:
+- `script-start` / `observer-start`: the capture script is running.
+- `scan` with `found=0`: current page selectors did not match visible messages.
+- `message-sent`: JavaScript sent a message to the desktop host.
+- `SQLite OK`: the host saved or updated a row.
+- `post-error`, `bridge-missing`, or `ОШИБКА`: inspect the accompanying error text.
