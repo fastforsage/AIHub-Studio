@@ -14,7 +14,7 @@
   const pendingTimers = new WeakMap();
   const pendingPreviousKeys = new WeakMap();
   const candidateDebugState = new WeakMap();
-  const scriptVersion = "2026.11.17-chatgpt-api-dom-v4";
+  const scriptVersion = "2026.11.18-chatgpt-api-dom-v5";
   let chatGptApiState = "unknown";
   let chatGptApiInFlight = false;
   let chatGptApiLastAttempt = 0;
