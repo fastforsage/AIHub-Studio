@@ -179,6 +179,7 @@ class CatalogFetchWorker(QRunnable):
                 raise ValueError("В удалённом каталоге не найдено сервисов.")
             self.signals.finished.emit(services, "")
         except Exception as exc:
+            logger.exception("Ошибка загрузки каталога AI")
             self.signals.finished.emit([], str(exc))
 
 def save_cfg(cfg):
@@ -288,6 +289,7 @@ class AgentFetchWorker(QRunnable):
             response.raise_for_status()
             self.signals.finished.emit(response.json(), "")
         except Exception as exc:
+            logger.exception("Ошибка запроса к удалённому GPU Agent")
             self.signals.finished.emit({}, str(exc))
 
 class Main(QMainWindow):
@@ -470,6 +472,7 @@ class Main(QMainWindow):
 
     def start_catalog_fetch(self):
         self.catalog_count.setText("Обновляем каталог…") if hasattr(self, "catalog_count") else None
+        logger.info("Запрошено обновление каталога AI")
         worker = CatalogFetchWorker(self.proxy_map())
         self.catalog_worker = worker
         worker.signals.finished.connect(self.on_catalog_loaded)
@@ -658,6 +661,9 @@ class Main(QMainWindow):
         save_button = QPushButton("Сохранить подключения")
         save_button.clicked.connect(self.save_settings)
         layout.addWidget(save_button)
+        logs_button = QPushButton("Открыть журнал приложения")
+        logs_button.clicked.connect(self.show_logs)
+        layout.addWidget(logs_button)
         add_button = QPushButton("Добавить внешний AI-сервис")
         add_button.clicked.connect(self.add_service_dialog)
         layout.addWidget(add_button)
@@ -669,6 +675,39 @@ class Main(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setWidget(content)
         return scroll
+
+    def show_logs(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Журнал AIHub Studio")
+        dialog.resize(900, 560)
+        layout = QVBoxLayout(dialog)
+        description = QLabel(f"Файл журнала: {LOG_FILE}")
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        viewer = QTextEdit()
+        viewer.setReadOnly(True)
+        viewer.setLineWrapMode(QTextEdit.NoWrap)
+        viewer.setFont(QFont("Consolas", 9))
+        layout.addWidget(viewer, 1)
+        def reload_log():
+            try:
+                viewer.setPlainText(LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else "Журнал пока пуст.")
+                viewer.moveCursor(viewer.textCursor().End)
+            except Exception as exc:
+                viewer.setPlainText("Не удалось прочитать журнал: " + str(exc))
+        actions = QHBoxLayout()
+        refresh = QPushButton("Обновить")
+        refresh.clicked.connect(reload_log)
+        copy = QPushButton("Копировать")
+        copy.clicked.connect(lambda: QApplication.clipboard().setText(viewer.toPlainText()))
+        folder = QPushButton("Открыть папку")
+        folder.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(CONFIG_DIR))))
+        close = QPushButton("Закрыть")
+        close.clicked.connect(dialog.accept)
+        for button in (refresh, copy, folder, close): actions.addWidget(button)
+        layout.addLayout(actions)
+        reload_log()
+        dialog.exec()
 
     def server_check_row(self, fields, key, title):
         wrap = QWidget()
@@ -778,7 +817,8 @@ class Main(QMainWindow):
         try:
             save_cfg(self.cfg)
         except Exception as exc:
-            QMessageBox.critical(self, "Хранилище учётных данных", str(exc))
+            logger.exception("Не удалось сохранить настройки или зашифрованные секреты")
+            QMessageBox.critical(self, "Ошибка сохранения", str(exc))
             return
         self.apply_server_urls()
         QMessageBox.information(self, "AIHub Studio", "Настройки сохранены. Если изменён прокси, перезапустите приложение.")
@@ -902,12 +942,14 @@ class Main(QMainWindow):
             self.agent.set("Нет подключения")
             self.gpu_info.setText("Удалённый агент недоступен. Проверьте адрес, токен и соединение LAN/VPN.")
             self.status.setText("Ошибка связи с GPU Agent")
+            logger.warning("Удалённый GPU Agent недоступен: %s", error)
             return
         devices = payload.get("devices", []) if isinstance(payload, dict) else []
         self.agent.set(f"{len(devices)} AMD GPU" if devices else "Агент доступен · нет метрик")
         info = [f"AMD GPU {d.get('index', '—')}: загрузка {d.get('gpu_percent', '—')}% · VRAM {d.get('vram_percent', '—')}% · температура {d.get('temperature_c', '—')}°C · мощность {d.get('power_w', '—')} W" for d in devices]
         self.gpu_info.setText("\\n".join(info) if info else "Агент отвечает, но не вернул данные GPU.")
         self.status.setText("Данные получены от удалённого ROCm Agent")
+        logger.info("Получены метрики удалённого GPU Agent: %d устройств", len(devices))
 
 # Read the proxy before Chromium starts; QtWebEngine reads this at process startup.
 try:
