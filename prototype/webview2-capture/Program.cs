@@ -363,9 +363,8 @@ internal sealed class CaptureForm : Form
         var stats = db.CreateCommand();
         stats.CommandText = """
             INSERT INTO adapter_extraction_stats(adapter_id, detections, extracted_messages, failures, updated_utc)
-            VALUES($provider, 1, 1, 0, $now)
+            VALUES($provider, 0, 1, 0, $now)
             ON CONFLICT(adapter_id) DO UPDATE SET
-                detections=adapter_extraction_stats.detections+1,
                 extracted_messages=adapter_extraction_stats.extracted_messages+1,
                 updated_utc=excluded.updated_utc;
             """;
