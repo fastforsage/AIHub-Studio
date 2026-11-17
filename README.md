@@ -1,25 +1,22 @@
 # AIHub Studio
 
-Windows 10 x64 desktop prototype for connecting to remote AI services and a Linux GPU server.
+Windows 10 x64 desktop prototype for connecting to self-hosted AI services and a remote Linux GPU server.
 
 ## Status
-Early prototype. This is not yet a full IDE: code editor, integrated terminal, and production-grade Docker controls are not implemented.
+Early prototype, not a full IDE yet. A source-code editor, integrated terminal, project manager, and native Docker API client are not implemented.
 
 ## Architecture
 - Windows client: PySide6 desktop shell.
-- Remote Linux agent: FastAPI endpoint for AMD ROCm telemetry.
-- Open WebUI and Dockhand: opened through their existing HTTPS web interfaces.
-
-## Server layout
-- Open WebUI: `https://ai.forsage.netcraze.link/`
-- Dockhand: `https://dh.forsage.netcraze.link`
-- GPU agent: bind to VPN/private interface only; do not expose Docker API or unauthenticated telemetry to the public Internet.
+- Linux GPU host: FastAPI agent for AMD ROCm telemetry.
+- Dockhand and Open WebUI: opened using their web interfaces.
+- Server addresses are configured locally in the application; no private hostnames, IP addresses, or ports are published in this repository.
 
 ## Build
-The Windows MSI is built by GitHub Actions on a Windows runner. See `.github/workflows/build-windows-msi.yml` and [BUILD_MSI_RU.md](BUILD_MSI_RU.md).
+Use GitHub Actions → **Build Windows MSI** → **Run workflow**. Download the `AIHubStudio-Windows10-x64-MSI` artifact after the run completes.
 
-## Configuration
-Copy `settings.example.json` to `settings.json` and set the private VPN URL for the GPU agent plus a strong bearer token. Do not commit secrets.
+## Configuration and privacy
+Configure protocol, DNS names/IP addresses, and ports for Dockhand, Open WebUI, and the GPU agent in the application's **Settings** tab. The settings file is stored under `%APPDATA%\AIHubStudio\settings.json` on Windows.
 
-## License
-Review the licenses of AIHub, Dockhand, and all bundled dependencies before redistribution.
+Do not commit local settings, bearer tokens, passwords, private DNS names, or private IP addresses. Keep the GPU agent reachable only over a trusted LAN/VPN and do not expose the Docker API to the public Internet.
+
+See [BUILD_MSI_RU.md](BUILD_MSI_RU.md) for build instructions.
