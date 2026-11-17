@@ -523,7 +523,7 @@ class Main(QMainWindow):
         self.proxy_url = QLineEdit(self.cfg.get("proxy_url", ""))
         self.proxy_url.setPlaceholderText("http://host:port или socks5://host:port")
         proxy_form.addRow("Proxy URL", self.proxy_url)
-        proxy_hint = QLabel("Изменение прокси для встроенных браузеров вступит в силу после перезапуска приложения. Для прокси с авторизацией используйте локальный прокси-клиент без пароля в URL.")
+        proxy_hint = QLabel("Прокси применяется к AI-браузерам и загрузке каталога; Dockhand и GPU Agent подключаются напрямую. После изменения прокси перезапустите приложение. Для прокси с авторизацией используйте локальный прокси-клиент без пароля в URL.")
         proxy_hint.setWordWrap(True)
         proxy_form.addRow(proxy_hint)
         layout.addWidget(proxy_group)
