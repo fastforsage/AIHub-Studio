@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 
 import requests
 import psutil
-from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal, Qt
+from PySide6.QtCore import QTimer, QUrl, QRunnable, QThreadPool, QObject, Signal, Qt, qInstallMessageHandler, QtMsgType
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFrame, QGridLayout, QMessageBox, QInputDialog, QComboBox, QFormLayout, QGroupBox, QScrollArea, QListWidget, QListWidgetItem, QSplitter, QStackedWidget, QAbstractItemView, QDialog, QTextEdit, QDialogButtonBox, QMenu
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -69,6 +69,12 @@ if not logger.handlers:
 def _log_uncaught(exc_type, exc_value, exc_tb):
     logger.error("Необработанное исключение", exc_info=(exc_type, exc_value, exc_tb))
 sys.excepthook = _log_uncaught
+
+def _qt_message_handler(mode, context, message):
+    if mode in (QtMsgType.QtWarningMsg, QtMsgType.QtCriticalMsg, QtMsgType.QtFatalMsg):
+        category = getattr(context, "category", "") or "Qt"
+        logger.warning("%s: %s", category, message)
+qInstallMessageHandler(_qt_message_handler)
 
 DEFAULTS = {
     "servers": {
