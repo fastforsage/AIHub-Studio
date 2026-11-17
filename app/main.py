@@ -58,6 +58,7 @@ CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CFG = CONFIG_DIR / "settings.json"
 AI_CATALOG_URL = "https://silentcoderhere.github.io/aihub-config-data/ais.json"
 AI_CATALOG_CACHE = CONFIG_DIR / "ais.json"
+AI_LINK_STATUS_CACHE = CONFIG_DIR / "ai_link_status.json"
 LOG_FILE = CONFIG_DIR / "AIHubStudio.log"
 logger = logging.getLogger("AIHubStudio")
 logger.setLevel(logging.INFO)
@@ -291,6 +292,63 @@ class ConnectionCheck(QRunnable):
 class AgentFetchSignals(QObject):
     finished = Signal(object, str)
 
+class LinkCheckSignals(QObject):
+    finished = Signal(object)
+
+class CatalogLinkCheck(QRunnable):
+    def __init__(self, service, proxies=None):
+        super().__init__()
+        self.service = dict(service)
+        self.proxies = proxies or {}
+        self.signals = LinkCheckSignals()
+
+    def run(self):
+        import time
+        from datetime import datetime, timezone
+        name = self.service.get("name", "")
+        url = self.service.get("url", "")
+        started = time.monotonic()
+        result = {"name": name, "url": url, "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        try:
+            response = requests.get(
+                url, allow_redirects=True, stream=True,
+                timeout=(5, 8), proxies=self.proxies,
+                headers={"User-Agent": "AIHubStudio-LinkChecker/1.0"}
+            )
+            code = response.status_code
+            final_url = response.url
+            response.close()
+            result.update({"http": code, "final_url": final_url, "elapsed_ms": int((time.monotonic() - started) * 1000)})
+            if code in (401, 407):
+                result.update({"status": "auth", "label": f"Доступен · HTTP {code}, нужна авторизация"})
+            elif code == 403:
+                result.update({"status": "blocked", "label": "Сайт ответил HTTP 403 · возможна защита/региональная блокировка"})
+            elif code == 404 or code == 410:
+                result.update({"status": "broken", "label": f"Страница не найдена · HTTP {code}"})
+            elif code >= 500:
+                result.update({"status": "server_error", "label": f"Ошибка сервера · HTTP {code}"})
+            elif code >= 400:
+                result.update({"status": "warning", "label": f"Сайт ответил · HTTP {code}"})
+            elif final_url.rstrip("/") != url.rstrip("/"):
+                result.update({"status": "redirect", "label": f"Доступен · перенаправление (HTTP {code})"})
+            else:
+                result.update({"status": "ok", "label": f"Доступен · HTTP {code}"})
+        except requests.exceptions.SSLError:
+            result.update({"status": "tls", "label": "Ошибка TLS/сертификата"})
+        except requests.exceptions.Timeout:
+            result.update({"status": "timeout", "label": "Тайм-аут · сайт не ответил"})
+        except requests.exceptions.ConnectionError as exc:
+            message = str(exc).lower()
+            if "name or service not known" in message or "getaddrinfo failed" in message:
+                label, status = "Не найден DNS-адрес", "dns"
+            else:
+                label, status = "Нет соединения · DNS, сеть или сайт недоступен", "connection"
+            result.update({"status": status, "label": label})
+        except Exception as exc:
+            result.update({"status": "error", "label": f"Ошибка проверки: {str(exc)[:140]}"})
+        self.signals.finished.emit(result)
+
+
 class AgentFetchWorker(QRunnable):
     def __init__(self, url, token, proxies=None):
         super().__init__()
@@ -324,6 +382,13 @@ class Main(QMainWindow):
         self.web_profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
         self.web_profile.setHttpCacheType(QWebEngineProfile.DiskHttpCache)
         self.ai_catalog = load_ai_catalog_cache()
+        try:
+            self.ai_link_status = json.loads(AI_LINK_STATUS_CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            self.ai_link_status = {}
+        self.link_check_workers = []
+        self.link_checks_pending = 0
+        self.link_checks_total = 0
         self.ai_services_by_name = {}
         self.setWindowTitle("AIHub Studio")
         self.resize(1480, 920)
@@ -456,6 +521,9 @@ class Main(QMainWindow):
         header.addWidget(title)
         self.catalog_count = QLabel("Загружаем локальный каталог…")
         header.addWidget(self.catalog_count)
+        self.link_check_button = QPushButton("Проверить ссылки")
+        self.link_check_button.clicked.connect(self.start_catalog_link_checks)
+        header.addWidget(self.link_check_button)
         refresh = QPushButton("Обновить каталог")
         refresh.clicked.connect(self.start_catalog_fetch)
         header.addWidget(refresh)
@@ -512,6 +580,45 @@ class Main(QMainWindow):
         self.sync_ai_tabs()
         self.catalog_count.setText(f"Загружено: {len(services)} сервисов")
 
+    def start_catalog_link_checks(self):
+        if not self.ai_catalog:
+            self.catalog_count.setText("Каталог пуст — сначала обновите его")
+            return
+        self.link_check_button.setEnabled(False)
+        self.link_checks_total = len(self.ai_catalog)
+        self.link_checks_pending = self.link_checks_total
+        self.catalog_count.setText(f"Проверяем ссылки: 0/{self.link_checks_total}…")
+        self.link_check_workers = []
+        proxies = self.proxy_map()
+        for service in self.ai_catalog:
+            worker = CatalogLinkCheck(service, proxies)
+            worker.signals.finished.connect(self.on_catalog_link_checked)
+            self.link_check_workers.append(worker)
+            self.thread_pool.start(worker)
+
+    def on_catalog_link_checked(self, result):
+        name = result.get("name", "")
+        if name:
+            self.ai_link_status[name] = result
+            try:
+                AI_LINK_STATUS_CACHE.write_text(json.dumps(self.ai_link_status, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                logger.exception("Не удалось сохранить результаты проверки ссылок")
+        self.link_checks_pending = max(0, self.link_checks_pending - 1)
+        done = self.link_checks_total - self.link_checks_pending
+        if self.link_checks_pending:
+            self.catalog_count.setText(f"Проверено ссылок: {done}/{self.link_checks_total}…")
+        else:
+            self.link_check_button.setEnabled(True)
+            counts = {}
+            for item in self.ai_link_status.values():
+                status = item.get("status", "unknown")
+                counts[status] = counts.get(status, 0) + 1
+            bad = sum(counts.get(key, 0) for key in ("broken", "server_error", "tls", "timeout", "dns", "connection", "error"))
+            self.catalog_count.setText(f"Проверка завершена: {self.link_checks_total} · проблемных: {bad}")
+            logger.info("Проверка ссылок каталога завершена: %s сервисов, проблемных: %s", self.link_checks_total, bad)
+        self.populate_ai_catalog()
+
     def populate_ai_catalog(self, *_):
         if not hasattr(self, "catalog_list"):
             return
@@ -552,7 +659,9 @@ class Main(QMainWindow):
                 continue
             if login == "Без входа" and service["login_required"]:
                 continue
-            label = f'{service["name"]}  ·  {service["category"]}  ·  {service["pricing"]}  ·  privacy: {service["privacy"]}  ·  login: {"yes" if service["login_required"] else "no"}'
+            check = self.ai_link_status.get(service["name"], {})
+            check_label = f'  ·  ссылка: {check.get("label", "не проверена")}'
+            label = f'{service["name"]}  ·  {service["category"]}  ·  {service["pricing"]}  ·  privacy: {service["privacy"]}  ·  login: {"yes" if service["login_required"] else "no"}{check_label}'
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, service)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
