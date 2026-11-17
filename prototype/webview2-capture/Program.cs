@@ -18,6 +18,13 @@ internal static class Program
 
 internal sealed class CaptureForm : Form
 {
+    private static readonly System.Text.RegularExpressions.Regex UuidPattern = new(
+        @"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static string RedactSensitive(string? value)
+        => string.IsNullOrEmpty(value) ? (value ?? "") : UuidPattern.Replace(value, "{id}");
+
     private readonly TextBox _address = new() { Dock = DockStyle.Fill, Text = "https://chatgpt.com" };
     private readonly Button _go = new() { Text = "Открыть", AutoSize = true };
     private readonly Button _importAdapter = new() { Text = "Импорт адаптера JSON", AutoSize = true };
@@ -101,11 +108,11 @@ internal sealed class CaptureForm : Form
     private void UpdateDiagnostics(string message)
     {
         WriteDebugLog("INFO", "app", message);
-        _lastDiagnostic = $"{DateTime.Now:HH:mm:ss}  {message}";
-        _diagnostics.Text =
+        _lastDiagnostic = RedactSensitive($"{DateTime.Now:HH:mm:ss}  {message}");
+        _diagnostics.Text = RedactSensitive(
             $"Браузер: {(_web.CoreWebView2 is null ? "не готов" : "готов")} | Скрипт зарегистрирован: {_captureScriptRegistered}\r\n" +
             $"DOM: найдено {_domFound} | сканирований {_scanCount} | Получено событий: {_receivedCount} | Записей/обновлений SQLite: {_savedEvents}\r\n" +
-            $"URL: {_web.Source?.ToString() ?? "(нет)"}\r\nЛог: {_logPath}\r\n{_domProbeDiagnostic}\r\n{_lastDiagnostic}";
+            $"URL: {RedactConversationUrl(_web.Source?.ToString() ?? "(нет)")}\r\nЛог: {_logPath}\r\n{_domProbeDiagnostic}\r\n{_lastDiagnostic}");
     }
 
     private async Task InitializeBrowserAsync()
@@ -113,7 +120,8 @@ internal sealed class CaptureForm : Form
         try
         {
             await _adapterRegistry.InitializeAsync();
-            UpdateDiagnostics("Каталог адаптеров загружен из SQLite. Создаю профиль WebView2…");
+            await InitializeDatabaseAsync();
+            UpdateDiagnostics("Каталог адаптеров и схема сообщений подготовлены в SQLite. Создаю профиль WebView2…");
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var userData = Path.Combine(local, "AIHubStudio", "WebView2CapturePrototype", "BrowserData");
             Directory.CreateDirectory(userData);
@@ -337,7 +345,7 @@ internal sealed class CaptureForm : Form
     {
         try
         {
-            var line = $"{DateTimeOffset.Now:O} [{level}] [{category}] {message}{Environment.NewLine}";
+            var line = $"{DateTimeOffset.Now:O} [{level}] [{category}] {RedactSensitive(message)}{Environment.NewLine}";
             File.AppendAllText(_logPath, line);
         }
         catch
@@ -395,7 +403,7 @@ internal sealed class CaptureForm : Form
             }
             else report.AppendLine("(debug log not found)");
 
-            await File.WriteAllTextAsync(reportPath, report.ToString(), System.Text.Encoding.UTF8);
+            await File.WriteAllTextAsync(reportPath, RedactSensitive(report.ToString()), System.Text.Encoding.UTF8);
             WriteDebugLog("INFO", "diagnostic-report", $"Separate report created: {Path.GetFileName(reportPath)}");
             UpdateDiagnostics($"Диагностический отчёт сохранён: {reportPath}");
             MessageBox.Show(this, $"Отчёт собран. Текст переписки в снимок DOM не включается.\n\n{reportPath}",
@@ -465,12 +473,12 @@ internal sealed class CaptureForm : Form
     private static int GetInt(JsonElement root, string name)
         => root.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : 0;
 
-    private async Task SaveMessageAsync(string provider, string conversationKey, string messageKey, string previousMessageKey, string role, string content, string url)
+    private async Task InitializeDatabaseAsync()
     {
         await using var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _dbPath }.ToString());
         await db.OpenAsync();
-        var create = db.CreateCommand();
-        create.CommandText = """
+        await using var command = db.CreateCommand();
+        command.CommandText = """
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 provider TEXT NOT NULL,
@@ -485,7 +493,13 @@ internal sealed class CaptureForm : Form
             );
             CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(provider, conversation_key, id);
             """;
-        await create.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task SaveMessageAsync(string provider, string conversationKey, string messageKey, string previousMessageKey, string role, string content, string url)
+    {
+        await using var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _dbPath }.ToString());
+        await db.OpenAsync();
 
         if (!string.IsNullOrWhiteSpace(previousMessageKey) &&
             !string.Equals(previousMessageKey, messageKey, StringComparison.Ordinal))

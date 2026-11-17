@@ -14,7 +14,7 @@
   const pendingTimers = new WeakMap();
   const pendingPreviousKeys = new WeakMap();
   const candidateDebugState = new WeakMap();
-  const scriptVersion = "2026.11.18-chatgpt-api-dom-v5";
+  const scriptVersion = "2026.11.18-chatgpt-api-dom-v6";
   let chatGptApiState = "unknown";
   let chatGptApiInFlight = false;
   let chatGptApiLastAttempt = 0;
@@ -375,6 +375,24 @@
     ].join(" | ");
   }
 
+  let scanTimer = null;
+  let scanPending = false;
+
+  function scheduleScan() {
+    if (scanTimer !== null) {
+      scanPending = true;
+      return;
+    }
+    scanTimer = setTimeout(() => {
+      scanTimer = null;
+      scan();
+      if (scanPending) {
+        scanPending = false;
+        scheduleScan();
+      }
+    }, 150);
+  }
+
   function scan() {
     scans++;
     // Refresh the structural probe after hydration; the first document-created\n    // scan often sees only the application shell. Never include message text.\n    if (scans === 1 || scans % 20 === 0) diagnostic("dom-probe", describeDomShape(), { scanCount: scans });
@@ -511,10 +529,10 @@
       diagnostic("dom-missing", "document.documentElement пока отсутствует");
       return;
     }
-    const observer = new MutationObserver(() => scan());
+    const observer = new MutationObserver(scheduleScan);
     observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true });
-    diagnostic("observer-start", "MutationObserver подключён");
-    setInterval(scan, 1800);
+    diagnostic("observer-start", "MutationObserver подключён с debounce 150 мс");
+    setInterval(scheduleScan, 1800);
   };
 
   if (document.readyState === "loading") {
