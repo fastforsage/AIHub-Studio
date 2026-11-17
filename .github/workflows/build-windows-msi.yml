@@ -24,12 +24,14 @@ jobs:
           pyinstaller --noconfirm --clean --windowed --name AIHubStudio --collect-all PySide6 --hidden-import PySide6.QtWebEngineWidgets app/main.py
           New-Item -ItemType Directory -Force publish | Out-Null
           Copy-Item -Recurse dist/AIHubStudio/* publish/
-      - name: Install WiX Toolset
+      - name: Install pinned WiX Toolset v4
         shell: pwsh
-        run: dotnet tool install --global wix
+        run: |
+          dotnet tool install --tool-path .wix wix --version 4.0.5
+          .\.wix\wix.exe --version
       - name: Build x64 MSI
         shell: pwsh
-        run: wix build installer/Product.wxs -arch x64 -out AIHubStudio-Setup-x64.msi
+        run: .\.wix\wix.exe build installer/Product.wxs -arch x64 -out AIHubStudio-Setup-x64.msi
       - uses: actions/upload-artifact@v4
         with:
           name: AIHubStudio-Windows10-x64-MSI
