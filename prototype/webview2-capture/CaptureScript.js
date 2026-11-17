@@ -100,140 +100,123 @@
     return textParts.join("\n").replace(/\u00a0/g, " ").trim();
   }
 
-  async function captureChatGptConversationApi() {
+
+  function processChatGptMappingPayload(conversationId, payload, responseStatus = 200) {
+    const mapping = payload && payload.mapping && typeof payload.mapping === "object" ? payload.mapping : null;
+    if (!mapping) {
+      chatGptApiState = "unavailable";
+      diagnostic("api-payload", "Нативный ответ успешен, но ожидаемая структура mapping отсутствует", {
+        conversationId, topLevelKeys: Object.keys(payload || {}).slice(0, 30),
+        hasCurrentNode: Boolean(payload && payload.current_node), hasMapping: Boolean(payload && payload.mapping)
+      });
+      return;
+    }
+    diagnostic("api-payload", "Структура conversation API распознана", {
+      conversationId, mappingNodes: Object.keys(mapping).length, currentNodePresent: Boolean(payload.current_node)
+    });
+    const ordered = [];
+    const visited = new Set();
+    let cursor = payload.current_node;
+    while (cursor && mapping[cursor] && !visited.has(cursor)) {
+      visited.add(cursor);
+      const node = mapping[cursor];
+      ordered.push(node);
+      cursor = node.parent || null;
+    }
+    ordered.reverse();
+    if (!ordered.length) {
+      Object.values(mapping).filter(node => node && node.message)
+        .sort((a, b) => (a.message.create_time || 0) - (b.message.create_time || 0))
+        .forEach(node => ordered.push(node));
+    }
+
+    let captured = 0;
+    for (const node of ordered) {
+      const message = node && node.message;
+      if (!message || !message.author) continue;
+      const role = message.author.role;
+      if (role !== "user" && role !== "assistant") continue;
+      if (message.metadata?.is_visually_hidden_from_conversation === true) continue;
+      if (role === "assistant" && message.recipient && message.recipient !== "all") continue;
+      const contentType = message.content?.content_type || "";
+      if (contentType !== "text" && contentType !== "multimodal_text") continue;
+      const text = extractApiMessageText(message.content);
+      if (!text || text.length < 2) continue;
+      const messageKey = message.id || node.id;
+      if (!messageKey) continue;
+      if (apiSentContent.get(messageKey) === text) continue;
+      apiSentContent.set(messageKey, text);
+      window.chrome.webview.postMessage(JSON.stringify({
+        type: "aihub-message",
+        providerHost: "chatgpt.com",
+        url: location.href,
+        role,
+        messageKey,
+        text,
+        capturedAt: new Date().toISOString(),
+        extractionStrategy: "chatgpt-conversation-api"
+      }));
+      captured++;
+    }
+    chatGptApiState = "ready";
+    diagnostic("api-capture", "История ChatGPT прочитана из авторизованной сессии", {
+      conversationId, pathNodes: ordered.length, mappingNodes: Object.keys(mapping).length,
+      messagesSent: captured, apiStatus: response.status, elapsedMs: Date.now() - startedAt
+    });
+  }
+
+  // Observe the page's own authenticated conversation request. Do not copy
+  // authorization headers or tokens into diagnostics, the native bridge, or storage.
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async function(input, init) {
+    const response = await nativeFetch(input, init);
+    try {
+      const requestUrl = typeof input === "string" ? input
+        : (input && typeof input.url === "string" ? input.url : "");
+      const responseUrl = response.url || requestUrl;
+      const match = responseUrl.match(/^https?:\\/\\/[^/]+\\/backend-api\\/conversation\\/([0-9a-f-]{36})(?:[?#]|$)/i);
+      if (match && response.ok) {
+        const conversationId = match[1];
+        response.clone().json().then(payload => {
+          const currentMatch = location.pathname.match(/^\\/c\\/([^/]+)/);
+          if (location.hostname.toLowerCase() === "chatgpt.com" &&
+              currentMatch && currentMatch[1] === conversationId) {
+            processChatGptMappingPayload(conversationId, payload, response.status);
+          }
+        }).catch(error => diagnostic("api-native-parse-error", "Не удалось разобрать клон нативного ответа", {
+          error: String(error).slice(0, 160), endpointPath: "/backend-api/conversation/{id}"
+        }));
+      } else if (match && !response.ok) {
+        const currentMatch = location.pathname.match(/^\\/c\\/([^/]+)/);
+        if (location.hostname.toLowerCase() === "chatgpt.com" && currentMatch && currentMatch[1] === match[1]) {
+          chatGptApiState = "unavailable";
+          diagnostic("api-native-response", "Нативный запрос истории вернул ошибочный HTTP-ответ; использую DOM fallback", {
+            apiStatus: response.status, endpointPath: "/backend-api/conversation/{id}"
+          });
+        }
+      }
+    } catch (error) {
+      diagnostic("api-native-observer-error", "Ошибка наблюдения за нативным запросом ChatGPT", {
+        error: String(error).slice(0, 160)
+      });
+    }
+    return response;
+  };
+
+  function captureChatGptConversationApi() {
     if (location.hostname.toLowerCase() !== "chatgpt.com") return;
-    const match = location.pathname.match(/^\/c\/([^/]+)/);
+    const match = location.pathname.match(/^\\/c\\/([^/]+)/);
     if (!match) return;
-    const conversationId = match[1];
-    const conversationUrl = location.origin + "/c/" + conversationId;
+    const conversationUrl = location.origin + "/c/" + match[1];
     if (conversationUrl !== chatGptApiConversationUrl) {
       chatGptApiConversationUrl = conversationUrl;
       chatGptApiState = "unknown";
       chatGptApiLastAttempt = 0;
+      chatGptApiInFlight = false;
       apiSentContent.clear();
     }
-    if (chatGptApiInFlight || Date.now() - chatGptApiLastAttempt < 8000) return;
-    chatGptApiLastAttempt = Date.now();
-    chatGptApiInFlight = true;
-    const endpoint = location.origin + "/backend-api/conversation/" + encodeURIComponent(conversationId);
-    const startedAt = Date.now();
-    diagnostic("api-request", "Отправляю запрос истории ChatGPT", {
-      conversationId, endpointPath: "/backend-api/conversation/{id}", method: "GET", credentials: "include",
-      readyState: document.readyState, pageOrigin: location.origin
-    });
-    try {
-      const response = await fetch(endpoint, {
-        method: "GET",
-        credentials: "include",
-        headers: { "Accept": "application/json" },
-        cache: "no-store"
-      });
-      const contentType = response.headers.get("content-type") || "";
-      const requestId = response.headers.get("x-request-id") || response.headers.get("oai-request-id") || "";
-      const cfRay = response.headers.get("cf-ray") || "";
-      if (!response.ok) {
-        let bodyLength = 0;
-        let bodyKind = "empty";
-        let bodyTitle = "";
-        try {
-          const body = await response.clone().text();
-          bodyLength = body.length;
-          const trimmed = body.trim();
-          if (trimmed.startsWith("<")) {
-            bodyKind = "html";
-            const title = trimmed.match(new RegExp("<title[^>]*>([^<]{0,160})</title>", "i"));
-            bodyTitle = title ? title[1].replace(/\\s+/g, " ").trim() : "";
-          } else if (trimmed) {
-            try { const parsed = JSON.parse(trimmed); bodyKind = "json"; bodyTitle = Object.keys(parsed).slice(0, 12).join(","); }
-            catch (_) { bodyKind = "text"; }
-          }
-        } catch (_) { bodyKind = "unreadable"; }
-        chatGptApiState = "unavailable";
-        diagnostic("api-response", "API вернул ошибочный HTTP-ответ", {
-          apiStatus: response.status, contentType, redirected: response.redirected, responseUrl: response.url,
-          elapsedMs: Date.now() - startedAt, bodyLength, bodyKind, bodyTitle, requestId, cfRay, conversationId
-        });
-        diagnostic("api-capture", "ChatGPT conversation endpoint вернул HTTP " + response.status + "; DOM fallback активирован", {
-          apiStatus: response.status, conversationId, elapsedMs: Date.now() - startedAt
-        });
-        return;
-      }
-      diagnostic("api-response", "API вернул успешный HTTP-ответ", {
-        apiStatus: response.status, contentType, redirected: response.redirected,
-        elapsedMs: Date.now() - startedAt, requestId, cfRay, conversationId
-      });
-      const payload = await response.json();
-      const mapping = payload && payload.mapping && typeof payload.mapping === "object" ? payload.mapping : null;
-      if (!mapping) {
-        chatGptApiState = "unavailable";
-        diagnostic("api-payload", "HTTP успешен, но ожидаемая структура mapping отсутствует", {
-          conversationId, topLevelKeys: Object.keys(payload || {}).slice(0, 30),
-          hasCurrentNode: Boolean(payload && payload.current_node), hasMapping: Boolean(payload && payload.mapping)
-        });
-        diagnostic("api-capture", "Ответ endpoint не содержит mapping; переключаюсь на DOM", { conversationId });
-        return;
-      }
-      diagnostic("api-payload", "Структура conversation API распознана", {
-        conversationId, mappingNodes: Object.keys(mapping).length, currentNodePresent: Boolean(payload.current_node)
-      });
-
-      const ordered = [];
-      const visited = new Set();
-      let cursor = payload.current_node;
-      while (cursor && mapping[cursor] && !visited.has(cursor)) {
-        visited.add(cursor);
-        const node = mapping[cursor];
-        ordered.push(node);
-        cursor = node.parent || null;
-      }
-      ordered.reverse();
-      if (!ordered.length) {
-        Object.values(mapping).filter(node => node && node.message)
-          .sort((a, b) => (a.message.create_time || 0) - (b.message.create_time || 0))
-          .forEach(node => ordered.push(node));
-      }
-
-      let captured = 0;
-      for (const node of ordered) {
-        const message = node && node.message;
-        if (!message || !message.author) continue;
-        const role = message.author.role;
-        if (role !== "user" && role !== "assistant") continue;
-        if (message.metadata?.is_visually_hidden_from_conversation === true) continue;
-        if (role === "assistant" && message.recipient && message.recipient !== "all") continue;
-        const contentType = message.content?.content_type || "";
-        if (contentType !== "text" && contentType !== "multimodal_text") continue;
-        const text = extractApiMessageText(message.content);
-        if (!text || text.length < 2) continue;
-        const messageKey = message.id || node.id;
-        if (!messageKey) continue;
-        if (apiSentContent.get(messageKey) === text) continue;
-        apiSentContent.set(messageKey, text);
-        window.chrome.webview.postMessage(JSON.stringify({
-          type: "aihub-message",
-          providerHost: "chatgpt.com",
-          url: location.href,
-          role,
-          messageKey,
-          text,
-          capturedAt: new Date().toISOString(),
-          extractionStrategy: "chatgpt-conversation-api"
-        }));
-        captured++;
-      }
-      chatGptApiState = "ready";
-      diagnostic("api-capture", "История ChatGPT прочитана из авторизованной сессии", {
-        conversationId, pathNodes: ordered.length, mappingNodes: Object.keys(mapping).length,
-        messagesSent: captured, apiStatus: response.status, elapsedMs: Date.now() - startedAt
-      });
-    } catch (error) {
-      chatGptApiState = "unavailable";
-      diagnostic("api-capture", "Не удалось прочитать conversation API; использую DOM fallback", {
-        error: String(error).slice(0, 180), conversationId
-      });
-    } finally {
-      chatGptApiInFlight = false;
-    }
+    // No manual polling: the page's own authenticated fetch is observed above.
+    // A failed native response leaves DOM capture as the fallback for this chat.
   }
 
   function identifyMessages() {
