@@ -880,6 +880,7 @@ class Main(QMainWindow):
             QMessageBox.critical(self, "Ошибка сохранения", str(exc))
             return
         self.apply_server_urls()
+        self.cfg.setdefault("service_last_urls", {}).pop("Open WebUI", None)
         if self.current_service == "Open WebUI": self.select_openwebui()
         QMessageBox.information(self, "AIHub Studio", "Настройки сохранены. Если изменён прокси, перезапустите приложение.")
 
@@ -926,8 +927,9 @@ class Main(QMainWindow):
         kind = data.get("kind")
         if kind == "heading": return
         old_name = self.current_service
-        if old_name and old_name != "Dockhand" and self.chat_view.url().isValid():
-            self.cfg.setdefault("service_last_urls", {})[old_name] = self.chat_view.url().toString()
+        current_url = self.chat_view.url()
+        if old_name and old_name != "Dockhand" and old_name != ("Open WebUI" if kind == "openwebui" else data.get("name", "")) and current_url.scheme() in ("http", "https"):
+            self.cfg.setdefault("service_last_urls", {})[old_name] = current_url.toString()
         self.show_page("chat")
         self.current_service = "Open WebUI" if kind == "openwebui" else data.get("name", "")
         if kind == "openwebui":
@@ -953,7 +955,7 @@ class Main(QMainWindow):
     def show_page(self, page):
         indexes = {"chat": 0, "overview": 1, "catalog": 2, "settings": 3}
         if page == "dockhand":
-            if self.current_service != "Dockhand" and self.current_service:
+            if self.current_service != "Dockhand" and self.current_service and self.chat_view.url().scheme() in ("http", "https"):
                 self.cfg.setdefault("service_last_urls", {})[self.current_service] = self.chat_view.url().toString()
             self.stack.setCurrentWidget(self.chat_view)
             url = server_url(self.cfg["servers"]["dockhand"])
@@ -981,7 +983,7 @@ class Main(QMainWindow):
 
     def closeEvent(self, event):
         try:
-            if self.current_service and self.current_service != "Dockhand":
+            if self.current_service and self.current_service != "Dockhand" and self.chat_view.url().scheme() in ("http", "https"):
                 self.cfg.setdefault("service_last_urls", {})[self.current_service] = self.chat_view.url().toString()
             save_cfg(self.cfg)
         except Exception:
