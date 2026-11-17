@@ -3,6 +3,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import requests
+import psutil
 import keyring
 from keyring.backends.Windows import WinVaultKeyring
 keyring.set_keyring(WinVaultKeyring())
@@ -473,8 +474,11 @@ class Main(QMainWindow):
         header.addWidget(self.status)
         outer.addLayout(header)
         grid = QGridLayout()
-        self.agent = Metric("Linux ROCm Agent")
-        grid.addWidget(self.agent, 0, 0)
+        self.cpu, self.ram = Metric("Локальный CPU"), Metric("Локальная RAM")
+        self.agent = Metric("Удалённый Linux ROCm Agent")
+        grid.addWidget(self.cpu, 0, 0)
+        grid.addWidget(self.ram, 0, 1)
+        grid.addWidget(self.agent, 0, 2)
         outer.addLayout(grid)
         self.gpu_info = QLabel("Метрики будут получены с удалённого Linux-агента.")
         self.gpu_info.setObjectName("info")
@@ -712,6 +716,9 @@ class Main(QMainWindow):
             save_cfg(self.cfg)
 
     def refresh(self):
+        self.cpu.set(f"{psutil.cpu_percent():.0f}%")
+        memory = psutil.virtual_memory()
+        self.ram.set(f"{memory.percent:.0f}% · {memory.used / 1024**3:.1f}/{memory.total / 1024**3:.1f} GB")
         gpu_url = server_url(self.cfg["servers"]["gpu"])
         if not gpu_url:
             self.agent.set("Адрес не задан")
