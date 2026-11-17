@@ -173,6 +173,11 @@ internal sealed class AdapterRegistry
         cmd.CommandText = """
             INSERT INTO adapter_detection_logs(host, adapter_id, confidence, detected_utc)
             VALUES($host, $adapter, $confidence, $now);
+            INSERT INTO adapter_extraction_stats(adapter_id, detections, extracted_messages, failures, updated_utc)
+            VALUES($adapter, 1, 0, 0, $now)
+            ON CONFLICT(adapter_id) DO UPDATE SET
+                detections=adapter_extraction_stats.detections+1,
+                updated_utc=excluded.updated_utc;
             """;
         cmd.Parameters.AddWithValue("$host", uri.Host);
         cmd.Parameters.AddWithValue("$adapter", adapterId);
