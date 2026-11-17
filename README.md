@@ -6,8 +6,8 @@ Windows 10 x64 desktop prototype for connecting to self-hosted AI services and a
 Early prototype, not a full IDE yet. A source-code editor, integrated terminal, project manager, and native Docker API client are not implemented.
 
 ## Architecture
-- Windows client: PySide6 desktop shell.
-- Linux GPU host: FastAPI agent for AMD ROCm telemetry.
+- Windows client: PySide6 desktop shell with embedded, persistent Qt WebEngine profiles for AI chat sessions.
+- Linux GPU host: FastAPI agent for AMD ROCm telemetry; GPU metrics are polled only from this remote agent (no local `nvidia-smi` polling).
 - Dockhand and Open WebUI: opened using their web interfaces.
 - Server addresses are configured locally in the application; no private hostnames, IP addresses, or ports are published in this repository.
 
