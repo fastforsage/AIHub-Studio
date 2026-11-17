@@ -21,7 +21,7 @@ jobs:
       - name: Build standalone application
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --windowed --name AIHubStudio --collect-all PySide6 --hidden-import PySide6.QtWebEngineWidgets app/main.py
+          pyinstaller --noconfirm --clean --windowed --name AIHubStudio --collect-all PySide6 --collect-all keyring --hidden-import keyring.backends.Windows --hidden-import PySide6.QtWebEngineWidgets --hidden-import PySide6.QtWebEngineCore app/main.py
           New-Item -ItemType Directory -Force publish | Out-Null
           Copy-Item -Recurse dist/AIHubStudio/* publish/
       - name: Install pinned WiX Toolset v5
