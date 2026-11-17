@@ -15,7 +15,7 @@ Early prototype, not a full IDE yet. A source-code editor, integrated terminal, 
 Use GitHub Actions → **Build Windows MSI** → **Run workflow**. Download the `AIHubStudio-Windows10-x64-MSI` artifact after the run completes.
 
 ## Configuration and privacy
-Configure protocol, DNS names/IP addresses, and ports for Dockhand, Open WebUI, and the GPU agent in the application's **Settings** tab. The settings file is stored under `%APPDATA%\AIHubStudio\settings.json` on Windows.
+Configure protocol, DNS names/IP addresses, and ports for Dockhand, Open WebUI, and the GPU agent in the application's **Settings** tab. The AI area uses one active Qt WebEngine view with Open WebUI pinned above the searchable cloud-assistant list; assistants can be reordered and marked as favorites. Browser cookies and site storage persist under `%APPDATA%\AIHubStudio\web-profile`. The settings file is stored under `%APPDATA%\AIHubStudio\settings.json`; sensitive GPU Agent and proxy values are encrypted locally with Windows DPAPI, without a Windows Credential Manager prompt. The in-app log viewer reads `%APPDATA%\AIHubStudio\AIHubStudio.log`.
 
 Do not commit local settings, bearer tokens, passwords, private DNS names, or private IP addresses. Keep the GPU agent reachable only over a trusted LAN/VPN and do not expose the Docker API to the public Internet.
 
