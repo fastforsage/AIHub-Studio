@@ -368,6 +368,7 @@ class Main(QMainWindow):
         super().__init__()
         self.cfg = load_cfg()
         self.thread_pool = QThreadPool.globalInstance()
+        self.thread_pool.setMaxThreadCount(6)
         self.check_workers = []
         self.agent_worker_active = False
         self.last_agent_error = None
@@ -542,11 +543,15 @@ class Main(QMainWindow):
         self.catalog_login = QComboBox()
         self.catalog_login.addItems(["Любой доступ", "Требуется вход", "Без входа"])
         self.catalog_login.currentTextChanged.connect(self.populate_ai_catalog)
+        self.catalog_status = QComboBox()
+        self.catalog_status.addItems(["Любой статус", "Не проверено", "Доступные", "Проблемные", "Требует внимания"])
+        self.catalog_status.currentTextChanged.connect(self.populate_ai_catalog)
         filters.addWidget(self.catalog_search, 2)
         filters.addWidget(self.catalog_category, 1)
         filters.addWidget(self.catalog_pricing, 1)
         filters.addWidget(self.catalog_privacy, 1)
         filters.addWidget(self.catalog_login, 1)
+        filters.addWidget(self.catalog_status, 1)
         layout.addLayout(filters)
 
         self.catalog_list = QListWidget()
@@ -642,6 +647,7 @@ class Main(QMainWindow):
         pricing = self.catalog_pricing.currentText()
         privacy = self.catalog_privacy.currentText()
         login = self.catalog_login.currentText()
+        status_filter = self.catalog_status.currentText()
         enabled = set(self.cfg.get("enabled_ai_services", []))
         self.catalog_list.blockSignals(True)
         self.catalog_list.clear()
@@ -660,6 +666,15 @@ class Main(QMainWindow):
             if login == "Без входа" and service["login_required"]:
                 continue
             check = self.ai_link_status.get(service["name"], {})
+            check_status = check.get("status", "unknown")
+            if status_filter == "Не проверено" and check_status != "unknown":
+                continue
+            if status_filter == "Доступные" and check_status not in ("ok", "redirect", "auth"):
+                continue
+            if status_filter == "Проблемные" and check_status not in ("broken", "server_error", "tls", "timeout", "dns", "connection", "error"):
+                continue
+            if status_filter == "Требует внимания" and check_status not in ("blocked", "warning", "auth", "redirect"):
+                continue
             check_label = f'  ·  ссылка: {check.get("label", "не проверена")}'
             label = f'{service["name"]}  ·  {service["category"]}  ·  {service["pricing"]}  ·  privacy: {service["privacy"]}  ·  login: {"yes" if service["login_required"] else "no"}{check_label}'
             item = QListWidgetItem(label)
