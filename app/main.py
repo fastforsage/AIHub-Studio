@@ -313,7 +313,7 @@ class Main(QMainWindow):
         self.check_workers = []
         self.agent_worker_active = False
         self.last_agent_error = None
-        self.current_service = "Open WebUI"
+        self.current_service = ""
         self.web_profile = QWebEngineProfile("AIHubStudio", self)
         web_data = CONFIG_DIR / "web-profile"
         web_cache = CONFIG_DIR / "web-cache"
@@ -613,7 +613,6 @@ class Main(QMainWindow):
                 if data.get("name") == selected: self.service_list.setCurrentItem(item); break
         else:
             self.service_list.setCurrentItem(open_item)
-            self.current_service = "Open WebUI"
         self.service_list.blockSignals(False)
         self.filter_service_list(self.service_search.text())
 
