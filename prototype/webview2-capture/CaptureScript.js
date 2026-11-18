@@ -1,6 +1,6 @@
 (() => {
   if (window.__aihubCaptureInstalled) {
-    try { window.chrome.webview.postMessage(JSON.stringify({ type: "aihub-diagnostic", stage: "duplicate-install", detail: "CaptureScript уже был запущен в этом документе", url: location.href })); } catch (_) {}
+    try { window.chrome.webview.postMessage(JSON.stringify({ type: "aihub-diagnostic", stage: "duplicate-install", detail: "CaptureScript уже был запущен в этом документе", url: location.origin + location.pathname })); } catch (_) {}
     return;
   }
   window.__aihubCaptureInstalled = true;
@@ -25,7 +25,7 @@
     try {
       if (window.chrome && window.chrome.webview) {
         window.chrome.webview.postMessage(JSON.stringify({
-          type: "aihub-diagnostic", stage, detail, url: location.href,
+          type: "aihub-diagnostic", stage, detail, url: location.origin + location.pathname,
           readyState: document.readyState, ...extra
         }));
       }
@@ -150,7 +150,7 @@
         window.chrome.webview.postMessage(JSON.stringify({
           type: "aihub-message",
           providerHost: "chatgpt.com",
-          url: location.href,
+          url: location.origin + location.pathname,
           role,
           messageKey,
           text,
@@ -471,7 +471,7 @@
             return;
           }
           window.chrome.webview.postMessage(JSON.stringify({
-            type: "aihub-message", providerHost: host, url: location.href, role,
+            type: "aihub-message", providerHost: host, url: location.origin + location.pathname, role,
             messageKey: latestKey, previousMessageKey: oldKey, text: latestText,
             extractionStrategy: strategy || "semantic-dom", capturedAt: new Date().toISOString()
           }));

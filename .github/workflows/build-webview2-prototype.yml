@@ -21,6 +21,8 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Validate capture script JavaScript syntax
         run: node --check prototype/webview2-capture/CaptureScript.js
+      - name: Run sensitive-data redaction tests
+        run: dotnet test prototype/webview2-capture.Tests/AIHub.WebView2Capture.Tests.csproj --configuration Release
       - name: Restore win-x64 dependencies
         run: dotnet restore prototype/webview2-capture/AIHub.WebView2Capture.csproj --runtime win-x64
       - name: Publish self-contained x64 application

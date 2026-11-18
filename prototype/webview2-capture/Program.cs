@@ -18,13 +18,6 @@ internal static class Program
 
 internal sealed class CaptureForm : Form
 {
-    private static readonly System.Text.RegularExpressions.Regex UuidPattern = new(
-        @"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
-        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-    private static string RedactSensitive(string? value)
-        => string.IsNullOrEmpty(value) ? (value ?? "") : UuidPattern.Replace(value, "{id}");
-
     private readonly TextBox _address = new() { Dock = DockStyle.Fill, Text = "https://chatgpt.com" };
     private readonly Button _go = new() { Text = "Открыть", AutoSize = true };
     private readonly Button _importAdapter = new() { Text = "Импорт адаптера JSON", AutoSize = true };
@@ -108,8 +101,8 @@ internal sealed class CaptureForm : Form
     private void UpdateDiagnostics(string message)
     {
         WriteDebugLog("INFO", "app", message);
-        _lastDiagnostic = RedactSensitive($"{DateTime.Now:HH:mm:ss}  {message}");
-        _diagnostics.Text = RedactSensitive(
+        _lastDiagnostic = SensitiveDataRedactor.Redact($"{DateTime.Now:HH:mm:ss}  {message}");
+        _diagnostics.Text = SensitiveDataRedactor.Redact(
             $"Браузер: {(_web.CoreWebView2 is null ? "не готов" : "готов")} | Скрипт зарегистрирован: {_captureScriptRegistered}\r\n" +
             $"DOM: найдено {_domFound} | сканирований {_scanCount} | Получено событий: {_receivedCount} | Записей/обновлений SQLite: {_savedEvents}\r\n" +
             $"URL: {RedactConversationUrl(_web.Source?.ToString() ?? "(нет)")}\r\nЛог: {_logPath}\r\n{_domProbeDiagnostic}\r\n{_lastDiagnostic}");
@@ -345,7 +338,7 @@ internal sealed class CaptureForm : Form
     {
         try
         {
-            var line = $"{DateTimeOffset.Now:O} [{level}] [{category}] {RedactSensitive(message)}{Environment.NewLine}";
+            var line = $"{DateTimeOffset.Now:O} [{level}] [{category}] {SensitiveDataRedactor.Redact(message)}{Environment.NewLine}";
             File.AppendAllText(_logPath, line);
         }
         catch
@@ -403,7 +396,7 @@ internal sealed class CaptureForm : Form
             }
             else report.AppendLine("(debug log not found)");
 
-            await File.WriteAllTextAsync(reportPath, RedactSensitive(report.ToString()), System.Text.Encoding.UTF8);
+            await File.WriteAllTextAsync(reportPath, SensitiveDataRedactor.Redact(report.ToString()), System.Text.Encoding.UTF8);
             WriteDebugLog("INFO", "diagnostic-report", $"Separate report created: {Path.GetFileName(reportPath)}");
             UpdateDiagnostics($"Диагностический отчёт сохранён: {reportPath}");
             MessageBox.Show(this, $"Отчёт собран. Текст переписки в снимок DOM не включается.\n\n{reportPath}",
