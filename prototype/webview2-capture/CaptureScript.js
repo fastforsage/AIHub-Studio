@@ -182,7 +182,6 @@
     });
   }
 
-  installQwenNetworkObserver();
   let chatGptApiState = "unknown";
   let chatGptApiInFlight = false;
   let chatGptApiLastAttempt = 0;
