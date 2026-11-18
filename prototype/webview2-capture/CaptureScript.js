@@ -27,6 +27,9 @@
       const parsed = new URL(String(rawUrl || ""), location.href);
       if (!/^https?:$/.test(parsed.protocol)) return "";
       if (!/(^|\.)qwen\.ai$/i.test(parsed.hostname) || networkAuthPath.test(parsed.pathname)) return "";
+      for (const key of parsed.searchParams.keys()) {
+        if (/^(access_token|id_token|refresh_token|token|api_key|code|state|nonce|signature|sig)$/i.test(key)) return "";
+      }
       return parsed.pathname.slice(0, 180) || "/";
     } catch (_) { return ""; }
   }

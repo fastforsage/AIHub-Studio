@@ -317,7 +317,11 @@ internal sealed class CaptureForm : Form
             _domProbeDiagnostic = $"JS [dom-probe]: {detail}";
         WriteDebugLog(stage == "post-error" || stage == "bridge-missing" ? "ERROR" : "DEBUG", "js-" + stage,
             $"detail={detail}; payload={root.ToString()}");
-        var extra = stage == "script-start"
+        var extra = stage == "network-shape"
+            ? $" | transport={GetString(root, "transport")} | endpoint={GetString(root, "endpointPath")} | schemaFields={(root.TryGetProperty("shape", out var shape) && shape.ValueKind == JsonValueKind.Array ? shape.GetArrayLength() : 0)}"
+            : stage == "network-observer"
+                ? " | Qwen network observer active"
+                : stage == "script-start"
             ? $" | version={GetString(root, "scriptVersion", "unknown")}"
             : stage == "scan"
                 ? $" | provider={GetString(root, "providerHost")} | adapter={GetString(root, "adapterId")} | confidence={GetString(root, "detectionConfidence")} | strategy={GetString(root, "strategy")} | найдено={_domFound} | scans={_scanCount}"
