@@ -269,9 +269,7 @@ internal sealed class CaptureForm : Form
             _receivedCount++;
             var url = GetString(root, "url");
             var provider = _adapterRegistry.ResolveProvider(url);
-            var confidence = provider == "unknown" ? 0.65 : 1.0;
             if (provider == "unknown") provider = "generic-chat";
-            await _adapterRegistry.RecordDetectionAsync(url, provider, confidence);
             var conversationKey = GetConversationKey(url);
             var role = GetString(root, "role", "unknown");
             var content = GetString(root, "text");
@@ -464,8 +462,15 @@ internal sealed class CaptureForm : Form
     }
 
     private static string GetString(JsonElement root, string name, string fallback = "")
-        => root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? fallback : fallback;
+    {
+        if (!root.TryGetProperty(name, out var value)) return fallback;
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? fallback,
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.GetRawText(),
+            _ => fallback
+        };
+    }
 
     private static int GetInt(JsonElement root, string name)
         => root.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : 0;
