@@ -14,7 +14,7 @@
   const pendingTimers = new WeakMap();
   const pendingPreviousKeys = new WeakMap();
   const candidateDebugState = new WeakMap();
-  const scriptVersion = "2026.11.18-qwen-network-capture-v2";
+  const scriptVersion = "2026.11.18-capture-regression-fixes-v1";
 
   // Qwen network schema spike. This observer reports JSON shape only:
   // property paths and JavaScript value types. It never forwards body values.
@@ -486,6 +486,10 @@
     return response;
   };
 
+  // Install after the ChatGPT fetch wrapper exists, but before DOMContentLoaded:
+  // the Qwen observer must wrap the final fetch implementation without racing SPA requests.
+  installQwenNetworkObserver();
+
   function captureChatGptConversationApi() {
     if (location.hostname.toLowerCase() !== "chatgpt.com") return;
     const match = location.pathname.match(/^\/c\/([^/]+)/);
@@ -805,7 +809,6 @@
   };
 
   const start = () => {
-    installQwenNetworkObserver();
     diagnostic("script-start", "CaptureScript запущен", { scriptVersion });
     scan();
     if (!document.documentElement) {
