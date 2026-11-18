@@ -1,4 +1,5 @@
 using AIHub.WebView2Capture;
+using Xunit;
 
 namespace AIHub.WebView2Capture.Tests;
 

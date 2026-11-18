@@ -6,6 +6,7 @@ on:
       - feature/webview2-local-chat-archive
     paths:
       - 'prototype/webview2-capture/**'
+      - 'prototype/webview2-capture.Tests/**'
       - '.github/workflows/build-webview2-prototype.yml'
 permissions:
   contents: read
