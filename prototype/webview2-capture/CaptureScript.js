@@ -170,7 +170,7 @@
       try {
         response.clone().json().then(payload => {
           reportNetworkShape("fetch", response.url || requestUrl, contentType, payload);
-          if (/^\/api\/v2\/chats\//i.test(endpointPath)) captureQwenChatPayload(response.url || requestUrl, payload, requestChatId);
+          if (response.ok && /^\/api\/v2\/chats\//i.test(endpointPath)) captureQwenChatPayload(response.url || requestUrl, payload, requestChatId);
         }).catch(() => {});
       } catch (_) {}
       return;
@@ -441,7 +441,7 @@
       }
       captured++;
     }
-    chatGptApiState = "ready";
+    chatGptApiState = captured > 0 ? "ready" : "unavailable";
     diagnostic("api-capture", "История ChatGPT прочитана из авторизованной сессии", {
       conversationId, pathNodes: ordered.length, mappingNodes: Object.keys(mapping).length,
       messagesSent: captured, apiStatus: responseStatus
@@ -680,7 +680,7 @@
     const host = location.hostname.toLowerCase();
     const isChatGpt = host === "chatgpt.com";
     if (isChatGpt) void captureChatGptConversationApi();
-    const found = isChatGpt && chatGptApiState === "ready" ? [] : identifyMessages();
+    const found = identifyMessages();
     const detection = detectAdapter();
     const supported = Boolean(detection.adapter) || found.some(item => item.strategy === "semantic-fallback") ||
       (isChatGpt && chatGptApiState === "ready");
@@ -696,6 +696,7 @@
     }
 
     found.forEach(({ el, role, strategy, stableKey }, index) => {
+      const capturedUrl = location.origin + location.pathname;
       const text = cleanText(el);
       const stableDomKey = stableKey || el.getAttribute("data-content-search-unit-key") ||
         el.getAttribute("data-chatgpt-search-unit-key") || el.getAttribute("data-turn-key") || "";
@@ -752,7 +753,7 @@
             return;
           }
           window.chrome.webview.postMessage(JSON.stringify({
-            type: "aihub-message", providerHost: host, url: location.origin + location.pathname, role,
+            type: "aihub-message", providerHost: host, url: capturedUrl, role,
             messageKey: latestKey, previousMessageKey: oldKey, text: latestText,
             extractionStrategy: strategy || "semantic-dom", capturedAt: new Date().toISOString()
           }));
