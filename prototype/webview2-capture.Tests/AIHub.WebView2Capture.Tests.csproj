@@ -16,6 +16,6 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../AIHub.WebView2Capture.csproj" />
+    <ProjectReference Include="../webview2-capture/AIHub.WebView2Capture.csproj" />
   </ItemGroup>
 </Project>
