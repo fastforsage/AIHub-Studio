@@ -14,7 +14,7 @@
   const pendingTimers = new WeakMap();
   const pendingPreviousKeys = new WeakMap();
   const candidateDebugState = new WeakMap();
-  const scriptVersion = "2026.11.18-qwen-network-spike-v1";
+  const scriptVersion = "2026.11.18-qwen-network-capture-v1";
 
   // Qwen network schema spike. This observer reports JSON shape only:
   // property paths and JavaScript value types. It never forwards body values.
@@ -49,6 +49,22 @@
       }
     }
     return output;
+  }
+
+  const qwenMessageContentSeen = new Map();
+  function captureQwenChatPayload(rawUrl, payload) {
+    if (!isQwenPage() || !/^\/api\/v2\/chats\/[^/]+$/i.test(safeEndpointPath(rawUrl))) return;
+    const messages = payload?.success === true && Array.isArray(payload?.data?.chat?.messages) ? payload.data.chat.messages : null;
+    if (!messages) { diagnostic("network-capture-rejected", "Unrecognized Qwen chat schema", { endpointPath: safeEndpointPath(rawUrl), confidence: 0.2, archived: 0 }); return; }
+    let captured = 0, rejected = 0;
+    for (const message of messages) {
+      if (!message || typeof message !== "object" || typeof message.id !== "string" || !message.id || !["user", "assistant"].includes(message.role) || typeof message.content !== "string" || !message.content.trim()) { rejected++; continue; }
+      const content = message.content.trim();
+      if (qwenMessageContentSeen.get(message.id) === content) continue;
+      qwenMessageContentSeen.set(message.id, content);
+      try { window.chrome?.webview?.postMessage(JSON.stringify({ type: "aihub-message", providerHost: "chat.qwen.ai", url: location.origin + location.pathname, role: message.role, messageKey: message.id, text: content, capturedAt: new Date().toISOString(), extractionStrategy: "qwen-chat-detail-xhr", confidence: 0.95 })); captured++; } catch (_) {}
+    }
+    diagnostic("network-capture", "Qwen chat history normalized from native JSON response", { endpointPath: safeEndpointPath(rawUrl), confidence: 0.95, candidateMessages: messages.length, capturedMessages: captured, rejectedMessages: rejected, archived: captured });
   }
 
   function reportNetworkShape(transport, rawUrl, contentType, payload) {
@@ -148,8 +164,10 @@
             if (!payload && typeof this.responseText === "string") {
               try { payload = JSON.parse(this.responseText); } catch (_) {}
             }
-            if (payload !== null && payload !== undefined)
+            if (payload !== null && payload !== undefined) {
               reportNetworkShape("xhr", url, contentType, payload);
+              if (this.status >= 200 && this.status < 300) captureQwenChatPayload(url, payload);
+            }
           } catch (_) {}
         }, { once: true });
         return originalSend.apply(this, args);
