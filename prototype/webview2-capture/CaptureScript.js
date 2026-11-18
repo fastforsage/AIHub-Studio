@@ -14,7 +14,172 @@
   const pendingTimers = new WeakMap();
   const pendingPreviousKeys = new WeakMap();
   const candidateDebugState = new WeakMap();
-  const scriptVersion = "2026.11.18-chatgpt-api-dom-v6";
+  const scriptVersion = "2026.11.18-qwen-network-spike-v1";
+
+  // Qwen network schema spike. This observer reports JSON shape only:
+  // property paths and JavaScript value types. It never forwards body values.
+  const networkShapeSeen = new Set();
+  const networkAuthPath = /(?:^|\/)(?:auth|oauth|token|login|signin|refresh)(?:\/|$)/i;
+  const isQwenPage = () => /(^|\.)qwen\.ai$/i.test(location.hostname);
+
+  function safeEndpointPath(rawUrl) {
+    try {
+      const parsed = new URL(String(rawUrl || ""), location.href);
+      if (!/^https?:$/.test(parsed.protocol)) return "";
+      if (!/(^|\.)qwen\.ai$/i.test(parsed.hostname) || networkAuthPath.test(parsed.pathname)) return "";
+      return parsed.pathname.slice(0, 180) || "/";
+    } catch (_) { return ""; }
+  }
+
+  function summarizeJsonShape(value, prefix = "$", depth = 0, output = []) {
+    if (output.length >= 80 || depth > 5) return output;
+    const type = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+    output.push(prefix + ":" + type);
+    if (depth === 5) return output;
+    if (Array.isArray(value)) {
+      if (value.length) summarizeJsonShape(value[0], prefix + "[0]", depth + 1, output);
+      if (value.length > 1) summarizeJsonShape(value[1], prefix + "[1]", depth + 1, output);
+    } else if (value && typeof value === "object") {
+      for (const key of Object.keys(value).slice(0, 30)) {
+        summarizeJsonShape(value[key], prefix + "." + String(key).slice(0, 80), depth + 1, output);
+        if (output.length >= 80) break;
+      }
+    }
+    return output;
+  }
+
+  function reportNetworkShape(transport, rawUrl, contentType, payload) {
+    if (!isQwenPage()) return;
+    const endpointPath = safeEndpointPath(rawUrl);
+    if (!endpointPath) return;
+    const shape = summarizeJsonShape(payload);
+    if (!shape.length) return;
+    const fingerprint = [transport, endpointPath, contentType || "", shape.join("|")].join("::");
+    if (networkShapeSeen.has(fingerprint)) return;
+    networkShapeSeen.add(fingerprint);
+    diagnostic("network-shape", "Обнаружена структура сетевого JSON (только имена полей и типы)", {
+      providerHost: location.hostname,
+      transport,
+      endpointPath,
+      contentType: String(contentType || "").split(";")[0].slice(0, 80),
+      shape
+    });
+  }
+
+  function observeFetchResponse(response, requestUrl) {
+    if (!isQwenPage() || !response) return;
+    const endpointPath = safeEndpointPath(response.url || requestUrl);
+    if (!endpointPath) return;
+    const contentType = response.headers?.get("content-type") || "";
+    if (/application\/(?:[^;]+\+)?json/i.test(contentType)) {
+      try {
+        response.clone().json().then(payload =>
+          reportNetworkShape("fetch", response.url || requestUrl, contentType, payload)
+        ).catch(() => {});
+      } catch (_) {}
+      return;
+    }
+    if (/text\/event-stream/i.test(contentType) && response.body) {
+      try {
+        const reader = response.clone().body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let consumed = 0;
+        let eventCount = 0;
+        const readNext = () => reader.read().then(({ done, value }) => {
+          if (done || eventCount >= 24 || consumed >= 262144) return;
+          consumed += value?.byteLength || 0;
+          buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+            const data = line.slice(5).trim();
+            if (!data || data === "[DONE]") continue;
+            try {
+              const payload = JSON.parse(data);
+              reportNetworkShape("sse", response.url || requestUrl, contentType, payload);
+              eventCount++;
+              if (eventCount >= 24) break;
+            } catch (_) {}
+          }
+          return readNext();
+        }).catch(() => {});
+        void readNext();
+      } catch (_) {}
+    }
+  }
+
+  function installQwenNetworkObserver() {
+    if (!isQwenPage() || window.__aihubQwenNetworkObserverInstalled) return;
+    window.__aihubQwenNetworkObserverInstalled = true;
+
+    const originalFetch = window.fetch;
+    if (typeof originalFetch === "function") {
+      window.fetch = function(...args) {
+        const requestUrl = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
+        return originalFetch.apply(this, args).then(response => {
+          try { observeFetchResponse(response, requestUrl); } catch (_) {}
+          return response;
+        });
+      };
+    }
+
+    const xhrPrototype = window.XMLHttpRequest?.prototype;
+    if (xhrPrototype && !xhrPrototype.__aihubQwenObserverInstalled) {
+      const originalOpen = xhrPrototype.open;
+      const originalSend = xhrPrototype.send;
+      xhrPrototype.open = function(method, url, ...rest) {
+        try { this.__aihubQwenProbeUrl = String(url); } catch (_) {}
+        return originalOpen.call(this, method, url, ...rest);
+      };
+      xhrPrototype.send = function(...args) {
+        this.addEventListener("load", () => {
+          try {
+            const url = this.responseURL || this.__aihubQwenProbeUrl || "";
+            const endpointPath = safeEndpointPath(url);
+            if (!endpointPath) return;
+            const contentType = this.getResponseHeader("content-type") || "";
+            if (!/application\/(?:[^;]+\+)?json/i.test(contentType)) return;
+            let payload = this.responseType === "json" ? this.response : null;
+            if (!payload && typeof this.responseText === "string") {
+              try { payload = JSON.parse(this.responseText); } catch (_) {}
+            }
+            if (payload !== null && payload !== undefined)
+              reportNetworkShape("xhr", url, contentType, payload);
+          } catch (_) {}
+        }, { once: true });
+        return originalSend.apply(this, args);
+      };
+      Object.defineProperty(xhrPrototype, "__aihubQwenObserverInstalled", { value: true });
+    }
+
+    const NativeWebSocket = window.WebSocket;
+    if (typeof NativeWebSocket === "function" && !NativeWebSocket.__aihubQwenObserverInstalled) {
+      const ObservedWebSocket = new Proxy(NativeWebSocket, {
+        construct(target, args, newTarget) {
+          const socket = Reflect.construct(target, args, newTarget);
+          const socketUrl = args[0];
+          socket.addEventListener("message", event => {
+            try {
+              if (typeof event.data !== "string" || event.data.length > 262144) return;
+              const payload = JSON.parse(event.data);
+              reportNetworkShape("websocket", socketUrl, "application/json", payload);
+            } catch (_) {}
+          });
+          return socket;
+        }
+      });
+      Object.defineProperty(ObservedWebSocket, "__aihubQwenObserverInstalled", { value: true });
+      window.WebSocket = ObservedWebSocket;
+    }
+
+    diagnostic("network-observer", "Qwen network schema observer установлен: fetch/XHR/WebSocket; тела и значения не сохраняются", {
+      providerHost: location.hostname
+    });
+  }
+
+  installQwenNetworkObserver();
   let chatGptApiState = "unknown";
   let chatGptApiInFlight = false;
   let chatGptApiLastAttempt = 0;
@@ -523,6 +688,7 @@
   };
 
   const start = () => {
+    installQwenNetworkObserver();
     diagnostic("script-start", "CaptureScript запущен", { scriptVersion });
     scan();
     if (!document.documentElement) {
