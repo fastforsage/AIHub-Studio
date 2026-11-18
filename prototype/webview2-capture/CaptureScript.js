@@ -14,7 +14,7 @@
   const pendingTimers = new WeakMap();
   const pendingPreviousKeys = new WeakMap();
   const candidateDebugState = new WeakMap();
-  const scriptVersion = "2026.11.18-qwen-network-capture-v1";
+  const scriptVersion = "2026.11.18-qwen-network-capture-v2";
 
   // Qwen network schema spike. This observer reports JSON shape only:
   // property paths and JavaScript value types. It never forwards body values.
@@ -35,36 +35,112 @@
   }
 
   function summarizeJsonShape(value, prefix = "$", depth = 0, output = []) {
-    if (output.length >= 80 || depth > 5) return output;
+    if (output.length >= 200 || depth > 7) return output;
     const type = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
     output.push(prefix + ":" + type);
-    if (depth === 5) return output;
     if (Array.isArray(value)) {
       if (value.length) summarizeJsonShape(value[0], prefix + "[0]", depth + 1, output);
-      if (value.length > 1) summarizeJsonShape(value[1], prefix + "[1]", depth + 1, output);
+      if (value.length > 1 && output.length < 200) summarizeJsonShape(value[1], prefix + "[1]", depth + 1, output);
     } else if (value && typeof value === "object") {
-      for (const key of Object.keys(value).slice(0, 30)) {
+      for (const key of Object.keys(value).slice(0, 40)) {
         summarizeJsonShape(value[key], prefix + "." + String(key).slice(0, 80), depth + 1, output);
-        if (output.length >= 80) break;
+        if (output.length >= 200) break;
       }
     }
     return output;
   }
 
   const qwenMessageContentSeen = new Map();
-  function captureQwenChatPayload(rawUrl, payload) {
-    if (!isQwenPage() || !/^\/api\/v2\/chats\/[^/]+$/i.test(safeEndpointPath(rawUrl))) return;
+  const qwenStreams = new Map();
+  function qwenCurrentChatId() {
+    const match = location.pathname.match(/^\/c\/([0-9a-f-]{36})\/?$/i);
+    return match ? match[1].toLowerCase() : "";
+  }
+  function qwenMessageText(message) {
+    if (typeof message?.content === "string" && message.content.trim()) return message.content.trim();
+    const list = Array.isArray(message?.content_list) ? message.content_list : [];
+    return list
+      .filter(part => part && typeof part.content === "string" && part.content.trim())
+      .filter(part => !/^(think|thinking|reasoning)$/i.test(String(part.phase || "")))
+      .map(part => part.content.trim())
+      .join("\n").trim();
+  }
+  function postQwenMessage(chatId, messageKey, role, content, strategy) {
+    if (!chatId || qwenCurrentChatId() !== chatId || !messageKey || !content || !["user", "assistant"].includes(role)) return false;
+    const previous = qwenMessageContentSeen.get(messageKey);
+    if (previous === content) return false;
+    qwenMessageContentSeen.set(messageKey, content);
+    try {
+      window.chrome?.webview?.postMessage(JSON.stringify({
+        type: "aihub-message", providerHost: "chat.qwen.ai",
+        url: location.origin + "/c/" + chatId, role, messageKey, text: content,
+        capturedAt: new Date().toISOString(), extractionStrategy: strategy, confidence: 0.95
+      }));
+      return true;
+    } catch (_) { return false; }
+  }
+  function captureQwenChatPayload(rawUrl, payload, requestChatId) {
+    const endpointPath = safeEndpointPath(rawUrl);
+    const match = endpointPath.match(/^\/api\/v2\/chats\/([0-9a-f-]{36})$/i);
+    if (!isQwenPage() || !match || match[1].toLowerCase() !== requestChatId || qwenCurrentChatId() !== requestChatId) return;
     const messages = payload?.success === true && Array.isArray(payload?.data?.chat?.messages) ? payload.data.chat.messages : null;
-    if (!messages) { diagnostic("network-capture-rejected", "Unrecognized Qwen chat schema", { endpointPath: safeEndpointPath(rawUrl), confidence: 0.2, archived: 0 }); return; }
-    let captured = 0, rejected = 0;
-    for (const message of messages) {
-      if (!message || typeof message !== "object" || typeof message.id !== "string" || !message.id || !["user", "assistant"].includes(message.role) || typeof message.content !== "string" || !message.content.trim()) { rejected++; continue; }
-      const content = message.content.trim();
-      if (qwenMessageContentSeen.get(message.id) === content) continue;
-      qwenMessageContentSeen.set(message.id, content);
-      try { window.chrome?.webview?.postMessage(JSON.stringify({ type: "aihub-message", providerHost: "chat.qwen.ai", url: location.origin + location.pathname, role: message.role, messageKey: message.id, text: content, capturedAt: new Date().toISOString(), extractionStrategy: "qwen-chat-detail-xhr", confidence: 0.95 })); captured++; } catch (_) {}
+    if (!messages) {
+      diagnostic("network-capture-rejected", "Unrecognized Qwen chat schema", {
+        endpointPath, confidence: 0.2, archived: 0, rejectReasons: { "schema-unrecognized": 1 }
+      });
+      return;
     }
-    diagnostic("network-capture", "Qwen chat history normalized from native JSON response", { endpointPath: safeEndpointPath(rawUrl), confidence: 0.95, candidateMessages: messages.length, capturedMessages: captured, rejectedMessages: rejected, archived: captured });
+    let captured = 0, rejected = 0;
+    const rejectReasons = {};
+    const contentSources = {};
+    const reject = code => { rejected++; rejectReasons[code] = (rejectReasons[code] || 0) + 1; };
+    for (const message of messages) {
+      if (!message || typeof message !== "object") { reject("message-not-object"); continue; }
+      if (typeof message.id !== "string" || !message.id) { reject("id-invalid"); continue; }
+      if (!["user", "assistant"].includes(message.role)) { reject("role-invalid"); continue; }
+      const content = qwenMessageText(message);
+      if (!content) { reject("content-empty"); continue; }
+      const source = typeof message.content === "string" && message.content.trim() ? "content" : "content_list";
+      contentSources[source] = (contentSources[source] || 0) + 1;
+      if (postQwenMessage(requestChatId, message.id, message.role, content, "qwen-chat-detail-xhr")) captured++;
+    }
+    diagnostic("network-capture", "Qwen chat history normalized from native JSON response", {
+      endpointPath, confidence: 0.95, candidateMessages: messages.length,
+      capturedMessages: captured, rejectedMessages: rejected, rejectReasons, contentSources, archived: captured
+    });
+  }
+  function finishQwenStream(responseId, chatId, reason = "finished") {
+    const state = qwenStreams.get(responseId);
+    if (!state) return false;
+    qwenStreams.delete(responseId);
+    const sent = state.text.trim()
+      ? postQwenMessage(chatId, responseId, state.role || "assistant", state.text.trim(), "qwen-chat-completions-sse")
+      : false;
+    diagnostic("network-stream-capture", "Qwen SSE response finalized", {
+      responseIdPresent: Boolean(responseId), confidence: sent ? 0.95 : 0.2,
+      capturedMessages: sent ? 1 : 0, textLength: state.text.length,
+      completion: reason, ignoredReasoningEvents: state.ignoredReasoningEvents || 0
+    });
+    return sent;
+  }
+  function captureQwenSseEvent(payload, chatId) {
+    const responseId = String(payload?.response_id || payload?.id || "");
+    const choice = payload?.choices?.[0];
+    const delta = choice?.delta;
+    if (!responseId || !delta || typeof delta !== "object") return "";
+    const state = qwenStreams.get(responseId) || { text: "", role: "assistant", ignoredReasoningEvents: 0 };
+    if (delta.role === "assistant" || delta.role === "user") state.role = delta.role;
+    const phase = String(delta.phase || "");
+    const chunk = delta.content;
+    if (/^(think|thinking|reasoning)$/i.test(phase)) {
+      state.ignoredReasoningEvents++;
+    } else if (typeof chunk === "string" && chunk) {
+      if (chunk.startsWith(state.text)) state.text = chunk;
+      else if (!state.text.startsWith(chunk)) state.text += chunk;
+    }
+    qwenStreams.set(responseId, state);
+    if (delta.status === "finished" || choice.finish_reason) finishQwenStream(responseId, chatId, delta.status || choice.finish_reason || "finished");
+    return responseId;
   }
 
   function reportNetworkShape(transport, rawUrl, contentType, payload) {
@@ -85,16 +161,17 @@
     });
   }
 
-  function observeFetchResponse(response, requestUrl) {
+  function observeFetchResponse(response, requestUrl, requestChatId) {
     if (!isQwenPage() || !response) return;
     const endpointPath = safeEndpointPath(response.url || requestUrl);
     if (!endpointPath) return;
     const contentType = response.headers?.get("content-type") || "";
     if (/application\/(?:[^;]+\+)?json/i.test(contentType)) {
       try {
-        response.clone().json().then(payload =>
-          reportNetworkShape("fetch", response.url || requestUrl, contentType, payload)
-        ).catch(() => {});
+        response.clone().json().then(payload => {
+          reportNetworkShape("fetch", response.url || requestUrl, contentType, payload);
+          if (/^\/api\/v2\/chats\//i.test(endpointPath)) captureQwenChatPayload(response.url || requestUrl, payload, requestChatId);
+        }).catch(() => {});
       } catch (_) {}
       return;
     }
@@ -105,22 +182,37 @@
         let buffer = "";
         let consumed = 0;
         let eventCount = 0;
+        let lastResponseId = "";
+        const maxBytes = 8 * 1024 * 1024;
+        const processData = data => {
+          if (!data || data === "[DONE]") {
+            if (data === "[DONE]" && lastResponseId) finishQwenStream(lastResponseId, requestChatId, "done-marker");
+            return;
+          }
+          try {
+            const payload = JSON.parse(data);
+            reportNetworkShape("sse", response.url || requestUrl, contentType, payload);
+            lastResponseId = captureQwenSseEvent(payload, requestChatId) || lastResponseId;
+            eventCount++;
+          } catch (_) {}
+        };
         const readNext = () => reader.read().then(({ done, value }) => {
-          if (done || eventCount >= 24 || consumed >= 262144) return;
-          consumed += value?.byteLength || 0;
+          const chunkBytes = value?.byteLength || 0;
+          if (consumed + chunkBytes > maxBytes) {
+            diagnostic("network-sse-limit", "Qwen SSE observer stopped at the 8 MiB safety limit", {
+              endpointPath, bytesObserved: consumed, eventsObserved: eventCount, responseIdPresent: Boolean(lastResponseId)
+            });
+            return;
+          }
+          consumed += chunkBytes;
           buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
           const lines = buffer.split(/\r?\n/);
           buffer = lines.pop() || "";
-          for (const line of lines) {
-            if (!line.startsWith("data:")) continue;
-            const data = line.slice(5).trim();
-            if (!data || data === "[DONE]") continue;
-            try {
-              const payload = JSON.parse(data);
-              reportNetworkShape("sse", response.url || requestUrl, contentType, payload);
-              eventCount++;
-              if (eventCount >= 24) break;
-            } catch (_) {}
+          for (const line of lines) if (line.startsWith("data:")) processData(line.slice(5).trim());
+          if (done) {
+            if (buffer.startsWith("data:")) processData(buffer.slice(5).trim());
+            if (lastResponseId) finishQwenStream(lastResponseId, requestChatId, "stream-end");
+            return;
           }
           return readNext();
         }).catch(() => {});
@@ -137,8 +229,9 @@
     if (typeof originalFetch === "function") {
       window.fetch = function(...args) {
         const requestUrl = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
+        const requestChatId = qwenCurrentChatId();
         return originalFetch.apply(this, args).then(response => {
-          try { observeFetchResponse(response, requestUrl); } catch (_) {}
+          try { observeFetchResponse(response, requestUrl, requestChatId); } catch (_) {}
           return response;
         });
       };
@@ -149,7 +242,10 @@
       const originalOpen = xhrPrototype.open;
       const originalSend = xhrPrototype.send;
       xhrPrototype.open = function(method, url, ...rest) {
-        try { this.__aihubQwenProbeUrl = String(url); } catch (_) {}
+        try {
+          this.__aihubQwenProbeUrl = String(url);
+          this.__aihubQwenRequestChatId = qwenCurrentChatId();
+        } catch (_) {}
         return originalOpen.call(this, method, url, ...rest);
       };
       xhrPrototype.send = function(...args) {
@@ -166,7 +262,7 @@
             }
             if (payload !== null && payload !== undefined) {
               reportNetworkShape("xhr", url, contentType, payload);
-              if (this.status >= 200 && this.status < 300) captureQwenChatPayload(url, payload);
+              if (this.status >= 200 && this.status < 300) captureQwenChatPayload(url, payload, this.__aihubQwenRequestChatId || "");
             }
           } catch (_) {}
         }, { once: true });
