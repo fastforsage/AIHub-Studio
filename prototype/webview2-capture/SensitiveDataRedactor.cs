@@ -5,11 +5,11 @@ namespace AIHub.WebView2Capture;
 public static class SensitiveDataRedactor
 {
     private static readonly Regex JwtPattern = new(
-        @"eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{4,}",
+        @"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex SecretParamPattern = new(
-        @"(?i)(?<=[?&#])(access_token|id_token|refresh_token|code|state|nonce|code_challenge|signature|sig|token|api_key)=([^&\\s""'#]+)",
+        @"(?i)(?<=[?&#])(access_token|id_token|refresh_token|code|state|nonce|code_challenge|signature|sig|token|api_key)=([^&\s""'#]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex UuidPattern = new(
