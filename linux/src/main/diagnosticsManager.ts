@@ -188,6 +188,7 @@ export class DiagnosticsManager {
 
   async exportLogs(destination: string): Promise<string> {
     this.ensureInitialized();
+    await this.flush();
     const files = await this.listLogFiles();
     const parts: string[] = [];
     for (const file of files) {
