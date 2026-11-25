@@ -53,7 +53,7 @@ describe("BrowserSettingsStore", () => {
     const path = await pathForSettings();
     const store = new BrowserSettingsStore(path);
     await store.initialize();
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
   it("does not overwrite a malformed settings file", async () => {
