@@ -40,9 +40,9 @@ function validateSettings(value: unknown): LoggingSettings {
 
 function redact(input: string): string {
   return input
-    .replace(/(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)(\\s*[:=]\\s*)[^\\s,;]+/gi, "$1$2[REDACTED]")
-    .replace(/Bearer\\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [REDACTED]")
-    .replace(/([?&](?:token|key|api_key|access_token)=)[^&\\s]+/gi, "$1[REDACTED]");
+    .replace(/(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)(\s*[:=]\s*)[^\s,;]+/gi, "$1$2[REDACTED]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [REDACTED]")
+    .replace(/([?&](?:token|key|api_key|access_token)=)[^&\s]+/gi, "$1[REDACTED]");
 }
 
 function formatArgument(value: unknown): string {
@@ -107,12 +107,12 @@ export class DiagnosticsManager {
     const safeScope = redact(scope).slice(0, 80);
     const safeMessage = redact(metadata === undefined
       ? message
-      : message + " " + formatArgument(metadata)).replace(/[\\r\\n]+/g, " ");
+      : message + " " + formatArgument(metadata)).replace(/[\r\n]+/g, " ");
     const line = JSON.stringify({ timestamp, level, scope: safeScope, message: safeMessage });
     this.queue = this.queue.then(async () => {
       if (!this.settings.fileEnabled) return;
-      await this.rotateIfNeeded(Buffer.byteLength(line + "\\n", "utf8"));
-      await appendFile(join(this.directory, LOG_FILE), line + "\\n", { encoding: "utf8", mode: 0o600 });
+      await this.rotateIfNeeded(Buffer.byteLength(line + "\n", "utf8"));
+      await appendFile(join(this.directory, LOG_FILE), line + "\n", { encoding: "utf8", mode: 0o600 });
       await chmod(join(this.directory, LOG_FILE), 0o600);
       await this.pruneExpired();
     }).catch(() => undefined);
@@ -145,7 +145,7 @@ export class DiagnosticsManager {
       currentFile: join(this.directory, LOG_FILE),
       settings: this.getSettings(),
       currentFileBytes,
-      rotatedFiles: files.filter((name) => new RegExp("^" + LOG_FILE.replace(/[.*+?^\\x24{}()|[\\]\\\\]/g, "\\\\$&") + "\\\\.\\\\d+$").test(name)).length
+      rotatedFiles: files.filter((name) => name.startsWith(LOG_FILE + ".") && Number.isInteger(Number(name.slice(LOG_FILE.length + 1))) && name.slice(LOG_FILE.length + 1).length > 0).length
     };
   }
 
@@ -161,7 +161,7 @@ export class DiagnosticsManager {
       } catch {
         continue;
       }
-      for (const line of content.split("\\n")) {
+      for (const line of content.split("\n")) {
         if (!line.trim()) continue;
         try {
           const parsed = JSON.parse(line) as Partial<LogEntry>;
@@ -193,12 +193,12 @@ export class DiagnosticsManager {
     const parts: string[] = [];
     for (const file of files) {
       try {
-        parts.push("===== " + file + " =====\\n" + await readFile(file, "utf8"));
+        parts.push("===== " + file + " =====\n" + await readFile(file, "utf8"));
       } catch {
         // A rotated file may disappear while an export is being prepared.
       }
     }
-    await writeFile(destination, parts.join("\\n"), { encoding: "utf8", mode: 0o600 });
+    await writeFile(destination, parts.join("\n"), { encoding: "utf8", mode: 0o600 });
     await chmod(destination, 0o600);
     return destination;
   }
@@ -220,8 +220,8 @@ export class DiagnosticsManager {
       "",
       "Recent log entries (up to 300):",
       ...recent.map((entry) => JSON.stringify(entry))
-    ].join("\\n");
-    await writeFile(destination, report + "\\n", { encoding: "utf8", mode: 0o600 });
+    ].join("\n");
+    await writeFile(destination, report + "\n", { encoding: "utf8", mode: 0o600 });
     await chmod(destination, 0o600);
     return destination;
   }
@@ -238,7 +238,7 @@ export class DiagnosticsManager {
     const temporaryPath = join(dirname(this.settingsPath), ".logging-settings-" + randomUUID() + ".tmp");
     const handle = await open(temporaryPath, "wx", 0o600);
     try {
-      await handle.writeFile(JSON.stringify(settings, null, 2) + "\\n", "utf8");
+      await handle.writeFile(JSON.stringify(settings, null, 2) + "\n", "utf8");
       await handle.sync();
     } finally {
       await handle.close();
@@ -283,7 +283,7 @@ export class DiagnosticsManager {
   private async listLogFiles(): Promise<string[]> {
     const names = await readdir(this.directory).catch(() => []);
     const rotated = names
-      .filter((name) => /^aihub-studio\\.log\\.\\d+$/.test(name))
+      .filter((name) => /^aihub-studio\.log\.\d+$/.test(name))
       .sort((left, right) => Number(right.split(".").at(-1)) - Number(left.split(".").at(-1)))
       .map((name) => join(this.directory, name));
     const current = join(this.directory, LOG_FILE);
