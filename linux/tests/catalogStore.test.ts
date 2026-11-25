@@ -125,7 +125,7 @@ describe("CatalogStore", () => {
     expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.enabled).toBe(true);
     expect(migrated.providers.filter((provider) => provider.name.toLocaleLowerCase() === "chatgpt")).toHaveLength(1);
     expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.favorite).toBe(true);
-    expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.profileId).toBe("legacy-chatgpt");
+    expect(migrated.providers.find((provider) => provider.id === "chatgpt")).toMatchObject({ type: "website", profileId: "legacy-chatgpt" });
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     expect(migrated.providers.filter((provider) => provider.enabled).length).toBe(14);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
