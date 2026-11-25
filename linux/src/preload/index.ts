@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { BrowserApi } from "../shared/browserApi";
 import type { CatalogApi } from "../shared/catalogApi";
+import type { LocalAiApi } from "../shared/localAiApi";
 
 const catalog: CatalogApi = {
   get: () => ipcRenderer.invoke("catalog:get"),
@@ -33,9 +34,16 @@ const browser: BrowserApi = {
   }
 };
 
+const localAi: LocalAiApi = {
+  discoverModels: (providerId) => ipcRenderer.invoke("local-ai:discover-models", { providerId }),
+  selectModel: (providerId, modelId) => ipcRenderer.invoke("local-ai:select-model", { providerId, modelId }),
+  completeChat: (providerId, messages) => ipcRenderer.invoke("local-ai:complete-chat", { providerId, messages })
+};
+
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
   version: "0.1.0",
   catalog: Object.freeze(catalog),
-  browser: Object.freeze(browser)
+  browser: Object.freeze(browser),
+  localAi: Object.freeze(localAi)
 }));
