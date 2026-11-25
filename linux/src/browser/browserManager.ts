@@ -133,7 +133,23 @@ export class BrowserManager {
   }
 
   closeAll(): void {
-    for (const id of [...this.tabs.keys()]) this.close(id);
+    const window = this.getWindow();
+    for (const tab of this.tabs.values()) {
+      if (window && !window.isDestroyed()) {
+        try {
+          window.contentView.removeChildView(tab.view);
+        } catch {
+          // The parent view may already have been torn down during app shutdown.
+        }
+      }
+      if (!tab.view.webContents.isDestroyed()) {
+        tab.view.webContents.close();
+      }
+    }
+    this.tabs.clear();
+    this.activeTabId = null;
+    this.viewportBounds = HIDDEN_BOUNDS;
+    this.publish();
   }
 
   async navigate(tabId: string, input: string): Promise<BrowserManagerState> {
@@ -275,10 +291,11 @@ export class BrowserManager {
 
   private updateViews(): void {
     for (const tab of this.tabs.values()) {
-      const active = tab.id === this.activeTabId;
+      const active = tab.id === this.activeTabId &&
+        this.viewportBounds.width > 0 &&
+        this.viewportBounds.height > 0;
       tab.view.setVisible(active);
-      if (active) tab.view.setBounds(this.viewportBounds);
-      else tab.view.setBounds(HIDDEN_BOUNDS);
+      tab.view.setBounds(active ? this.viewportBounds : HIDDEN_BOUNDS);
     }
   }
 
