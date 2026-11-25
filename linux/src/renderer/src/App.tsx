@@ -250,7 +250,7 @@ function App() {
         ? "local:" + localChatProviderId
         : null;
   const availabilityByProviderId = useMemo(
-    () => new Map((availabilityReport?.results ?? []).map((result) => [result.providerId, result])),
+    () => new Map((availabilityReport?.results ?? []).map((result) => [result.providerId, result] as const)),
     [availabilityReport]
   );
   const availabilitySummary = availabilityReport ? {
