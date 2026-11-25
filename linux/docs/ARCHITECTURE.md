@@ -15,7 +15,9 @@
 Sidebar, категории, каталог, формы Add / Change / Del, вкладки, рабочая область и настройки.
 
 ### Browser Manager
-Chromium-вкладки, изолированные профили, навигация, cookies/site storage, прокси и восстановление сессий.
+Chromium-вкладки через WebContentsView, изолированные persistent session partitions, навигация и cookies/site storage. Каждый Cloud Site получает собственный профиль; вкладки одного provider используют один профиль.
+
+Глобальный proxy хранится отдельно в browser-settings.json и применяется ко всем существующим и новым профилям. Пустое значение включает системный proxy mode. Поддерживаются HTTP, HTTPS, SOCKS4 и SOCKS5 без встроенных credentials.
 
 ### Local AI Manager
 OpenAI-compatible HTTP client, проверка endpoint, обнаружение моделей, выбор модели и отправка запросов.
