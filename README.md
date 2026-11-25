@@ -28,7 +28,7 @@ The GitHub Release provides the Windows x64 installer package as a ZIP archive. 
 
 ## Windows 10/11 x64
 
-The Windows build uses the same UI and Electron/Chromium runtime as Linux. App configuration is stored under `%APPDATA%\\AIHubStudio`; browser data under `%LOCALAPPDATA%\\AIHubStudio\\Data`; logs under `%LOCALAPPDATA%\\AIHubStudio\\Logs`.
+The Windows build uses the same UI and Electron/Chromium runtime as Linux. App configuration is stored under `%APPDATA%\AIHubStudio`; browser data under `%LOCALAPPDATA%\AIHubStudio\Data`; logs under `%LOCALAPPDATA%\AIHubStudio\Logs`.
 
 GitHub Actions workflow **Build Windows MSI** runs unit tests, TypeScript checks, Electron build, Chromium smoke test, creates a Windows x64 unpacked application and packages it as an MSI with pinned WiX Toolset 5.0.2.
 
