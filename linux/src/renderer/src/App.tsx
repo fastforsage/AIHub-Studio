@@ -182,10 +182,6 @@ function App() {
     return enabledProviders.filter((provider) => provider.categoryIds.includes(activeCategory));
   }, [catalog, activeCategory]);
 
-  useEffect(() => {
-    setAddressValue(activeBrowserTab?.url ?? "");
-  }, [activeBrowserTab?.id, activeBrowserTab?.url]);
-
   const activeCategoryName = activeCategory === "all"
     ? "All AI"
     : activeCategory === "favorites"
