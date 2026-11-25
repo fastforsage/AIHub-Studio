@@ -215,7 +215,7 @@ export class BrowserManager {
     await this.configureSession(partition, browserSession);
     const response = await browserSession.fetch(
       input.toString(),
-      init as Electron.GlobalRequestInit | undefined
+      init
     );
     return response as unknown as Response;
   }

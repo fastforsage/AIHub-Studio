@@ -123,7 +123,7 @@ async function bootstrap(): Promise<void> {
   registerBrowserIpc(browserManager, catalogStore, browserSettings, isTrustedRenderer);
   registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
   registerDiagnosticsIpc(diagnosticsManager, isTrustedRenderer);
-  registerServiceAvailabilityIpc(new ServiceAvailabilityManager(() => catalogStore.get().providers), isTrustedRenderer);
+  registerServiceAvailabilityIpc(new ServiceAvailabilityManager(() => catalogStore.get().providers, (input, init) => browserManager!.fetchForAvailability(input, init)), isTrustedRenderer);
   createMainWindow();
 }
 
