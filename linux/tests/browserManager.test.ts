@@ -79,7 +79,13 @@ const mocks = vi.hoisted(() => {
           setPermissionRequestHandler: vi.fn(),
           setPermissionCheckHandler: vi.fn(),
           setProxy: vi.fn(async () => undefined),
-          closeAllConnections: vi.fn(async () => undefined)
+          closeAllConnections: vi.fn(async () => undefined),
+          fetch: vi.fn(async (url: string, _init?: RequestInit) => ({
+            ok: true,
+            status: 200,
+            url,
+            body: { cancel: vi.fn(async () => undefined) }
+          }))
         });
       }
       return state.sessions.get(partition);
@@ -150,6 +156,19 @@ describe("BrowserManager", () => {
     expect(browserSession.setProxy).toHaveBeenCalledWith({ mode: "system" });
     expect(browserSession.setPermissionRequestHandler).toHaveBeenCalledOnce();
     expect(browserSession.setPermissionCheckHandler).toHaveBeenCalledOnce();
+  });
+
+  it("uses the configured Chromium proxy session for service availability fetches", async () => {
+    await manager.setProxyServer("127.0.0.1:8080");
+    const response = await manager.fetchForAvailability("https://example.com/health");
+    const browserSession = [...mocks.state.sessions.values()][0];
+
+    expect(response.status).toBe(200);
+    expect(browserSession.setProxy).toHaveBeenCalledWith({
+      mode: "fixed_servers",
+      proxyRules: "http://127.0.0.1:8080"
+    });
+    expect(browserSession.fetch).toHaveBeenCalledWith("https://example.com/health", undefined);
   });
 
   it("applies proxy changes to existing sessions and closes pooled connections", async () => {
