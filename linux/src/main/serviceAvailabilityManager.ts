@@ -19,9 +19,11 @@ const RULES: Record<string, { allowed?: string[]; note?: (cc: string | null) => 
 function regionResult(provider: Provider, country: string | null): { status: RegionStatus; note: string | null } {
   if (provider.type !== "website" || !RULES[provider.id]) return { status: "not-applicable", note: null };
   const rule = RULES[provider.id];
-  if (rule.allowed) {
-    if (!country) return { status: "unknown", note: "Не удалось определить страну по публичному IP." };
-    if (!rule.allowed.includes(country)) return { status: "restricted", note: rule.restricted ?? "Региональное ограничение." };
+  if (!country) {
+    return { status: "unknown", note: "Не удалось определить страну по публичному IP; региональные условия сервиса не проверены." };
+  }
+  if (rule.allowed && !rule.allowed.includes(country)) {
+    return { status: "restricted", note: rule.restricted ?? "Региональное ограничение." };
   }
   return { status: "allowed", note: rule.note?.(country) ?? null };
 }
