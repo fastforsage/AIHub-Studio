@@ -93,7 +93,7 @@ describe("CatalogStore", () => {
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
-    expect(persisted.providers).toHaveLength(34);
+    expect(persisted.providers).toHaveLength(32);
   });
 
   it("merges the installed legacy catalog with the full catalog and preserves existing connections", async () => {
@@ -128,7 +128,7 @@ describe("CatalogStore", () => {
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     expect(migrated.providers.filter((provider) => provider.enabled).length).toBe(16);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
-    expect(persisted.providers).toHaveLength(32);
+    expect(persisted.providers).toHaveLength(34);
   });
 
   it("writes config with owner-only permissions", async () => {
