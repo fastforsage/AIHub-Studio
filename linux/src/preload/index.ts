@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { BrowserApi } from "../shared/browserApi";
 import type { CatalogApi } from "../shared/catalogApi";
 import type { LocalAiApi } from "../shared/localAiApi";
+import type { DiagnosticsApi } from "../shared/diagnosticsApi";
 
 const catalog: CatalogApi = {
   get: () => ipcRenderer.invoke("catalog:get"),
@@ -41,10 +42,22 @@ const localAi: LocalAiApi = {
   completeChat: (providerId, messages) => ipcRenderer.invoke("local-ai:complete-chat", { providerId, messages })
 };
 
+const diagnostics: DiagnosticsApi = {
+  getStatus: () => ipcRenderer.invoke("diagnostics:status"),
+  getSettings: () => ipcRenderer.invoke("diagnostics:settings:get"),
+  updateSettings: (settings) => ipcRenderer.invoke("diagnostics:settings:update", settings),
+  getRecentLogs: (limit, level) => ipcRenderer.invoke("diagnostics:logs:get", limit, level),
+  clearLogs: () => ipcRenderer.invoke("diagnostics:logs:clear"),
+  exportLogs: () => ipcRenderer.invoke("diagnostics:logs:export"),
+  collectReport: () => ipcRenderer.invoke("diagnostics:report:collect"),
+  openLogDirectory: () => ipcRenderer.invoke("diagnostics:folder:open")
+};
+
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
   version: "0.1.5",
   catalog: Object.freeze(catalog),
   browser: Object.freeze(browser),
-  localAi: Object.freeze(localAi)
+  localAi: Object.freeze(localAi),
+  diagnostics: Object.freeze(diagnostics)
 }));
