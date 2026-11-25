@@ -204,6 +204,52 @@ describe("BrowserManager", () => {
     expect(mocks.state.views).toHaveLength(1);
   });
 
+  it("reuses the existing tab and navigates it when a provider URL is edited", async () => {
+    const first = await manager.openWebsite(website("site-a"));
+    const firstTabId = first.tabs[0].id;
+    const view = mocks.state.views[0];
+    const updatedProvider = { ...website("site-a"), url: "https://updated.example.com/path" };
+
+    const updated = await manager.openWebsite(updatedProvider);
+
+    expect(updated.tabs).toHaveLength(1);
+    expect(updated.activeTabId).toBe(firstTabId);
+    expect(view.webContents.loadURL).toHaveBeenLastCalledWith("https://updated.example.com/path");
+    expect(mocks.state.views).toHaveLength(1);
+  });
+
+  it("prunes a stale WebContentsView whose webContents has disappeared", async () => {
+    await manager.openWebsite(website("site-a"));
+    const view = mocks.state.views[0];
+    view.webContents = undefined;
+
+    expect(() => manager.getState()).not.toThrow();
+    expect(manager.getState()).toEqual({ tabs: [], activeTabId: null });
+    expect(parent.removed).toContain(view);
+  });
+
+  it("recreates a provider tab if its previous Chromium contents were destroyed", async () => {
+    await manager.openWebsite(website("site-a"));
+    const staleView = mocks.state.views[0];
+    staleView.webContents = undefined;
+
+    const next = await manager.openWebsite(website("site-a"));
+
+    expect(next.tabs).toHaveLength(1);
+    expect(next.tabs[0].url).toBe("https://example.com/site-a");
+    expect(mocks.state.views).toHaveLength(2);
+    expect(parent.removed).toContain(staleView);
+  });
+
+  it("rejects activation of a stale tab with a recoverable error instead of crashing", async () => {
+    await manager.openWebsite(website("site-a"));
+    const tabId = manager.getState().tabs[0].id;
+    mocks.state.views[0].webContents = undefined;
+
+    expect(() => manager.activate(tabId)).toThrow("Browser tab is no longer available");
+    expect(manager.getState()).toEqual({ tabs: [], activeTabId: null });
+  });
+
   it("keeps a tab hidden until a non-zero viewport is supplied", async () => {
     await manager.openWebsite(website("site-a"));
     const view = mocks.state.views[0];
