@@ -8,7 +8,15 @@ build_dir="$(mktemp -d /tmp/aihub-studio-pkg-XXXXXX)"
 trap 'rm -rf "$build_dir"' EXIT
 
 cp /packagesrc/PKGBUILD "$build_dir/PKGBUILD"
-cp /packagesrc/aihub-studio-0.1.0-linux-x86_64.tar.gz "$build_dir/"
+export CARCH="$(uname -m)"
+source "$build_dir/PKGBUILD"
+source_archive="aihub-studio-${pkgver}-linux-${CARCH}.tar.gz"
+if [[ ! -f "/packagesrc/${source_archive}" ]]; then
+  printf 'Missing versioned source archive: %s\n' "$source_archive" >&2
+  ls -la /packagesrc >&2
+  exit 1
+fi
+cp "/packagesrc/${source_archive}" "$build_dir/"
 
 if ! id builder >/dev/null 2>&1; then
   useradd --create-home builder
@@ -16,7 +24,8 @@ fi
 chown -R builder:builder "$build_dir"
 
 printf '%s\n' "Building native pacman package with makepkg..."
-su -s /bin/bash builder -c "cd '$build_dir' && makepkg --noconfirm --nodeps"
+pkgrel_env="${AIHUB_PKGREL:-1}"
+su -s /bin/bash builder -c "cd '$build_dir' && AIHUB_PKGREL='$pkgrel_env' makepkg --noconfirm --nodeps"
 
 shopt -s nullglob
 packages=("$build_dir"/*.pkg.tar.zst)
@@ -27,9 +36,14 @@ if (( ${#packages[@]} != 1 )); then
 fi
 
 package="${packages[0]}"
-package_name="$(pacman -Qp "$package" | awk '{print $1}')"
-export CARCH="$(uname -m)"
-source "$build_dir/PKGBUILD"
+package_metadata="$(pacman -Qp "$package")"
+package_name="$(awk '{print $1}' <<< "$package_metadata")"
+package_version="$(awk '{print $2}' <<< "$package_metadata")"
+expected_package_version="${pkgver}-${pkgrel}"
+if [[ "$package_version" != "$expected_package_version" ]]; then
+  printf 'Package version mismatch: expected %s, got %s\n' "$expected_package_version" "$package_version" >&2
+  exit 1
+fi
 pacman -S --noconfirm --needed "${depends[@]}"
 printf '%s\n' "Installing ${package_name} through pacman..."
 pacman -U --noconfirm "$package"
