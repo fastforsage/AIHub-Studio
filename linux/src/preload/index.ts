@@ -61,7 +61,7 @@ const availability: ServiceAvailabilityApi = {
 
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
-  version: "0.1.5",
+  version: "0.1.7",
   catalog: Object.freeze(catalog),
   browser: Object.freeze(browser),
   localAi: Object.freeze(localAi),
