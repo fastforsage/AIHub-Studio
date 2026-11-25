@@ -119,16 +119,16 @@ export class DiagnosticsManager {
   }
 
   installConsoleCapture(): void {
-    const methods: Array<[keyof Console, LogLevel]> = [
-      ["debug", "debug"], ["log", "info"], ["info", "info"], ["warn", "warn"], ["error", "error"]
-    ];
-    for (const [method, level] of methods) {
-      const original = console[method].bind(console) as (...args: unknown[]) => void;
-      console[method] = ((...args: unknown[]) => {
+    const capture = (level: LogLevel, original: (...args: any[]) => void) =>
+      (...args: any[]) => {
         original(...args);
         this.log(level, "console", args.map(formatArgument).join(" "));
-      }) as Console[typeof method];
-    }
+      };
+    console.debug = capture("debug", console.debug.bind(console)) as typeof console.debug;
+    console.log = capture("info", console.log.bind(console)) as typeof console.log;
+    console.info = capture("info", console.info.bind(console)) as typeof console.info;
+    console.warn = capture("warn", console.warn.bind(console)) as typeof console.warn;
+    console.error = capture("error", console.error.bind(console)) as typeof console.error;
   }
 
   async getStatus(): Promise<DiagnosticsStatus> {
@@ -281,7 +281,7 @@ export class DiagnosticsManager {
   }
 
   private async listLogFiles(): Promise<string[]> {
-    const names = await readdir(this.directory).catch(() => []);
+    const names: string[] = await readdir(this.directory).catch((): string[] => []);
     const rotated = names
       .filter((name) => /^aihub-studio\.log\.\d+$/.test(name))
       .sort((left, right) => Number(right.split(".").at(-1)) - Number(left.split(".").at(-1)))
