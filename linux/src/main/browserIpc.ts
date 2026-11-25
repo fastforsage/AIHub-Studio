@@ -1,6 +1,7 @@
 import { ipcMain, IpcMainInvokeEvent } from "electron";
 import { BrowserManager } from "../browser/browserManager";
 import type { BrowserBounds } from "../browser/browserTypes";
+import { BrowserSettingsStore } from "../browser/browserSettingsStore";
 import { CatalogStore } from "../catalog/catalogStore";
 import type { WebsiteProvider } from "../catalog/catalogModel";
 
@@ -23,6 +24,12 @@ function stringField(value: Record<string, unknown>, key: string): string {
   return result;
 }
 
+function stringFieldAllowEmpty(value: Record<string, unknown>, key: string): string {
+  const result = value[key];
+  if (typeof result !== "string") throw new Error("Invalid " + key);
+  return result;
+}
+
 function boundsField(value: Record<string, unknown>): BrowserBounds {
   const fields = ["x", "y", "width", "height"] as const;
   const bounds = {} as BrowserBounds;
@@ -39,6 +46,7 @@ function boundsField(value: Record<string, unknown>): BrowserBounds {
 export function registerBrowserIpc(
   manager: BrowserManager,
   catalog: CatalogStore,
+  settings: BrowserSettingsStore,
   isTrusted: TrustedSender
 ): void {
   const guard = (event: IpcMainInvokeEvent) => assertTrusted(event, isTrusted);
@@ -93,5 +101,26 @@ export function registerBrowserIpc(
   ipcMain.handle("browser:set-viewport", (event, payload: unknown) => {
     guard(event);
     return manager.setViewportBounds(boundsField(record(payload)));
+  });
+
+  ipcMain.handle("browser:proxy:get", (event) => {
+    guard(event);
+    return settings.get().proxyServer;
+  });
+
+  ipcMain.handle("browser:proxy:set", async (event, payload: unknown) => {
+    guard(event);
+    const input = record(payload);
+    const proxyServer = stringFieldAllowEmpty(input, "proxyServer");
+    const previous = settings.get().proxyServer;
+
+    await manager.setProxyServer(proxyServer);
+    try {
+      const next = await settings.setProxyServer(proxyServer);
+      return next.proxyServer;
+    } catch (error) {
+      await manager.setProxyServer(previous ?? "");
+      throw error;
+    }
   });
 }
