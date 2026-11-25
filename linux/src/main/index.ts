@@ -2,6 +2,7 @@ import { app, BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserManager } from "../browser/browserManager";
+import { BrowserSettingsStore } from "../browser/browserSettingsStore";
 import { CatalogStore } from "../catalog/catalogStore";
 import { resolveAppPaths } from "../shared/appPaths";
 import { registerBrowserIpc } from "./browserIpc";
@@ -68,7 +69,9 @@ async function bootstrap(): Promise<void> {
   await app.whenReady();
 
   const catalogStore = new CatalogStore(join(paths.config, "catalog.json"));
+  const browserSettings = new BrowserSettingsStore(join(paths.config, "browser-settings.json"));
   await catalogStore.initialize();
+  const initialBrowserSettings = await browserSettings.initialize();
 
   browserManager = new BrowserManager(
     () => mainWindow,
@@ -78,8 +81,10 @@ async function bootstrap(): Promise<void> {
     }
   );
 
+  await browserManager.setProxyServer(initialBrowserSettings.proxyServer ?? "");
+
   registerCatalogIpc(catalogStore, isTrustedRenderer);
-  registerBrowserIpc(browserManager, catalogStore, isTrustedRenderer);
+  registerBrowserIpc(browserManager, catalogStore, browserSettings, isTrustedRenderer);
   createMainWindow();
 }
 
