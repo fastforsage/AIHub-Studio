@@ -209,6 +209,17 @@ export class BrowserManager {
     return this.getState();
   }
 
+  async fetchForAvailability(input: string | URL, init?: RequestInit): Promise<Response> {
+    const partition = profilePartition("shared-workspace");
+    const browserSession = session.fromPartition(partition);
+    await this.configureSession(partition, browserSession);
+    const response = await browserSession.fetch(
+      input.toString(),
+      init as Electron.GlobalRequestInit | undefined
+    );
+    return response as unknown as Response;
+  }
+
   getProxyServer(): string | null {
     return this.proxyServer;
   }
