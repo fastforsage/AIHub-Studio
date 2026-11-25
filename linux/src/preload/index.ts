@@ -43,6 +43,7 @@ const localAi: LocalAiApi = {
 };
 
 const diagnostics: DiagnosticsApi = {
+  writeLog: (level, scope, message) => ipcRenderer.invoke("diagnostics:log:write", { level, scope, message }),
   getStatus: () => ipcRenderer.invoke("diagnostics:status"),
   getSettings: () => ipcRenderer.invoke("diagnostics:settings:get"),
   updateSettings: (settings) => ipcRenderer.invoke("diagnostics:settings:update", settings),
