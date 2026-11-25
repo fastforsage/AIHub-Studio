@@ -8,7 +8,7 @@ Target: Arch Linux / CachyOS x86_64, Wayland and X11.
 
 - Electron desktop runtime with isolated preload bridge;
 - XDG-compliant application paths;
-- categorized AI catalog with Add / Change / Del context menus;
+- AI catalog with categories and Add / Change / Del context menus;
 - Cloud Site entries and OpenAI-compatible Local AI entries;
 - persistent catalog configuration;
 - embedded Chromium tabs using WebContentsView;
@@ -21,8 +21,6 @@ Target: Arch Linux / CachyOS x86_64, Wayland and X11.
 
 ## Local AI defaults
 
-The Add Local AI form starts with:
-
 - Name: Local LLM
 - API type: openai (OpenAI-compatible)
 - Host: localhost
@@ -30,7 +28,7 @@ The Add Local AI form starts with:
 - Category: Local AI
 - Models: automatic discovery
 
-The app requests model discovery only when the user opens the connection or presses Refresh models. It does not automatically start a local inference server.
+The app requests model discovery when the user opens the connection or presses Refresh models. It does not start or install a local inference server.
 
 ## Development
 
@@ -43,12 +41,14 @@ Use Node.js 24 LTS and npm.
     npm run build
     npm run smoke
 
-## Build native Arch package
+## Build the native Arch package
 
-    npm run package:pacman
+    npm run package:dir
 
-The package is written to release/. Install it on Arch/CachyOS with:
+This stages the application in release/linux-unpacked. The native package is then built from linux/packaging/arch/PKGBUILD with makepkg inside an Arch Linux container, as demonstrated by the CI workflow.
 
-    sudo pacman -U ./<package>.pacman
+The generated package uses the .pkg.tar.zst format and can be installed with:
+
+    sudo pacman -U ./<package>.pkg.tar.zst
 
 See docs/ for architecture, security, Local AI API behavior, Browser Manager and installation.
