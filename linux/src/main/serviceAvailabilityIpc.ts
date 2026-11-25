@@ -1,5 +1,5 @@
 import { ipcMain, IpcMainInvokeEvent } from "electron";
-import { ServiceAvailabilityManager } from "../availability/serviceAvailabilityManager";
+import { ServiceAvailabilityManager } from "./serviceAvailabilityManager";
 
 type TrustedSender = (event: IpcMainInvokeEvent) => boolean;
 
