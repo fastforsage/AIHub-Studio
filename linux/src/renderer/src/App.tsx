@@ -30,13 +30,17 @@ type ModalState =
 const EMPTY_CATALOG: CatalogState = {
   version: 1,
   categories: [
-    { id: "ai", name: "AI" },
-    { id: "local-ai", name: "Local AI" },
-    { id: "dev", name: "Dev" },
-    { id: "community", name: "Community" },
-    { id: "design", name: "Design" },
-    { id: "email", name: "Email" },
-    { id: "video", name: "Video" }
+    { id: "chatbot", name: "chatbot" },
+    { id: "music-generator", name: "music generator" },
+    { id: "voice-generator", name: "voice generator" },
+    { id: "video-generator", name: "video generator" },
+    { id: "writing-helper", name: "writing helper" },
+    { id: "research-assistant", name: "research assistant" },
+    { id: "translator", name: "translator" },
+    { id: "presentation-maker", name: "presentation maker" },
+    { id: "image-generator", name: "image generator" },
+    { id: "many-in-one", name: "many in one" },
+    { id: "local-ai", name: "Local AI" }
   ],
   providers: []
 };
