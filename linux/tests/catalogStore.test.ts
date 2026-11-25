@@ -90,7 +90,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.providers).toHaveLength(34);
+    expect(migrated.providers).toHaveLength(32);
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
@@ -119,7 +119,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.providers).toHaveLength(32);
+    expect(migrated.providers).toHaveLength(34);
     expect(migrated.providers.find((provider) => provider.id === "duckai")?.categoryIds).toContain("chatbot");
     expect(migrated.providers.find((provider) => provider.id === "gemma-local")?.categoryIds).toContain("local-ai");
     expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.enabled).toBe(true);
