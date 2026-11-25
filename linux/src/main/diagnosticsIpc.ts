@@ -19,6 +19,19 @@ export function registerDiagnosticsIpc(
   manager: DiagnosticsManager,
   isTrusted: TrustedSender
 ): void {
+  ipcMain.handle("diagnostics:log:write", (event, value: unknown) => {
+    guard(event, isTrusted);
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new Error("Invalid diagnostics log payload");
+    }
+    const input = value as Record<string, unknown>;
+    const level = validateLevel(input.level);
+    if (level === "all" || typeof input.scope !== "string" || typeof input.message !== "string" ||
+        input.scope.length > 80 || input.message.length > 4000) {
+      throw new Error("Invalid diagnostics log entry");
+    }
+    manager.log(level, input.scope, input.message);
+  });
   ipcMain.handle("diagnostics:status", (event) => {
     guard(event, isTrusted);
     return manager.getStatus();
