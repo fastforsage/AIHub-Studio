@@ -465,7 +465,7 @@ function App() {
               key={category.id}
               className={activeCategory === category.id ? "category-item category-item-active" : "category-item"}
               type="button"
-              onClick={() => setActiveCategory(category.id)}
+              onClick={() => { setWorkspaceMode("catalog"); setActiveCategory(category.id); }}
               onContextMenu={(event) => showContextMenu(event, { kind: "category", id: category.id })}
             >
               <span className="folder-icon">▰</span>
@@ -696,7 +696,7 @@ function App() {
                     <>
                       <div className="detail-line"><span>Endpoint</span><strong>http://{selectedProvider.host}:{selectedProvider.port}</strong></div>
                       <div className="detail-line"><span>Models</span><strong>{selectedProvider.models.length ? selectedProvider.models.length + " discovered" : "Not discovered"}</strong></div>
-                      {selectedProvider.selectedModel && <div className="detail-line"><span>Selected</span><strong>{selectedProvider.selectedModel}</strong></div>
+                      {selectedProvider.selectedModel && <div className="detail-line"><span>Selected</span><strong>{selectedProvider.selectedModel}</strong></div>}
                     </>
                   )}
                   <div className="detail-line"><span>Categories</span><strong>{selectedProvider.categoryIds.map((id) => catalog.categories.find((item) => item.id === id)?.name).filter(Boolean).join(", ") || "All AI"}</strong></div>
