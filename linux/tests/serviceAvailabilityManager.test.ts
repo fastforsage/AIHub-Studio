@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ServiceAvailabilityManager } from "../src/availability/serviceAvailabilityManager";
+import { ServiceAvailabilityManager } from "../src/main/serviceAvailabilityManager";
 import type { WebsiteProvider } from "../src/catalog/catalogModel";
 
 function provider(id: string, url: string): WebsiteProvider {
