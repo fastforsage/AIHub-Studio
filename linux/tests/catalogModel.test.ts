@@ -27,7 +27,7 @@ describe("catalog categories", () => {
     ]);
     expect(catalog.providers.map((provider) => provider.name)).toContain("ChatGPT");
     expect(catalog.providers.map((provider) => provider.name)).toContain("Claude");
-    expect(catalog.providers).toHaveLength(28);
+    expect(catalog.providers).toHaveLength(30);
     expect(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id)).toEqual([
       "chatgpt", "claude", "gemini", "grok", "deepseek", "perplexity",
       "copilot", "mistral", "openrouter", "kimi", "qwen", "google-ai-studio"
