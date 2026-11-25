@@ -250,6 +250,12 @@ function App() {
     setNotice(null);
     try {
       const next = await operation();
+      const changedOpenWebsiteIds = browserState.tabs.flatMap((tab) => {
+        const previous = catalog.providers.find((provider) => provider.id === tab.providerId);
+        const updated = next.providers.find((provider) => provider.id === tab.providerId);
+        return previous?.type === "website" && updated?.type === "website" &&
+          previous.url !== updated.url ? [updated.id] : [];
+      });
       const newlyAddedProviders = next.providers.filter((provider) =>
         !catalog.providers.some((existing) => existing.id === provider.id)
       );
@@ -261,6 +267,15 @@ function App() {
       }
       setCatalog(next);
       setCatalogSelection(next.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
+      if (browserApi && changedOpenWebsiteIds.length > 0) {
+        for (const providerId of changedOpenWebsiteIds) {
+          try {
+            setBrowserState(await browserApi.openWebsite(providerId));
+          } catch (browserReason) {
+            setError("Connection was saved, but the open tab could not be refreshed: " + errorMessage(browserReason));
+          }
+        }
+      }
       setModal(null);
       setMenu(null);
       setNotice("Changes saved");
@@ -691,6 +706,15 @@ function App() {
           </div>
         </div>
 
+        <button className={workspaceMode === "settings" ? "nav-item nav-item-active sidebar-settings-button" : "nav-item sidebar-settings-button"} type="button" onClick={() => {
+          setCatalogSelection(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
+          setCatalogSearch("");
+          setWorkspaceMode("settings");
+        }}>
+          <span className="nav-icon">⚙</span><span>Settings</span>
+        </button>
+
+        <div className="sidebar-scroll" aria-label="Workspace navigation">
         <div className="sidebar-label">WORKSPACE</div>
         <button className={workspaceMode === "catalog" && activeCategory === "all" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("all"); }}>
           <span className="nav-icon">▦</span><span>AI Catalog</span><span className="item-count">{catalog.providers.filter((item) => item.enabled).length}</span>
@@ -751,14 +775,8 @@ function App() {
           })}
         </div>
 
-        <div className="sidebar-spacer" />
-        <button className={workspaceMode === "settings" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => {
-          setCatalogSelection(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
-          setCatalogSearch("");
-          setWorkspaceMode("settings");
-        }}>
-          <span className="nav-icon">⚙</span><span>Settings</span>
-        </button>
+        </div>
+
         <div className="sidebar-footer">
           <span>Chromium workspace · {window.aihub?.platform ?? "Linux"}</span>
           <span className="sidebar-version">{formatBuildLabel(__APP_VERSION__, __APP_BUILD__)}</span>
