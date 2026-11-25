@@ -44,3 +44,6 @@ jobs:
 
       - name: Build Electron application
         run: npm run build
+
+      - name: Chromium WebContentsView smoke test
+        run: xvfb-run -a npm run smoke
