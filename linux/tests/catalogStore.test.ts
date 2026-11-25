@@ -31,7 +31,7 @@ describe("CatalogStore", () => {
     ]);
     expect(initial.providers.map((provider) => provider.name)).toContain("ChatGPT");
     expect(initial.providers.map((provider) => provider.name)).toContain("Claude");
-    expect(initial.providers).toHaveLength(30);
+    expect(initial.providers).toHaveLength(32);
     expect(initial.providers.filter((provider) => provider.enabled)).toHaveLength(12);
 
     await store.transact((current) => addCategory(current, "Research", () => "research"));
@@ -66,7 +66,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const upgraded = await store.initialize();
-    expect(upgraded.providers).toHaveLength(30);
+    expect(upgraded.providers).toHaveLength(32);
     expect(upgraded.providers.filter((provider) => provider.enabled)).toHaveLength(12);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
     expect(upgraded.providers.find((provider) => provider.id === "mistral")?.categoryIds).toContain("api-providers");
@@ -90,11 +90,11 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.providers).toHaveLength(30);
+    expect(migrated.providers).toHaveLength(34);
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
-    expect(persisted.providers).toHaveLength(30);
+    expect(persisted.providers).toHaveLength(34);
   });
 
   it("merges the installed legacy catalog with the full catalog and preserves existing connections", async () => {
