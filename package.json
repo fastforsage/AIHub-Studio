@@ -1,6 +1,6 @@
 {
   "name": "aihub-studio",
-  "version": "0.1.9",
+  "version": "0.1.10-alpha.1",
   "private": true,
   "description": "Unified AI workspace for cloud AI websites and local language models",
   "main": "out/main/index.js",
