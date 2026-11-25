@@ -754,3 +754,41 @@ h1 { margin: 12px 0 8px; color: #f4f5fa; font-size: 32px; font-weight: 650; lett
 .catalog-local-icon { display: inline-grid; flex: 0 0 21px; width: 21px; height: 21px; place-items: center; border: 1px solid #315747; border-radius: 7px; color: #9cdbb9; background: #274235; font-size: 11px; }
 .settings-workspace-tab .settings-tab-icon { color: #d3ddff; border: 1px solid #42558e; background: linear-gradient(145deg, #3e5ca4, #26375d); }
 @media (max-width: 760px) { .availability-toolbar { align-items: stretch; flex-direction: column; } .availability-check-button { align-self: flex-start; } }
+
+
+/* Availability checker embedded in Settings */
+.availability-settings-card { width: min(100%, 900px); margin: 16px 0; }
+.availability-settings-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  margin-top: 8px; padding: 11px 12px; border: 1px solid #323d53; border-radius: 8px;
+  background: #151c29;
+}
+.availability-settings-region { display: grid; min-width: 0; gap: 4px; }
+.availability-settings-region strong { color: #d8e0f2; font-size: 10px; }
+.availability-settings-region small { color: #8290a8; font-size: 9px; }
+.availability-settings-summary { margin: 12px 2px; }
+.availability-settings-results {
+  display: flex; max-height: 340px; flex-direction: column; gap: 0;
+  overflow: auto; margin-top: 12px; border: 1px solid #303746; border-radius: 8px;
+  background: #11161f;
+}
+.availability-settings-result {
+  display: grid; grid-template-columns: minmax(180px, 1fr) minmax(125px, auto);
+  align-items: center; gap: 7px 14px; padding: 8px 10px; border-bottom: 1px solid #252d3a;
+}
+.availability-settings-result:last-child { border-bottom: 0; }
+.availability-settings-provider { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.availability-settings-provider > span:last-child { display: grid; min-width: 0; gap: 3px; }
+.availability-settings-provider strong { overflow: hidden; color: #dbe2ef; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.availability-settings-provider small { overflow: hidden; color: #78869e; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.availability-settings-result > .availability-badge { justify-self: end; white-space: nowrap; }
+.availability-settings-note { grid-column: 1 / -1; overflow: hidden; color: #a78bc5; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.availability-settings-empty {
+  display: grid; min-height: 76px; place-items: center; padding: 16px;
+  border: 1px dashed #354052; border-radius: 8px; color: #7f8ca2;
+  background: #11161f; font-size: 9px; text-align: center;
+}
+@media (max-width: 760px) {
+  .availability-settings-toolbar { align-items: stretch; flex-direction: column; }
+  .availability-settings-toolbar .availability-check-button { align-self: flex-start; }
+}

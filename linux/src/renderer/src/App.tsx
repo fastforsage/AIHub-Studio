@@ -970,6 +970,80 @@ function App() {
               {notice && <div className="alert alert-success" role="status">{notice}</div>}
               {proxyNotice && <div className="alert alert-success" role="status">{proxyNotice}</div>}
 
+              <section className="settings-card availability-settings-card" aria-label="AI service availability">
+                <div className="settings-card-heading">
+                  <div className="settings-card-icon">◉</div>
+                  <div>
+                    <h2>Проверка доступности AI</h2>
+                    <p>Проверить весь каталог через текущую Chromium-сессию и настроенный прокси, включая региональные ограничения.</p>
+                  </div>
+                </div>
+                <div className="availability-settings-toolbar">
+                  <div className="availability-settings-region">
+                    {availabilityReport ? (
+                      <>
+                        <strong>
+                          Регион выхода: {availabilityReport.detectedCountryName
+                            ? availabilityReport.detectedCountryName + " (" + availabilityReport.detectedCountryCode + ")"
+                            : "не определён"}
+                        </strong>
+                        <small>Последняя проверка: {new Date(availabilityReport.checkedAt).toLocaleString()}</small>
+                      </>
+                    ) : (
+                      <>
+                        <strong>Проверка ещё не запускалась</strong>
+                        <small>Проверка региона выполняется по публичному IP только после нажатия кнопки.</small>
+                      </>
+                    )}
+                  </div>
+                  <button className="primary-button availability-check-button" type="button"
+                    disabled={availabilityBusy || !availabilityApi} onClick={() => void checkCatalogAvailability()}>
+                    {availabilityBusy ? "Проверяем каталог…" : "Проверить все AI"}
+                  </button>
+                </div>
+                {availabilitySummary && (
+                  <div className="availability-summary availability-settings-summary">
+                    <span className="availability-count-good">Доступно: {availabilitySummary.available}</span>
+                    <span className="availability-count-warn">Защита / вход: {availabilitySummary.protected}</span>
+                    <span className="availability-count-region">Регион: {availabilitySummary.restricted}</span>
+                    <span className="availability-count-bad">Недоступно: {availabilitySummary.unavailable}</span>
+                  </div>
+                )}
+                {availabilityReport ? (
+                  <div className="availability-settings-results" aria-live="polite">
+                    {availabilityReport.results.map((result) => {
+                      const provider = catalog.providers.find((item) => item.id === result.providerId);
+                      if (!provider) return null;
+                      return (
+                        <div className="availability-settings-result" key={result.providerId}>
+                          <div className="availability-settings-provider">
+                            {provider.type === "website"
+                              ? <ProviderBrandIcon providerId={provider.id} name={provider.name} size="small" />
+                              : <span className="catalog-local-icon">⌘</span>}
+                            <span>
+                              <strong>{provider.name}</strong>
+                              <small>{provider.type === "website" ? provider.url : provider.apiType + " · " + provider.host + ":" + provider.port}</small>
+                            </span>
+                          </div>
+                          <span className={"availability-badge availability-" + result.status} title={result.message}>
+                            <span className="availability-dot" />{availabilityLabel(result.status)}
+                            {result.latencyMs !== null ? " · " + result.latencyMs + " мс" : ""}
+                          </span>
+                          {result.regionNote && <small className="availability-settings-note" title={result.regionNote}>{result.regionNote}</small>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="availability-settings-empty">
+                    Нажми «Проверить все AI». Будет проверен каждый сервис, в том числе выключенный в левом каталоге.
+                  </div>
+                )}
+                <div className="settings-help">
+                  HTTP 401/403/429 означает возможную защиту или требование авторизации, а не гарантированную недоступность сервиса.
+                </div>
+              </section>
+
               <section className="settings-card catalog-settings-card">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">▦</div>
