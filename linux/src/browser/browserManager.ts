@@ -35,6 +35,7 @@ export class BrowserManager {
   ) {}
 
   getState(): BrowserManagerState {
+    this.pruneUnavailableTabs();
     return {
       tabs: [...this.tabs.values()].map((tab) => this.toInfo(tab)),
       activeTabId: this.activeTabId
@@ -47,9 +48,13 @@ export class BrowserManager {
 
     const existing = [...this.tabs.values()].find((tab) => tab.providerId === provider.id);
     if (existing) {
-      this.activate(existing.id);
-      if (existing.url !== url) await this.navigate(existing.id, url);
-      return this.getState();
+      if (this.getLiveContents(existing)) {
+        existing.title = existing.title || provider.name;
+        this.activate(existing.id);
+        if (existing.url !== url) await this.navigate(existing.id, url);
+        return this.getState();
+      }
+      this.discardTab(existing.id, existing);
     }
 
     const window = this.getWindow();
@@ -116,38 +121,15 @@ export class BrowserManager {
     const tab = this.tabs.get(tabId);
     if (!tab) return this.getState();
 
-    const window = this.getWindow();
-    if (window && !window.isDestroyed()) {
-      window.contentView.removeChildView(tab.view);
-    }
-
-    this.tabs.delete(tabId);
-    if (this.activeTabId === tabId) {
-      this.activeTabId = [...this.tabs.keys()].at(-1) ?? null;
-    }
-
-    if (!tab.view.webContents.isDestroyed()) {
-      tab.view.webContents.close();
-    }
-
+    this.discardTab(tabId, tab);
     this.updateViews();
     this.publish();
     return this.getState();
   }
 
   closeAll(): void {
-    const window = this.getWindow();
-    for (const tab of this.tabs.values()) {
-      if (window && !window.isDestroyed()) {
-        try {
-          window.contentView.removeChildView(tab.view);
-        } catch {
-          // The parent view may already have been torn down during app shutdown.
-        }
-      }
-      if (!tab.view.webContents.isDestroyed()) {
-        tab.view.webContents.close();
-      }
+    for (const [tabId, tab] of [...this.tabs.entries()]) {
+      this.discardTab(tabId, tab);
     }
     this.tabs.clear();
     this.activeTabId = null;
@@ -338,35 +320,117 @@ export class BrowserManager {
   }
 
   private updateViews(): void {
-    for (const tab of this.tabs.values()) {
-      const active = tab.id === this.activeTabId &&
+    this.pruneUnavailableTabs();
+    for (const [tabId, tab] of [...this.tabs.entries()]) {
+      const active = tabId === this.activeTabId &&
         this.viewportBounds.width > 0 &&
         this.viewportBounds.height > 0;
-      tab.view.setVisible(active);
-      tab.view.setBounds(active ? this.viewportBounds : HIDDEN_BOUNDS);
+      try {
+        tab.view.setVisible(active);
+        tab.view.setBounds(active ? this.viewportBounds : HIDDEN_BOUNDS);
+      } catch {
+        this.discardTab(tabId, tab);
+      }
+    }
+    if (this.activeTabId && !this.tabs.has(this.activeTabId)) {
+      this.activeTabId = [...this.tabs.keys()].at(-1) ?? null;
+    }
+  }
+
+  private getLiveContents(tab: BrowserTabRecord): Electron.WebContents | null {
+    try {
+      const contents = tab.view?.webContents;
+      if (!contents || contents.isDestroyed()) return null;
+      return contents;
+    } catch {
+      return null;
+    }
+  }
+
+  private discardTab(tabId: string, tab: BrowserTabRecord): void {
+    this.tabs.delete(tabId);
+    const window = this.getWindow();
+    if (window && !window.isDestroyed()) {
+      try {
+        window.contentView.removeChildView(tab.view);
+      } catch {
+        // A stale view may already have been detached by Chromium.
+      }
+    }
+
+    const contents = this.getLiveContents(tab);
+    if (contents) {
+      try {
+        contents.close();
+      } catch {
+        // The web contents may have been torn down between the liveness check and close.
+      }
+    }
+
+    if (this.activeTabId === tabId) {
+      this.activeTabId = [...this.tabs.keys()].at(-1) ?? null;
+    }
+  }
+
+  private pruneUnavailableTabs(): void {
+    for (const [tabId, tab] of [...this.tabs.entries()]) {
+      if (!this.getLiveContents(tab)) this.discardTab(tabId, tab);
+    }
+    if (this.activeTabId && !this.tabs.has(this.activeTabId)) {
+      this.activeTabId = [...this.tabs.keys()].at(-1) ?? null;
     }
   }
 
   private requireTab(tabId: string): BrowserTabRecord {
     const tab = this.tabs.get(tabId);
     if (!tab) throw new Error("Browser tab was not found");
-    if (tab.view.webContents.isDestroyed()) throw new Error("Browser tab is no longer available");
+    if (!this.getLiveContents(tab)) {
+      this.discardTab(tabId, tab);
+      this.updateViews();
+      this.publish();
+      throw new Error("Browser tab is no longer available. Reopen it from the AI catalog.");
+    }
     return tab;
   }
 
   private toInfo(tab: BrowserTabRecord): BrowserTabInfo {
-    const contents = tab.view.webContents;
-    const destroyed = contents.isDestroyed();
-    return {
-      id: tab.id,
-      providerId: tab.providerId,
-      title: tab.title,
-      url: tab.url,
-      loading: destroyed ? false : tab.loading,
-      canGoBack: !destroyed && contents.navigationHistory.canGoBack(),
-      canGoForward: !destroyed && contents.navigationHistory.canGoForward(),
-      error: tab.error
-    };
+    const contents = this.getLiveContents(tab);
+    if (!contents) {
+      return {
+        id: tab.id,
+        providerId: tab.providerId,
+        title: tab.title,
+        url: tab.url,
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+        error: tab.error ?? "Browser tab is no longer available. Reopen it from the AI catalog."
+      };
+    }
+
+    try {
+      return {
+        id: tab.id,
+        providerId: tab.providerId,
+        title: tab.title,
+        url: tab.url,
+        loading: tab.loading,
+        canGoBack: contents.navigationHistory.canGoBack(),
+        canGoForward: contents.navigationHistory.canGoForward(),
+        error: tab.error
+      };
+    } catch {
+      return {
+        id: tab.id,
+        providerId: tab.providerId,
+        title: tab.title,
+        url: tab.url,
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+        error: "Browser tab state could not be read. Reopen it from the AI catalog."
+      };
+    }
   }
 
   private publish(): void {
