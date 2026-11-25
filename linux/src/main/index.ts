@@ -1,8 +1,10 @@
 import { app, BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { resolveAppPaths } from "../shared/appPaths";
+import { BrowserManager } from "../browser/browserManager";
 import { CatalogStore } from "../catalog/catalogStore";
+import { resolveAppPaths } from "../shared/appPaths";
+import { registerBrowserIpc } from "./browserIpc";
 import { registerCatalogIpc } from "./catalogIpc";
 
 const paths = resolveAppPaths(process.env);
@@ -17,6 +19,7 @@ app.setPath("userData", paths.config);
 app.setPath("sessionData", sessionDataPath);
 
 let mainWindow: BrowserWindow | null = null;
+let browserManager: BrowserManager | null = null;
 
 function isTrustedRenderer(event: IpcMainInvokeEvent): boolean {
   return mainWindow !== null &&
@@ -45,6 +48,7 @@ function createMainWindow(): BrowserWindow {
   mainWindow = window;
   window.once("ready-to-show", () => window.show());
   window.on("closed", () => {
+    browserManager?.closeAll();
     if (mainWindow === window) mainWindow = null;
   });
 
@@ -65,12 +69,18 @@ async function bootstrap(): Promise<void> {
 
   const catalogStore = new CatalogStore(join(paths.config, "catalog.json"));
   await catalogStore.initialize();
-  registerCatalogIpc(catalogStore, isTrustedRenderer);
-  createMainWindow();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
-  });
+  browserManager = new BrowserManager(
+    () => mainWindow,
+    (state) => {
+      const target = mainWindow;
+      if (target && !target.isDestroyed()) target.webContents.send("browser:changed", state);
+    }
+  );
+
+  registerCatalogIpc(catalogStore, isTrustedRenderer);
+  registerBrowserIpc(browserManager, catalogStore, isTrustedRenderer);
+  createMainWindow();
 }
 
 void bootstrap().catch((error: unknown) => {
