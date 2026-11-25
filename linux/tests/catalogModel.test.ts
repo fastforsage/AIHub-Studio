@@ -9,7 +9,9 @@ import {
   deleteProvider,
   renameCategory,
   setProviderFavorite,
-  updateProvider
+  updateProvider,
+  updateLocalModels,
+  selectLocalModel
 } from "../src/catalog/catalogModel";
 
 const id = (value: string) => () => value;
@@ -137,5 +139,70 @@ describe("catalog providers", () => {
     const favorited = setProviderFavorite(first, "website", true);
     expect(favorited.providers[0].favorite).toBe(true);
     expect(deleteProvider(favorited, "website").providers).toEqual([]);
+  });
+});
+
+
+describe("Local AI model catalog state", () => {
+  function localCatalog() {
+    return addLocalApiProvider(createDefaultCatalog(), {
+      name: "Local LLM", host: "localhost", port: 11434
+    }, id("local"));
+  }
+
+  it("stores discovered models and selects the first available model", () => {
+    const result = updateLocalModels(localCatalog(), "local", ["qwen3:8b", "llama3.2"]);
+    expect(result.providers[0]).toMatchObject({
+      models: ["qwen3:8b", "llama3.2"],
+      selectedModel: "qwen3:8b"
+    });
+  });
+
+  it("preserves the current selection while it remains available", () => {
+    const first = updateLocalModels(localCatalog(), "local", ["qwen3:8b", "llama3.2"]);
+    const selected = selectLocalModel(first, "local", "llama3.2");
+    const refreshed = updateLocalModels(selected, "local", ["llama3.2", "deepseek-r1"]);
+    expect(refreshed.providers[0]).toMatchObject({
+      models: ["llama3.2", "deepseek-r1"],
+      selectedModel: "llama3.2"
+    });
+  });
+
+  it("chooses the first new model when the previous selection disappears", () => {
+    const first = updateLocalModels(localCatalog(), "local", ["qwen3:8b", "llama3.2"]);
+    const selected = selectLocalModel(first, "local", "llama3.2");
+    const refreshed = updateLocalModels(selected, "local", ["deepseek-r1", "qwen3:8b"]);
+    expect(refreshed.providers[0]).toMatchObject({
+      selectedModel: "deepseek-r1"
+    });
+  });
+
+  it("clears selected model when the server reports no models", () => {
+    const first = updateLocalModels(localCatalog(), "local", ["qwen3:8b"]);
+    const refreshed = updateLocalModels(first, "local", []);
+    expect(refreshed.providers[0]).toMatchObject({
+      models: [],
+      selectedModel: undefined
+    });
+  });
+
+  it("rejects selecting an undiscovered model", () => {
+    expect(() => selectLocalModel(localCatalog(), "local", "missing"))
+      .toThrowError(CatalogError);
+  });
+
+  it("rejects model discovery updates on a website provider", () => {
+    const site = addWebsiteProvider(createDefaultCatalog(), {
+      name: "Example", url: "example.com"
+    }, id("site"));
+    expect(() => updateLocalModels(site, "site", ["qwen"]))
+      .toThrowError(CatalogError);
+  });
+
+  it("deduplicates discovered identifiers and rejects invalid values", () => {
+    const result = updateLocalModels(localCatalog(), "local", ["qwen3:8b", "qwen3:8b"]);
+    expect(result.providers[0]).toMatchObject({ models: ["qwen3:8b"] });
+    expect(() => updateLocalModels(localCatalog(), "local", [" "]))
+      .toThrowError(CatalogError);
   });
 });
