@@ -64,7 +64,7 @@ export function registerDiagnosticsIpc(
       appVersion: app.getVersion(),
       platform: process.platform,
       architecture: process.arch,
-      operatingSystem: process.getSystemVersion?.() ?? null,
+      operatingSystem: process.platform,
       electronVersion: process.versions.electron,
       chromiumVersion: process.versions.chrome,
       nodeVersion: process.versions.node
