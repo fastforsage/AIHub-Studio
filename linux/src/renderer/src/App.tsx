@@ -939,6 +939,106 @@ function App() {
                 </div>
               </form>
 
+              <section className="settings-card diagnostics-settings-card" aria-label="Diagnostics and logs">
+                <div className="settings-card-heading">
+                  <div className="settings-card-icon">▤</div>
+                  <div>
+                    <h2>Diagnostics and logs</h2>
+                    <p>Logging levels, local log storage, automatic rotation and troubleshooting exports.</p>
+                  </div>
+                </div>
+
+                <div className="diagnostics-settings-grid">
+                  <label className="form-field">
+                    <span>Logging level</span>
+                    <select value={loggingSettings.level}
+                      onChange={(event) => setLoggingSettings((current) => ({ ...current, level: event.target.value as LogLevel }))}>
+                      <option value="debug">Debug — detailed troubleshooting</option>
+                      <option value="info">Info — normal operation</option>
+                      <option value="warn">Warning — warnings and errors</option>
+                      <option value="error">Error — errors only</option>
+                    </select>
+                  </label>
+                  <label className="diagnostics-toggle">
+                    <input type="checkbox" checked={loggingSettings.fileEnabled}
+                      onChange={(event) => setLoggingSettings((current) => ({ ...current, fileEnabled: event.target.checked }))} />
+                    <span><strong>Write logs to files</strong><small>Store application logs on this device</small></span>
+                  </label>
+                  <label className="form-field">
+                    <span>Maximum file size</span>
+                    <select value={String(loggingSettings.maxFileSizeMb)}
+                      onChange={(event) => setLoggingSettings((current) => ({ ...current, maxFileSizeMb: Number(event.target.value) }))}>
+                      {[5, 10, 25, 50, 100].map((value) => <option key={value} value={value}>{value} MB</option>)}
+                    </select>
+                  </label>
+                  <label className="form-field">
+                    <span>Files to keep</span>
+                    <select value={String(loggingSettings.maxFiles)}
+                      onChange={(event) => setLoggingSettings((current) => ({ ...current, maxFiles: Number(event.target.value) }))}>
+                      {[3, 5, 7, 10, 20, 30].map((value) => <option key={value} value={value}>{value} files (including current)</option>)}
+                    </select>
+                  </label>
+                  <label className="form-field">
+                    <span>Retention period</span>
+                    <select value={String(loggingSettings.retentionDays)}
+                      onChange={(event) => setLoggingSettings((current) => ({ ...current, retentionDays: Number(event.target.value) }))}>
+                      {[1, 7, 14, 30, 60, 90].map((value) => <option key={value} value={value}>{value} days</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="diagnostics-actions">
+                  <button className="primary-button" type="button" disabled={diagnosticsBusy || !diagnosticsApi}
+                    onClick={() => void saveLoggingSettings()}>{diagnosticsBusy ? "Working…" : "Save logging settings"}</button>
+                  <button className="secondary-button" type="button" disabled={diagnosticsBusy}
+                    onClick={() => void collectDiagnosticReport()}>Collect diagnostics</button>
+                  <button className="secondary-button" type="button" disabled={diagnosticsBusy}
+                    onClick={() => void exportApplicationLogs()}>Export logs</button>
+                  <button className="danger-button" type="button" disabled={diagnosticsBusy}
+                    onClick={() => void clearApplicationLogs()}>Clear logs</button>
+                </div>
+
+                <div className="diagnostics-path-row">
+                  <div><strong>Log directory</strong><small>{diagnosticsStatus?.directory ?? "Loading log location…"}</small></div>
+                  <button className="secondary-button" type="button" onClick={() => void openLogDirectory()}>Open folder</button>
+                </div>
+
+                <div className="diagnostics-log-heading">
+                  <div><h3>Log viewer</h3><p>
+                    {diagnosticsStatus
+                      ? (diagnosticsStatus.currentFileBytes / 1024 / 1024).toFixed(2) + " MB current file · " + diagnosticsStatus.rotatedFiles + " rotated file(s)"
+                      : "Log status unavailable"}
+                  </p></div>
+                  <div className="diagnostics-log-controls">
+                    <select aria-label="Filter log level" value={logFilter} onChange={(event) => setLogFilter(event.target.value as LogLevel | "all")}>
+                      <option value="all">All levels</option>
+                      <option value="debug">Debug</option>
+                      <option value="info">Info</option>
+                      <option value="warn">Warning</option>
+                      <option value="error">Error</option>
+                    </select>
+                    <button className="secondary-button" type="button" disabled={diagnosticsBusy}
+                      onClick={() => void refreshDiagnostics()}>Refresh</button>
+                  </div>
+                </div>
+                <div className="diagnostics-log-list" aria-live="polite">
+                  {logEntries.length === 0 ? (
+                    <div className="diagnostics-empty">No log entries for this filter. Try another level or refresh.</div>
+                  ) : logEntries.map((entry, index) => (
+                    <div className="diagnostics-log-entry" key={entry.timestamp + "-" + index}>
+                      <time>{new Date(entry.timestamp).toLocaleString()}</time>
+                      <span className={"log-level log-level-" + entry.level}>{entry.level.toUpperCase()}</span>
+                      <span className="log-scope">{entry.scope}</span>
+                      <span className="log-message">{entry.message}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="settings-help">
+                  Authorization headers, API-key fields and common token query parameters are masked before file storage.
+                  Log files use owner-only permissions. The default level is Info; switch to Debug temporarily when troubleshooting.
+                </div>
+              </section>
+
               <section className="settings-card version-card" aria-label="Application version">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">ⓘ</div>
