@@ -103,7 +103,7 @@ function App() {
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
       const details = reason instanceof Error
-        ? reason.name + ": " + reason.message + (reason.stack ? "\\n" + reason.stack : "")
+        ? reason.name + ": " + reason.message + (reason.stack ? "\n" + reason.stack : "")
         : typeof reason === "string" ? reason : JSON.stringify(reason);
       void diagnosticsApi.writeLog("error", "renderer", "Unhandled promise rejection: " + details).catch(() => undefined);
     };
@@ -969,6 +969,11 @@ function App() {
                 </div>
               </form>
 
+              {diagnosticsStatus?.lastWriteError && (
+                <div className="alert alert-error" role="alert">
+                  Failed to write log files: {diagnosticsStatus.lastWriteError}
+                </div>
+              )}
               <section className="settings-card diagnostics-settings-card" aria-label="Diagnostics and logs">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">▤</div>
