@@ -93,10 +93,12 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
   { id: "groqcloud", name: "GroqCloud", url: "https://console.groq.com/", categoryIds: ["api-providers"] },
   { id: "cloudflare-workers-ai", name: "Cloudflare Workers AI", url: "https://developers.cloudflare.com/workers-ai/", categoryIds: ["api-providers"] },
   { id: "cohere", name: "Cohere", url: "https://dashboard.cohere.com/", categoryIds: ["api-providers"] },
+  { id: "cerebras-inference", name: "Cerebras Inference", url: "https://www.cerebras.ai/inference", categoryIds: ["api-providers"] },
+  { id: "sambanova-cloud", name: "SambaNova Cloud", url: "https://cloud.sambanova.ai/", categoryIds: ["api-providers"] },
   { id: "modelscope", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers"] },
   { id: "huggingface-inference", name: "Hugging Face Inference Providers", url: "https://huggingface.co/inference-providers", categoryIds: ["api-providers"] },
-  { id: "opencode-zen", name: "OpenCode Zen", url: "https://opencode.ai/", categoryIds: ["api-providers"] },
-  { id: "kilo-ai-gateway", name: "Kilo AI Gateway", url: "https://kilo.ai/", categoryIds: ["api-providers"] }
+  { id: "opencode-zen", name: "OpenCode Zen", url: "https://opencode.ai/en/zen", categoryIds: ["api-providers"] },
+  { id: "kilo-ai-gateway", name: "Kilo AI Gateway", url: "https://kilo.ai/gateway", categoryIds: ["api-providers"] }
 ];
 
 export function createDefaultCatalog(): CatalogState {

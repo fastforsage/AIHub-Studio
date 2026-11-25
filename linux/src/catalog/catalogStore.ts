@@ -23,48 +23,69 @@ export class CatalogStore {
       const parsed: unknown = JSON.parse(raw);
       assertCatalogState(parsed);
       const legacyDefaultIds = new Set(["ai", "local-ai", "dev", "community", "design", "email", "video"]);
-      const isUntouchedLegacyCatalog = parsed.providers.length === 0 &&
-        parsed.categories.length === legacyDefaultIds.size &&
-        parsed.categories.every((category) => legacyDefaultIds.has(category.id));
       const currentDefaults = createDefaultCatalog();
-      const previousDefaultIds = new Set(currentDefaults.providers
-        .filter((provider) => ![
-          "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
-          "modelscope", "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
-        ].includes(provider.id))
+      const newProviderIds = new Set(["cerebras-inference", "sambanova-cloud"]);
+      const previousProviderIds = new Set(currentDefaults.providers
+        .filter((provider) => !newProviderIds.has(provider.id))
         .map((provider) => provider.id));
-      const previousCategoryIds = new Set(currentDefaults.categories
-        .filter((category) => category.id !== "api-providers")
-        .map((category) => category.id));
-      const isPreviousCuratedCatalog = parsed.providers.length === previousDefaultIds.size &&
-        parsed.providers.every((provider) => previousDefaultIds.has(provider.id)) &&
-        parsed.categories.length === previousCategoryIds.size &&
-        parsed.categories.every((category) => previousCategoryIds.has(category.id));
+      const defaultCategoryIds = new Set(currentDefaults.categories.map((category) => category.id));
+      const isLegacyStarterLayout = parsed.categories.length === legacyDefaultIds.size &&
+        parsed.categories.every((category) => legacyDefaultIds.has(category.id));
+      const isPreviousCuratedCatalog = parsed.providers.length === previousProviderIds.size &&
+        parsed.providers.every((provider) => previousProviderIds.has(provider.id)) &&
+        parsed.categories.length === currentDefaults.categories.length &&
+        parsed.categories.every((category) => defaultCategoryIds.has(category.id));
 
-      // Upgrade known untouched catalogs while preserving provider edits and category names.
-      if (isUntouchedLegacyCatalog) {
-        this.state = currentDefaults;
-      } else if (isPreviousCuratedCatalog) {
-        const previousProviders = new Map(parsed.providers.map((provider) => [provider.id, provider]));
+      if (isLegacyStarterLayout || isPreviousCuratedCatalog) {
+        const legacyCategoryMap: Record<string, string> = {
+          ai: "chatbot", "local-ai": "local-ai", dev: "many-in-one",
+          community: "many-in-one", design: "image-generator",
+          email: "writing-helper", video: "video-generator"
+        };
         const previousCategories = new Map(parsed.categories.map((category) => [category.id, category]));
-        this.state = {
-          ...currentDefaults,
-          categories: currentDefaults.categories.map((category) => previousCategories.get(category.id) ?? category),
-          providers: currentDefaults.providers.map((provider) => {
-            const previous = previousProviders.get(provider.id);
-            if (!previous) return provider;
+        const customCategories = parsed.categories.filter((category) =>
+          !legacyDefaultIds.has(category.id) && !defaultCategoryIds.has(category.id)
+        );
+        const categories = currentDefaults.categories.map((category) =>
+          previousCategories.get(category.id) ?? category
+        ).concat(customCategories);
+        const availableCategoryIds = new Set(categories.map((category) => category.id));
+        const previousProviders = new Map(parsed.providers.map((provider) => [provider.id, provider]));
+        const mergedDefaults = currentDefaults.providers.map((provider) => {
+          const previous = previousProviders.get(provider.id);
+          if (!previous) return provider;
+          const mappedPreviousCategories = previous.categoryIds
+            .map((id) => legacyCategoryMap[id] ?? id)
+            .filter((id) => availableCategoryIds.has(id));
+          return {
+            ...provider,
+            ...previous,
+            categoryIds: [...new Set([...mappedPreviousCategories, ...provider.categoryIds])],
+            enabled: POPULAR_PROVIDER_IDS.includes(provider.id)
+          };
+        });
+        const defaultProviderIds = new Set(currentDefaults.providers.map((provider) => provider.id));
+        const preservedCustomProviders = parsed.providers
+          .filter((provider) => !defaultProviderIds.has(provider.id))
+          .map((provider) => {
+            const mappedCategoryIds = provider.categoryIds
+              .map((id) => legacyCategoryMap[id] ?? id)
+              .filter((id) => availableCategoryIds.has(id));
+            const fallbackCategory = provider.type === "local-api" ? "local-ai" : "chatbot";
             return {
               ...provider,
-              ...previous,
-              categoryIds: [...new Set([...previous.categoryIds, ...provider.categoryIds])],
-              enabled: POPULAR_PROVIDER_IDS.includes(provider.id)
+              categoryIds: mappedCategoryIds.length ? [...new Set(mappedCategoryIds)] : [fallbackCategory]
             };
-          })
+          });
+        this.state = {
+          version: 1,
+          categories,
+          providers: [...mergedDefaults, ...preservedCustomProviders]
         };
+        await this.write(this.state);
       } else {
         this.state = structuredClone(parsed);
       }
-      if (isUntouchedLegacyCatalog || isPreviousCuratedCatalog) await this.write(this.state);
     } catch (error) {
       if (isMissingFile(error)) {
         this.state = createDefaultCatalog();

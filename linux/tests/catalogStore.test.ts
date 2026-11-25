@@ -31,7 +31,7 @@ describe("CatalogStore", () => {
     ]);
     expect(initial.providers.map((provider) => provider.name)).toContain("ChatGPT");
     expect(initial.providers.map((provider) => provider.name)).toContain("Claude");
-    expect(initial.providers).toHaveLength(28);
+    expect(initial.providers).toHaveLength(30);
     expect(initial.providers.filter((provider) => provider.enabled)).toHaveLength(12);
 
     await store.transact((current) => addCategory(current, "Research", () => "research"));
@@ -65,7 +65,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const upgraded = await store.initialize();
-    expect(upgraded.providers).toHaveLength(28);
+    expect(upgraded.providers).toHaveLength(30);
     expect(upgraded.providers.filter((provider) => provider.enabled)).toHaveLength(12);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
     expect(upgraded.providers.find((provider) => provider.id === "mistral")?.categoryIds).toContain("api-providers");
@@ -89,11 +89,43 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.providers).toHaveLength(28);
+    expect(migrated.providers).toHaveLength(30);
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
-    expect(persisted.providers).toHaveLength(28);
+    expect(persisted.providers).toHaveLength(30);
+  });
+
+  it("merges the installed legacy catalog with the full catalog and preserves existing connections", async () => {
+    const filePath = await createTemporaryCatalogPath();
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify({
+      version: 1,
+      categories: [
+        { id: "ai", name: "AI" }, { id: "local-ai", name: "Local AI" },
+        { id: "dev", name: "Dev" }, { id: "community", name: "Community" },
+        { id: "design", name: "Design" }, { id: "email", name: "Email" },
+        { id: "video", name: "Video" }
+      ],
+      providers: [
+        { id: "gemma-local", name: "Gemma4-26B", type: "local-api", apiType: "openai", host: "localhost", port: 11434, models: ["Gemma4-26B"], selectedModel: "Gemma4-26B", categoryIds: ["local-ai"], favorite: false, enabled: true },
+        { id: "duckai", name: "DuckAI", type: "website", url: "https://duck.ai/", profileId: "duckai", categoryIds: ["ai"], favorite: false, enabled: true },
+        { id: "chatgpt", name: "ChatGPT", type: "website", url: "https://chatgpt.com/", profileId: "chatgpt", categoryIds: ["ai"], favorite: false, enabled: true }
+      ]
+    }), "utf8");
+
+    const store = new CatalogStore(filePath);
+    const migrated = await store.initialize();
+    expect(migrated.providers).toHaveLength(32);
+    expect(migrated.providers.find((provider) => provider.id === "duckai")?.categoryIds).toContain("chatbot");
+    expect(migrated.providers.find((provider) => provider.id === "gemma-local")?.categoryIds).toContain("local-ai");
+    expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.enabled).toBe(true);
+    expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
+    expect(migrated.providers.filter((provider) => provider.enabled).length).toBe(14);
+    const persisted = JSON.parse(await readFile(filePath, "utf8"));
+    expect(persisted.providers).toHaveLength(32);
   });
 
   it("writes config with owner-only permissions", async () => {

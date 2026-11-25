@@ -84,7 +84,6 @@ function App() {
   const [proxyServer, setProxyServer] = useState("");
   const [proxySaving, setProxySaving] = useState(false);
   const [proxyNotice, setProxyNotice] = useState<string | null>(null);
-  const [addressValue, setAddressValue] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -435,17 +434,10 @@ function App() {
       const next = await browserApi.openWebsite(provider.id);
       setBrowserState(next);
       setSelectedProviderId(provider.id);
-      setAddressValue(provider.url);
       setWorkspaceMode("browser");
     } catch (reason) {
       setError(errorMessage(reason));
     }
-  }
-
-  function submitAddress(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    if (!activeBrowserTab || !browserApi) return;
-    void runBrowserAction(() => browserApi.navigate(activeBrowserTab.id, addressValue));
   }
 
   async function saveCatalogSelection(): Promise<void> {
@@ -660,21 +652,9 @@ function App() {
           </div>
         </header>
 
-        <section className="content-area">
+        <section className={workspaceMode === "browser" ? "content-area content-area-browser" : "content-area"}>
           {workspaceMode === "browser" ? (
             <div className="browser-workspace">
-              <div className="browser-toolbar">
-                <button className="browser-control" type="button" title="Back" disabled={!activeBrowserTab?.canGoBack} onClick={() => activeBrowserTab && browserApi && void runBrowserAction(() => browserApi.back(activeBrowserTab.id))}>←</button>
-                <button className="browser-control" type="button" title="Forward" disabled={!activeBrowserTab?.canGoForward} onClick={() => activeBrowserTab && browserApi && void runBrowserAction(() => browserApi.forward(activeBrowserTab.id))}>→</button>
-                <button className="browser-control" type="button" title="Reload" disabled={!activeBrowserTab} onClick={() => activeBrowserTab && browserApi && void runBrowserAction(() => browserApi.reload(activeBrowserTab.id))}>↻</button>
-                <form className="browser-address-form" onSubmit={submitAddress}>
-                  <span className="address-lock">⌑</span>
-                  <input aria-label="Website address" value={addressValue} onChange={(event) => setAddressValue(event.target.value)} placeholder="Enter website address" disabled={!activeBrowserTab} />
-                  <button type="submit" disabled={!activeBrowserTab}>Go</button>
-                </form>
-                <span className="browser-load-state">{activeBrowserTab?.loading ? "Loading" : activeBrowserTab?.error ? "Error" : "Ready"}</span>
-              </div>
-
               {activeBrowserTab?.error && <div className="browser-error" role="alert">{activeBrowserTab.error}</div>}
               <div className="browser-viewport" ref={browserViewportRef}>
                 {!activeBrowserTab && <div className="browser-empty">Open a cloud website from the AI catalog.</div>}
