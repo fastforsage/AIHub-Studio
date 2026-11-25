@@ -1,19 +1,23 @@
-import { app, BrowserWindow } from "electron";
-import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { app, BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { join } from "node:path";
 import { resolveAppPaths } from "../shared/appPaths";
+import { CatalogStore } from "../catalog/catalogStore";
+import { registerCatalogIpc } from "./catalogIpc";
 
-const paths = resolveAppPaths(process.env, homedir());
+const paths = resolveAppPaths(process.env);
 const sessionDataPath = join(paths.data, "sessions");
-
-for (const directory of [paths.config, paths.data, paths.state, sessionDataPath]) {
-  mkdirSync(directory, { recursive: true });
-}
 
 app.setName("AIHub Studio");
 app.setPath("userData", paths.config);
 app.setPath("sessionData", sessionDataPath);
+
+let mainWindow: BrowserWindow | null = null;
+
+function isTrustedRenderer(event: IpcMainInvokeEvent): boolean {
+  return mainWindow !== null &&
+    event.sender === mainWindow.webContents &&
+    event.senderFrame === event.sender.mainFrame;
+}
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -33,7 +37,11 @@ function createMainWindow(): BrowserWindow {
     }
   });
 
+  mainWindow = window;
   window.once("ready-to-show", () => window.show());
+  window.on("closed", () => {
+    if (mainWindow === window) mainWindow = null;
+  });
 
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   const loadResult = rendererUrl
@@ -47,13 +55,20 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
-app.whenReady().then(() => {
+async function bootstrap(): Promise<void> {
+  await app.whenReady();
+
+  const catalogStore = new CatalogStore(join(paths.config, "catalog.json"));
+  await catalogStore.initialize();
+  registerCatalogIpc(catalogStore, isTrustedRenderer);
   createMainWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
-}).catch((error: unknown) => {
+}
+
+void bootstrap().catch((error: unknown) => {
   console.error("AIHub Studio startup failed:", error);
   app.quit();
 });
