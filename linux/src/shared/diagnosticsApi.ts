@@ -24,6 +24,7 @@ export interface DiagnosticsStatus {
 }
 
 export interface DiagnosticsApi {
+  writeLog(level: LogLevel, scope: string, message: string): Promise<void>;
   getStatus(): Promise<DiagnosticsStatus>;
   getSettings(): Promise<LoggingSettings>;
   updateSettings(settings: LoggingSettings): Promise<LoggingSettings>;
