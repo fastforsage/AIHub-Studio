@@ -144,8 +144,11 @@ function App() {
   const contextProviderId = menu && menu.target.kind === "provider" ? menu.target.id : null;
   const contextProvider = contextProviderId ? catalog.providers.find((provider) => provider.id === contextProviderId) ?? null : null;
   const activeBrowserTab = browserState.tabs.find((tab) => tab.id === browserState.activeTabId) ?? null;
-  const activeLocalProvider = localChatProviderId
-    ? catalog.providers.find((item) => item.id === localChatProviderId && item.type === "local-api") ?? null
+  const localProviderCandidate = localChatProviderId
+    ? catalog.providers.find((item) => item.id === localChatProviderId)
+    : undefined;
+  const activeLocalProvider = localProviderCandidate?.type === "local-api"
+    ? localProviderCandidate
     : null;
   const activeLocalMessages = localChatProviderId ? localChats[localChatProviderId] ?? [] : [];
   const visibleProviders = useMemo(() => {
@@ -363,7 +366,7 @@ function App() {
       setLocalChats((current) => ({
         ...current,
         [activeLocalProvider.id]: [...(current[activeLocalProvider.id] ?? history), {
-          role: "assistant",
+          role: "assistant" as const,
           content: result.content
         }].slice(-100)
       }));
