@@ -24,13 +24,46 @@ describe("CatalogStore", () => {
     const filePath = await createTemporaryCatalogPath();
     const store = new CatalogStore(filePath);
     const initial = await store.initialize();
-    expect(initial.categories.some((category) => category.id === "local-ai")).toBe(true);
+    expect(initial.categories.map((category) => category.name)).toEqual([
+      "chatbot", "music generator", "voice generator", "video generator",
+      "writing helper", "research assistant", "translator", "presentation maker",
+      "image generator", "many in one", "Local AI"
+    ]);
+    expect(initial.providers.map((provider) => provider.name)).toContain("ChatGPT");
+    expect(initial.providers.map((provider) => provider.name)).toContain("Claude");
+    expect(initial.providers).toHaveLength(20);
 
     await store.transact((current) => addCategory(current, "Research", () => "research"));
 
     const reloaded = new CatalogStore(filePath);
     const loaded = await reloaded.initialize();
     expect(loaded.categories.at(-1)).toEqual({ id: "research", name: "Research" });
+  });
+
+
+  it("migrates an untouched legacy starter catalog to the curated catalog", async () => {
+    const filePath = await createTemporaryCatalogPath();
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify({
+      version: 1,
+      categories: [
+        { id: "ai", name: "AI" }, { id: "local-ai", name: "Local AI" },
+        { id: "dev", name: "Dev" }, { id: "community", name: "Community" },
+        { id: "design", name: "Design" }, { id: "email", name: "Email" },
+        { id: "video", name: "Video" }
+      ],
+      providers: []
+    }), "utf8");
+
+    const store = new CatalogStore(filePath);
+    const migrated = await store.initialize();
+    expect(migrated.providers).toHaveLength(20);
+    expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
+    expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
+    const persisted = JSON.parse(await readFile(filePath, "utf8"));
+    expect(persisted.providers).toHaveLength(20);
   });
 
   it("writes config with owner-only permissions", async () => {
