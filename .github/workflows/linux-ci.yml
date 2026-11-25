@@ -55,7 +55,9 @@ jobs:
         run: |
           set -euo pipefail
           bash -n packaging/arch/ci-build-install-test.sh
+          bash -n packaging/arch/PKGBUILD
           mkdir -p packaging/arch/pkgsrc
+          cp packaging/arch/PKGBUILD packaging/arch/pkgsrc/PKGBUILD
           tar -C release -czf "packaging/arch/pkgsrc/aihub-studio-0.1.0-linux-x86_64.tar.gz" linux-unpacked
           docker run --rm \
             -v "$PWD/packaging/arch/pkgsrc:/packagesrc:ro" \
