@@ -49,9 +49,8 @@ describe("catalog categories", () => {
       name: "Example", url: "example.com", categoryIds: ["chatbot", "music-generator"]
     }, id("provider"));
     const result = deleteCategory(base, "music-generator");
-    expect(result.categories.some((item) => item.id === "dev")).toBe(false);
-    expect(result.providers).toHaveLength(1);
-    expect(result.providers[0].categoryIds).toEqual(["chatbot"]);
+    expect(result.categories.some((item) => item.id === "music-generator")).toBe(false);
+    expect(result.providers.find((provider) => provider.id === "provider")?.categoryIds).toEqual(["chatbot"]);
   });
 });
 
@@ -123,7 +122,7 @@ describe("catalog providers", () => {
     });
     expect(result.providers.find((provider) => provider.id === "website")).toMatchObject({
       id: "website", name: "Example AI", url: "https://example.org/",
-      profileId: "website", categoryIds: ["dev"]
+      profileId: "website", categoryIds: ["music-generator"]
     });
   });
 
@@ -176,7 +175,7 @@ describe("Local AI model catalog state", () => {
     const first = updateLocalModels(localCatalog(), "local", ["qwen3:8b", "llama3.2"]);
     const selected = selectLocalModel(first, "local", "llama3.2");
     const refreshed = updateLocalModels(selected, "local", ["deepseek-r1", "qwen3:8b"]);
-    expect(refreshed.providers[0]).toMatchObject({
+    expect(refreshed.providers.find((provider) => provider.id === "local")).toMatchObject({
       selectedModel: "deepseek-r1"
     });
   });
