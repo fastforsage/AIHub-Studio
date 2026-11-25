@@ -8,6 +8,7 @@ on:
       - "linux/**"
       - ".github/workflows/linux-ci.yml"
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "linux/**"
       - ".github/workflows/linux-ci.yml"
