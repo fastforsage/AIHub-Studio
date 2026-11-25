@@ -652,7 +652,7 @@ function App() {
           </div>
         </header>
 
-        <section className={workspaceMode === "browser" ? "content-area content-area-browser" : "content-area"}>
+        <section className={workspaceMode === "browser" || workspaceMode === "local-chat" ? "content-area content-area-full-workspace" : "content-area"}>
           {workspaceMode === "browser" ? (
             <div className="browser-workspace">
               {activeBrowserTab?.error && <div className="browser-error" role="alert">{activeBrowserTab.error}</div>}
