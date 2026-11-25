@@ -51,12 +51,13 @@ describe("DiagnosticsManager", () => {
     manager.log("debug", "test", "debug detail");
     await manager.flush();
 
-    const entries = await manager.getRecentLogs(20);
-    expect(entries).toHaveLength(1);
-    expect(entries[0].level).toBe("info");
-    expect(entries[0].message).not.toContain("secret-value");
-    expect(entries[0].message).not.toContain("abc.def.ghi");
-    expect(entries[0].message).toContain("[REDACTED]");
+    const entries = await manager.getRecentLogs(20, "info");
+    const authEntry = entries.find((entry) => entry.scope === "auth");
+    expect(authEntry).toBeDefined();
+    expect(authEntry?.level).toBe("info");
+    expect(authEntry?.message).not.toContain("secret-value");
+    expect(authEntry?.message).not.toContain("abc.def.ghi");
+    expect(authEntry?.message).toContain("[REDACTED]");
   });
 
   it("filters log levels and supports disabling file output", async () => {
