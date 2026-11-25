@@ -79,23 +79,50 @@ export class CatalogStore {
           };
         });
         const defaultProviderIds = new Set(currentDefaults.providers.map((provider) => provider.id));
-        const preservedCustomProviders = parsed.providers
-          .filter((provider) => !defaultProviderIds.has(provider.id))
-          .map((provider) => {
-            const mappedCategoryIds = provider.categoryIds
-              .map((id) => legacyCategoryMap[id] ?? id)
-              .filter((id) => availableCategoryIds.has(id));
-            const fallbackCategory = provider.type === "local-api" ? "local-ai" : "chatbot";
-            return {
-              ...provider,
-              categoryIds: mappedCategoryIds.length ? [...new Set(mappedCategoryIds)] : [fallbackCategory]
-            };
-          });
+        const mergedProviders = [...mergedDefaults];
+        const normalizedName = (name: string) => name.trim().toLocaleLowerCase();
+        for (const provider of parsed.providers) {
+          if (defaultProviderIds.has(provider.id)) continue;
+          const mappedCategoryIds = provider.categoryIds
+            .map((id) => legacyCategoryMap[id] ?? id)
+            .filter((id) => availableCategoryIds.has(id));
+          const fallbackCategory = provider.type === "local-api" ? "local-ai" : "chatbot";
+          const categoryIds = mappedCategoryIds.length
+            ? [...new Set(mappedCategoryIds)]
+            : [fallbackCategory];
+          const sameName = mergedProviders.find((item) =>
+            normalizedName(item.name) === normalizedName(provider.name)
+          );
+          if (sameName && sameName.type === provider.type) {
+            // Keep the seeded provider's stable ID while preserving the user's settings
+            // and browser profile from the legacy entry.
+            sameName.categoryIds = [...new Set([...sameName.categoryIds, ...categoryIds])];
+            sameName.favorite = sameName.favorite || provider.favorite;
+            if (sameName.type === "website" && provider.type === "website") {
+              sameName.profileId = provider.profileId || sameName.profileId;
+            }
+            continue;
+          }
+
+          let uniqueName = provider.name.trim();
+          if (sameName) {
+            const suffix = provider.type === "local-api" ? " (Local API)" : " (Website)";
+            uniqueName += suffix;
+            let counter = 2;
+            while (mergedProviders.some((item) =>
+              normalizedName(item.name) === normalizedName(uniqueName)
+            )) {
+              uniqueName = provider.name.trim() + suffix + " " + counter++;
+            }
+          }
+          mergedProviders.push({ ...provider, name: uniqueName, categoryIds });
+        }
         this.state = {
           version: 1,
           categories,
-          providers: [...mergedDefaults, ...preservedCustomProviders]
+          providers: mergedProviders
         };
+        assertCatalogState(this.state);
         await this.write(this.state);
       } else {
         this.state = structuredClone(parsed);
