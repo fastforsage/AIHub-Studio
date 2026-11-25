@@ -10,6 +10,7 @@ import type { BrowserManagerState } from "../../browser/browserTypes";
 import type { LocalChatMessage } from "../../local-ai/localAiManager";
 import { formatBuildLabel } from "../../shared/versionLabel";
 import { buildWorkspaceTabs, type WorkspaceTab } from "../../shared/workspaceTabs";
+import { getInitiallyExpandedCategories, toggleExpandedCategory } from "../../shared/catalogNavigation";
 
 type MenuTarget =
   | { kind: "root" }
@@ -85,9 +86,7 @@ function App() {
     catalogApi.get().then((state) => {
       if (!cancelled) {
         setCatalog(state);
-        setExpandedCategoryIds(state.categories
-          .filter((category) => state.providers.some((provider) => provider.categoryIds.includes(category.id)))
-          .map((category) => category.id));
+        setExpandedCategoryIds(getInitiallyExpandedCategories(state.categories, state.providers));
         setError(null);
       }
     }).catch((reason: unknown) => {
@@ -476,17 +475,15 @@ function App() {
 
   function activateWorkspaceTab(tab: WorkspaceTab): void {
     setError(null);
-    if (tab.kind === "catalog") {
-      setWorkspaceMode("catalog");
-    } else if (tab.kind === "website") {
+    if (tab.kind === "website") {
       if (!browserApi) return;
       setWorkspaceMode("browser");
       void runBrowserAction(() => browserApi.activate(tab.browserTabId));
-    } else {
-      setLocalChatProviderId(tab.providerId);
-      setLocalChatDraft("");
-      setWorkspaceMode("local-chat");
+      return;
     }
+    setLocalChatProviderId(tab.providerId);
+    setLocalChatDraft("");
+    setWorkspaceMode("local-chat");
   }
 
   function closeLocalWorkspaceTab(providerId: string): void {
@@ -546,9 +543,7 @@ function App() {
                     aria-label={(expanded ? "Collapse " : "Expand ") + category.name}
                     aria-expanded={expanded} disabled={categoryProviders.length === 0}
                     onClick={() => setExpandedCategoryIds((current) =>
-                      current.includes(category.id)
-                        ? current.filter((id) => id !== category.id)
-                        : [...current, category.id]
+                      toggleExpandedCategory(current, category.id)
                     )}>{expanded ? "▾" : "▸"}</button>
                   <button className={activeCategory === category.id ? "category-item category-item-active" : "category-item"}
                     type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory(category.id); }}
