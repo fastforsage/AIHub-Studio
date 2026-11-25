@@ -90,7 +90,7 @@ describe("LocalAiManager.discoverModels", () => {
   it("handles malformed JSON", async () => {
     const manager = new LocalAiManager(async () => ({
       ok: true, status: 200, json: async () => { throw new Error("bad json"); }
-    } as Response));
+    } as unknown as Response));
     await expect(manager.discoverModels(provider())).rejects.toMatchObject({ code: "INVALID_JSON" });
   });
 
