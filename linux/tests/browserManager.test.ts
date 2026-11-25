@@ -186,12 +186,12 @@ describe("BrowserManager", () => {
     expect(mocks.state.sessions.size).toBe(1);
   });
 
-  it("creates different persistent sessions for different providers by default", async () => {
-    await manager.openWebsite(website("site-a"));
-    await manager.openWebsite(website("site-b"));
-
-    expect(mocks.state.partitions[0]).not.toBe(mocks.state.partitions[1]);
-    expect(mocks.state.sessions.size).toBe(2);
+  it("shares one persistent browser session across website tabs", async () => {
+    await manager.openWebsite(website("site-a", "legacy-profile-a"));
+    await manager.openWebsite(website("site-b", "legacy-profile-b"));
+    expect(mocks.state.partitions[0]).toMatch(/^persist:aihub-/);
+    expect(mocks.state.partitions[0]).toBe(mocks.state.partitions[1]);
+    expect(mocks.state.sessions.size).toBe(1);
   });
 
   it("reuses the existing tab when the same provider is opened twice", async () => {

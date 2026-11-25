@@ -42,7 +42,7 @@ const localAi: LocalAiApi = {
 
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
-  version: "0.1.0",
+  version: "0.1.2",
   catalog: Object.freeze(catalog),
   browser: Object.freeze(browser),
   localAi: Object.freeze(localAi)

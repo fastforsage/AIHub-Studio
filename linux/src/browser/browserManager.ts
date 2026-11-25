@@ -55,7 +55,7 @@ export class BrowserManager {
     const window = this.getWindow();
     if (!window || window.isDestroyed()) throw new Error("The application window is not available");
 
-    const partition = profilePartition(provider.profileId);
+    const partition = profilePartition("shared-workspace");
     const browserSession = session.fromPartition(partition);
     await this.configureSession(partition, browserSession);
 

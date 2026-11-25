@@ -9,6 +9,7 @@ import type {
 import type { BrowserManagerState } from "../../browser/browserTypes";
 import type { LocalChatMessage } from "../../local-ai/localAiManager";
 import { formatBuildLabel } from "../../shared/versionLabel";
+import { buildWorkspaceTabs, type WorkspaceTab } from "../../shared/workspaceTabs";
 
 type MenuTarget =
   | { kind: "root" }
@@ -64,6 +65,7 @@ function App() {
   const [browserState, setBrowserState] = useState<BrowserManagerState>({ tabs: [], activeTabId: null });
   const [workspaceMode, setWorkspaceMode] = useState<"catalog" | "browser" | "settings" | "local-chat">("catalog");
   const [localChatProviderId, setLocalChatProviderId] = useState<string | null>(null);
+  const [openLocalTabIds, setOpenLocalTabIds] = useState<string[]>([]);
   const [localChats, setLocalChats] = useState<Record<string, LocalChatMessage[]>>({});
   const [localChatDraft, setLocalChatDraft] = useState("");
   const [localSending, setLocalSending] = useState(false);
@@ -152,6 +154,17 @@ function App() {
     ? localProviderCandidate
     : null;
   const activeLocalMessages = localChatProviderId ? localChats[localChatProviderId] ?? [] : [];
+  const workspaceTabs = useMemo(
+    () => buildWorkspaceTabs(browserState.tabs, catalog.providers, openLocalTabIds),
+    [browserState.tabs, catalog.providers, openLocalTabIds]
+  );
+  const activeWorkspaceTabKey = workspaceMode === "catalog"
+    ? "catalog"
+    : workspaceMode === "browser" && activeBrowserTab
+      ? "website:" + activeBrowserTab.id
+      : workspaceMode === "local-chat" && localChatProviderId
+        ? "local:" + localChatProviderId
+        : null;
   const visibleProviders = useMemo(() => {
     if (activeCategory === "favorites") {
       return catalog.providers.filter((provider) => provider.favorite);
@@ -330,6 +343,7 @@ function App() {
     if (provider.type !== "local-api") return;
     setSelectedProviderId(provider.id);
     setLocalChatProviderId(provider.id);
+    setOpenLocalTabIds((current) => current.includes(provider.id) ? current : [...current, provider.id]);
     setLocalChatDraft("");
     setWorkspaceMode("local-chat");
     setError(null);
@@ -400,6 +414,7 @@ function App() {
     try {
       const next = await browserApi.openWebsite(provider.id);
       setBrowserState(next);
+      setSelectedProviderId(provider.id);
       setAddressValue(provider.url);
       setWorkspaceMode("browser");
     } catch (reason) {
@@ -432,11 +447,56 @@ function App() {
 
   function closeBrowserTab(tabId: string): void {
     if (!browserApi) return;
+    const wasActive = workspaceMode === "browser" && browserState.activeTabId === tabId;
     void runBrowserAction(async () => {
       const next = await browserApi.close(tabId);
-      if (next.tabs.length === 0) setWorkspaceMode("catalog");
+      if (wasActive && !next.activeTabId) {
+        const availableLocalIds = openLocalTabIds.filter((id) =>
+          catalog.providers.some((provider) => provider.id === id && provider.type === "local-api")
+        );
+        if (availableLocalIds.length > 0) {
+          setLocalChatProviderId(availableLocalIds.at(-1)!);
+          setWorkspaceMode("local-chat");
+        } else setWorkspaceMode("catalog");
+      }
       return next;
     });
+  }
+
+  function activateWorkspaceTab(tab: WorkspaceTab): void {
+    setError(null);
+    if (tab.kind === "catalog") {
+      setWorkspaceMode("catalog");
+    } else if (tab.kind === "website") {
+      if (!browserApi) return;
+      setWorkspaceMode("browser");
+      void runBrowserAction(() => browserApi.activate(tab.browserTabId));
+    } else {
+      setLocalChatProviderId(tab.providerId);
+      setLocalChatDraft("");
+      setWorkspaceMode("local-chat");
+    }
+  }
+
+  function closeLocalWorkspaceTab(providerId: string): void {
+    const remaining = openLocalTabIds.filter((id) => id !== providerId);
+    setOpenLocalTabIds(remaining);
+    if (workspaceMode !== "local-chat" || localChatProviderId !== providerId) return;
+    const availableLocalIds = remaining.filter((id) =>
+      catalog.providers.some((provider) => provider.id === id && provider.type === "local-api")
+    );
+    if (availableLocalIds.length > 0) {
+      setLocalChatProviderId(availableLocalIds.at(-1)!);
+      setLocalChatDraft("");
+    } else if (browserState.activeTabId && browserApi) {
+      setWorkspaceMode("browser");
+      void runBrowserAction(() => browserApi.activate(browserState.activeTabId!));
+    } else setWorkspaceMode("catalog");
+  }
+
+  function closeWorkspaceTab(tab: WorkspaceTab): void {
+    if (tab.kind === "website") closeBrowserTab(tab.browserTabId);
+    else if (tab.kind === "local-ai") closeLocalWorkspaceTab(tab.providerId);
   }
 
   return (
@@ -490,29 +550,37 @@ function App() {
       </aside>
 
       <main className="main-area">
-        <header className="topbar">
-          <div className="breadcrumb"><span className="muted">Workspace</span><span className="breadcrumb-separator">/</span><strong>{workspaceMode === "settings" ? "Settings" : workspaceMode === "browser" ? "Browser" : workspaceMode === "local-chat" ? activeLocalProvider?.name ?? "Local AI Chat" : activeCategoryName}</strong></div>
-          {workspaceMode === "catalog" && <button className="primary-button top-add" type="button" onClick={(event) => showContextMenu(event, { kind: "root" })}>＋ Add</button>}
+        <header className="workspace-topbar">
+          <div className="workspace-tabs" role="tablist" aria-label="Workspace tabs">
+            {workspaceTabs.map((tab) => {
+              const active = activeWorkspaceTabKey === tab.key;
+              return (
+                <div key={tab.key} className={active ? "workspace-tab workspace-tab-active" : "workspace-tab"}>
+                  <button className="workspace-tab-select" type="button" role="tab" aria-selected={active}
+                    title={tab.kind === "website" ? tab.url : tab.title} onClick={() => activateWorkspaceTab(tab)}>
+                    <span className={tab.kind === "local-ai" ? "workspace-tab-icon local-tab-icon" : tab.kind === "website" ? "workspace-tab-icon website-tab-icon" : "workspace-tab-icon catalog-tab-icon"}>
+                      {tab.kind === "catalog" ? "▦" : tab.kind === "local-ai" ? "⌘" : "◉"}
+                    </span>
+                    <span className="workspace-tab-label">{tab.title}</span>
+                    {tab.kind === "website" && tab.loading && <span className="workspace-tab-loading">◌</span>}
+                  </button>
+                  {tab.kind !== "catalog" && <button className="workspace-tab-close" type="button"
+                    title={"Close " + tab.title} aria-label={"Close " + tab.title} onClick={() => closeWorkspaceTab(tab)}>×</button>}
+                </div>
+              );
+            })}
+            <button className="workspace-new-tab" type="button" title="Add website or Local AI" aria-label="Add website or Local AI"
+              onClick={(event) => { setWorkspaceMode("catalog"); setActiveCategory("all"); showContextMenu(event, { kind: "root" }); }}>＋</button>
+          </div>
+          <div className="workspace-topbar-actions">
+            {workspaceMode === "catalog" && <button className="primary-button top-add" type="button"
+              onClick={(event) => showContextMenu(event, { kind: "root" })}>＋ Add</button>}
+          </div>
         </header>
 
         <section className="content-area">
           {workspaceMode === "browser" ? (
             <div className="browser-workspace">
-              <div className="browser-tab-strip">
-                <div className="browser-tabs">
-                  {browserState.tabs.map((tab) => (
-                    <div key={tab.id} className={tab.id === browserState.activeTabId ? "browser-tab browser-tab-active" : "browser-tab"}>
-                      <button type="button" className="browser-tab-title" onClick={() => browserApi && void runBrowserAction(() => browserApi.activate(tab.id))}>
-                        <span className="browser-tab-loading">{tab.loading ? "◌" : "◉"}</span>
-                        <span>{tab.title || tab.url}</span>
-                      </button>
-                      <button type="button" className="browser-tab-close" aria-label={"Close " + tab.title} onClick={() => closeBrowserTab(tab.id)}>×</button>
-                    </div>
-                  ))}
-                </div>
-                <button className="browser-back-catalog" type="button" onClick={() => setWorkspaceMode("catalog")}>Catalog</button>
-              </div>
-
               <div className="browser-toolbar">
                 <button className="browser-control" type="button" title="Back" disabled={!activeBrowserTab?.canGoBack} onClick={() => activeBrowserTab && browserApi && void runBrowserAction(() => browserApi.back(activeBrowserTab.id))}>←</button>
                 <button className="browser-control" type="button" title="Forward" disabled={!activeBrowserTab?.canGoForward} onClick={() => activeBrowserTab && browserApi && void runBrowserAction(() => browserApi.forward(activeBrowserTab.id))}>→</button>
@@ -539,7 +607,6 @@ function App() {
                   <p>{activeLocalProvider ? "http://" + activeLocalProvider.host + ":" + activeLocalProvider.port : "Connection is no longer available"}</p>
                 </div>
                 <div className="local-chat-header-actions">
-                  <button className="secondary-button" type="button" onClick={() => setWorkspaceMode("catalog")}>Back to catalog</button>
                   {activeLocalProvider && <button className="secondary-button" type="button" onClick={clearLocalChat}>Clear chat</button>}
                 </div>
               </div>
@@ -681,75 +748,44 @@ function App() {
           {error && <div className="alert alert-error" role="alert">{error}</div>}
           {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
-          <div className="catalog-layout">
-            <section className="provider-list" aria-label="AI connections">
-              {visibleProviders.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-icon">＋</div>
-                  <h2>No connections here yet</h2>
-                  <p>Add a cloud website or a local OpenAI-compatible endpoint.</p>
-                  <div className="empty-actions">
-                    <button className="secondary-button" type="button" onClick={() => openModal({ kind: "website-add" })}>Add website</button>
-                    <button className="primary-button" type="button" onClick={() => openModal({ kind: "local-add" })}>Add Local AI</button>
-                  </div>
+          <div className="connection-grid" aria-label="AI connections">
+            {visibleProviders.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">＋</div>
+                <h2>No connections here yet</h2>
+                <p>Add a cloud website or a local OpenAI-compatible endpoint.</p>
+                <div className="empty-actions">
+                  <button className="secondary-button" type="button" onClick={() => openModal({ kind: "website-add" })}>Add website</button>
+                  <button className="primary-button" type="button" onClick={() => openModal({ kind: "local-add" })}>Add Local AI</button>
                 </div>
-              ) : visibleProviders.map((provider) => (
-                <button
-                  key={provider.id}
-                  className={selectedProviderId === provider.id ? "provider-row provider-row-active" : "provider-row"}
-                  type="button"
-                  onClick={() => setSelectedProviderId(provider.id)}
-                  onContextMenu={(event) => showContextMenu(event, { kind: "provider", id: provider.id })}
-                >
+              </div>
+            ) : visibleProviders.map((provider) => (
+              <article key={provider.id}
+                className={selectedProviderId === provider.id ? "connection-card connection-card-selected" : "connection-card"}
+                onContextMenu={(event) => showContextMenu(event, { kind: "provider", id: provider.id })}>
+                <button className="connection-open" type="button"
+                  onClick={() => provider.type === "website" ? void openWebsite(provider) : void openLocalChat(provider)}
+                  title={provider.type === "website" ? "Open website in a workspace tab" : "Open Local AI chat in a workspace tab"}>
                   <span className={provider.type === "website" ? "provider-icon website-icon" : "provider-icon local-icon"}>
                     {provider.type === "website" ? "◉" : "⌘"}
                   </span>
-                  <span className="provider-main">
+                  <span className="connection-copy">
                     <span className="provider-name">{provider.name}</span>
                     <span className="provider-subtitle">{provider.type === "website" ? provider.url : provider.apiType + " · " + provider.host + ":" + provider.port}</span>
                   </span>
-                  {provider.favorite && <span className="provider-star" aria-label="Favorite">★</span>}
                   <span className={provider.type === "website" ? "type-pill cloud-pill" : "type-pill local-pill"}>{provider.type === "website" ? "CLOUD" : "LOCAL"}</span>
-                  <span className="row-menu" onClick={(event) => { event.stopPropagation(); showContextMenu(event, { kind: "provider", id: provider.id }); }}>⋯</span>
                 </button>
-              ))}
-            </section>
-
-            <aside className="details-panel">
-              {selectedProvider ? (
-                <>
-                  <div className="details-type">{selectedProvider.type === "website" ? "CLOUD WEBSITE" : "LOCAL API CONNECTION"}</div>
-                  <h2>{selectedProvider.name}</h2>
-                  <div className="detail-line"><span>Type</span><strong>{selectedProvider.type === "website" ? "Chromium website" : "OpenAI-compatible API"}</strong></div>
-                  {selectedProvider.type === "website" ? (
-                    <div className="detail-line"><span>URL</span><strong>{selectedProvider.url}</strong></div>
-                  ) : (
-                    <>
-                      <div className="detail-line"><span>Endpoint</span><strong>http://{selectedProvider.host}:{selectedProvider.port}</strong></div>
-                      <div className="detail-line"><span>Models</span><strong>{selectedProvider.models.length ? selectedProvider.models.length + " discovered" : "Not discovered"}</strong></div>
-                      {selectedProvider.selectedModel && <div className="detail-line"><span>Selected</span><strong>{selectedProvider.selectedModel}</strong></div>}
-                    </>
-                  )}
-                  <div className="detail-line"><span>Categories</span><strong>{selectedProvider.categoryIds.map((id) => catalog.categories.find((item) => item.id === id)?.name).filter(Boolean).join(", ") || "All AI"}</strong></div>
-                  <div className="detail-actions">
-                    <button className="secondary-button" type="button" onClick={() => openModal({ kind: "provider-edit", id: selectedProvider.id })}>Change</button>
-                    {selectedProvider.type === "website" && <button className="primary-button" type="button" onClick={() => void openWebsite(selectedProvider)}>Open in Chromium</button>}
-                    {selectedProvider.type === "local-api" && <>
-                      <button className="secondary-button" type="button" disabled={discoveringProviderId === selectedProvider.id} onClick={() => void refreshLocalModels(selectedProvider.id)}>{discoveringProviderId === selectedProvider.id ? "Checking…" : "Refresh models"}</button>
-                      <button className="primary-button" type="button" onClick={() => void openLocalChat(selectedProvider)}>Open Chat</button>
-                    </>}
-                    <button className="secondary-button" type="button" onClick={() => void commit(() => catalogApi!.setFavorite(selectedProvider.id, !selectedProvider.favorite))}>{selectedProvider.favorite ? "Unfavorite" : "Add to Favorites"}</button>
+                <div className="connection-card-footer">
+                  <span className="connection-hint">{provider.type === "website" ? "Open in Chromium" : provider.models.length ? provider.models.length + " model(s) discovered" : "Open local chat"}</span>
+                  <div className="connection-actions">
+                    {provider.favorite && <span className="provider-star" title="Favorite">★</span>}
+                    <button className="connection-menu" type="button" title={"Manage " + provider.name}
+                      aria-label={"Manage " + provider.name}
+                      onClick={(event) => showContextMenu(event, { kind: "provider", id: provider.id })}>⋯</button>
                   </div>
-                  <p className="detail-hint">{selectedProvider.type === "website" ? "Open the site in a persistent isolated Chromium profile." : "Discover available models and open a local chat in the shared workspace."}</p>
-                </>
-              ) : (
-                <div className="detail-placeholder">
-                  <div className="detail-placeholder-icon">⌘</div>
-                  <h2>Select a connection</h2>
-                  <p>Connection details and actions will appear here.</p>
                 </div>
-              )}
-            </aside>
+              </article>
+            ))}
           </div>
             </>
           )}
