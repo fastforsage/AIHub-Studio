@@ -150,7 +150,8 @@ describe("CatalogStore", () => {
       categories: defaults.categories.filter((category) => category.id !== "api-providers"),
       providers: defaults.providers.filter((provider) => !additions.includes(provider.id)).map((provider) => ({ ...provider }))
     };
-    const chatgpt = previous.providers.find((provider) => provider.id === "chatgpt")!;
+    const chatgpt = previous.providers.find((provider) => provider.id === "chatgpt");
+    if (!chatgpt || chatgpt.type !== "website") throw new Error("ChatGPT seed fixture is missing");
     chatgpt.favorite = true;
     chatgpt.enabled = false;
     chatgpt.profileId = "existing-chatgpt-profile";

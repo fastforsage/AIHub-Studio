@@ -316,6 +316,24 @@ describe("BrowserManager", () => {
     expect(mocks.state.views[1].webContents.close).toHaveBeenCalledOnce();
   });
 
+
+  it("keeps a failed website navigation in tab state instead of rejecting its IPC call", async () => {
+    const initial = await manager.openWebsite(website("unreachable"));
+    const tabId = initial.activeTabId!;
+    const view = mocks.state.views[0];
+    view.webContents.loadURL.mockRejectedValueOnce(new Error("net::ERR_NAME_NOT_RESOLVED"));
+
+    await expect(manager.navigate(tabId, "https://unreachable.invalid/"))
+      .resolves.toMatchObject({
+        activeTabId: tabId,
+        tabs: [expect.objectContaining({
+          id: tabId,
+          loading: false,
+          error: expect.stringContaining("ERR_NAME_NOT_RESOLVED")
+        })]
+      });
+  });
+
   it("rejects unsafe navigation protocols", async () => {
     await manager.openWebsite(website("site-a"));
     const tabId = manager.getState().tabs[0].id;

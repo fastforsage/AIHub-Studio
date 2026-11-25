@@ -154,14 +154,16 @@ export class BrowserManager {
 
     try {
       await contents.loadURL(url);
-    } catch {
+    } catch (reason) {
       const current = this.tabs.get(tabId);
       if (current) {
         current.loading = false;
-        current.error = "Navigation failed. Check the address and network connection.";
+        const reasonText = reason instanceof Error ? reason.message : "Network request failed";
+        current.error = "Navigation failed: " + reasonText.slice(0, 160) + ". Check the address, proxy and network connection.";
         this.publish();
       }
-      throw new Error("Navigation failed");
+      // A failed website navigation is tab state, not an IPC exception.
+      return this.getState();
     }
 
     return this.getState();
@@ -324,10 +326,12 @@ export class BrowserManager {
       this.publish();
     });
 
-    contents.on("did-fail-load", (_event, errorCode, _description, _validatedUrl, isMainFrame) => {
+    contents.on("did-fail-load", (_event, errorCode, description, _validatedUrl, isMainFrame) => {
       if (isMainFrame && errorCode !== -3) {
         tab.loading = false;
-        tab.error = "Page failed to load. Check the address and network connection.";
+        const detail = typeof description === "string" ? description.trim().slice(0, 140) : "";
+        tab.error = "Page failed to load (" + errorCode + ")" +
+          (detail ? ": " + detail : "") + ". Check the address, proxy and network connection.";
         this.publish();
       }
     });

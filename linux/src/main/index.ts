@@ -15,6 +15,19 @@ import { registerDiagnosticsIpc } from "./diagnosticsIpc";
 import { ServiceAvailabilityManager } from "./serviceAvailabilityManager";
 import { registerServiceAvailabilityIpc } from "./serviceAvailabilityIpc";
 
+const isLinuxWayland =
+  process.platform === "linux" &&
+  process.env.XDG_SESSION_TYPE?.toLocaleLowerCase() === "wayland";
+
+if (isLinuxWayland) {
+  // Some KDE/KWin Wayland compositors do not expose the color-management
+  // protocol features expected by this Chromium build.
+  app.commandLine.appendSwitch("disable-features", "WaylandWpColorManagerV1");
+  // Keep Chromium's compositor/GTK debug noise out of the user's terminal.
+  // App-level failures remain available in AIHub Studio's Diagnostics viewer.
+  app.commandLine.appendSwitch("log-level", "3");
+}
+
 const paths = resolveAppPaths(process.env);
 const sessionDataPath = join(paths.data, "sessions");
 
