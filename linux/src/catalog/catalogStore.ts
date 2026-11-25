@@ -8,6 +8,15 @@ import {
 } from "./catalogModel";
 import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
+const CURRENT_CATALOG_SEED_VERSION = 2;
+const INCREMENTAL_PROVIDER_IDS = new Set([
+  "alice-ai", "gigachat",
+  "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
+  "cerebras-inference", "sambanova-cloud", "modelscope",
+  "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+]);
+
+
 export class CatalogStore {
   private state: CatalogState | null = null;
   private pending: Promise<void> = Promise.resolve();
@@ -129,7 +138,13 @@ export class CatalogStore {
         await this.write(this.state);
       } else {
         this.state = structuredClone(parsed);
-        if (repaired.changed) await this.write(this.state);
+        if ((this.state.catalogSeedVersion ?? 0) < CURRENT_CATALOG_SEED_VERSION) {
+          this.state = mergeIncrementalProviderDefaults(this.state, currentDefaults);
+          assertCatalogState(this.state);
+          await this.write(this.state);
+        } else if (repaired.changed) {
+          await this.write(this.state);
+        }
       }
     } catch (error) {
       if (isMissingFile(error)) {
@@ -185,6 +200,82 @@ export class CatalogStore {
       throw error;
     }
   }
+}
+
+
+function mergeIncrementalProviderDefaults(state: CatalogState, defaults: CatalogState): CatalogState {
+  const next = structuredClone(state);
+  const defaultApiCategory = defaults.categories.find((category) => category.id === "api-providers");
+  const defaultChatbotCategory = defaults.categories.find((category) => category.id === "chatbot");
+  if (!defaultApiCategory || !defaultChatbotCategory) {
+    throw new Error("Incremental catalog seed is missing required categories");
+  }
+
+  const findCategory = (id: string, name: string) =>
+    next.categories.find((category => category.id === id)) ??
+    next.categories.find((category) => category.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+
+  let chatbotCategory = findCategory("chatbot", "chatbot");
+  if (!chatbotCategory) {
+    const legacyAiCategory = findCategory("ai", "AI");
+    if (legacyAiCategory) chatbotCategory = legacyAiCategory;
+    else {
+      next.categories.push({ ...defaultChatbotCategory });
+      chatbotCategory = next.categories[next.categories.length - 1];
+    }
+  }
+
+  let apiCategory = findCategory("api-providers", defaultApiCategory.name);
+  if (!apiCategory) {
+    next.categories.push({ ...defaultApiCategory });
+    apiCategory = next.categories[next.categories.length - 1];
+  }
+
+  const providerIds = new Set(next.providers.map((provider) => provider.id));
+  const normalizeUrl = (value: string): string => {
+    try { return new URL(value).href; } catch { return value.trim(); }
+  };
+  const normalizeName = (value: string): string => value.trim().toLocaleLowerCase();
+
+  for (const seeded of defaults.providers) {
+    if (!INCREMENTAL_PROVIDER_IDS.has(seeded.id) || providerIds.has(seeded.id)) continue;
+    const targetCategoryId = seeded.id === "alice-ai" || seeded.id === "gigachat"
+      ? chatbotCategory.id
+      : apiCategory.id;
+
+    const sameWebsite = seeded.type === "website"
+      ? next.providers.find((provider) =>
+          provider.type === "website" && normalizeUrl(provider.url) === normalizeUrl(seeded.url)
+        )
+      : undefined;
+    if (sameWebsite) {
+      sameWebsite.categoryIds = [...new Set([...sameWebsite.categoryIds, targetCategoryId])];
+      providerIds.add(seeded.id);
+      continue;
+    }
+
+    let name = seeded.name;
+    if (next.providers.some((provider) => normalizeName(provider.name) === normalizeName(name))) {
+      const baseName = name + " (AIHub)";
+      name = baseName;
+      let suffix = 2;
+      while (next.providers.some((provider) => normalizeName(provider.name) === normalizeName(name))) {
+        name = baseName + " " + suffix++;
+      }
+    }
+
+    next.providers.push({
+      ...seeded,
+      name,
+      categoryIds: [targetCategoryId],
+      favorite: false,
+      enabled: POPULAR_PROVIDER_IDS.includes(seeded.id)
+    });
+    providerIds.add(seeded.id);
+  }
+
+  next.catalogSeedVersion = CURRENT_CATALOG_SEED_VERSION;
+  return next;
 }
 
 function repairDuplicateProviderEntries(value: unknown): { catalog: unknown; changed: boolean } {

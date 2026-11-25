@@ -131,6 +131,88 @@ describe("CatalogStore", () => {
     expect(persisted.providers).toHaveLength(34);
   });
 
+
+  it("adds new built-in services to customized catalogs once without changing user entries", async () => {
+    const filePath = await createTemporaryCatalogPath();
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    const { createDefaultCatalog } = await import("../src/catalog/catalogModel");
+    const defaults = createDefaultCatalog();
+    const additions = [
+      "alice-ai", "gigachat",
+      "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
+      "cerebras-inference", "sambanova-cloud", "modelscope",
+      "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+    ];
+    const previous = {
+      version: 1,
+      catalogSeedVersion: 1,
+      categories: defaults.categories.filter((category) => category.id !== "api-providers"),
+      providers: defaults.providers.filter((provider) => !additions.includes(provider.id)).map((provider) => ({ ...provider }))
+    };
+    const chatgpt = previous.providers.find((provider) => provider.id === "chatgpt")!;
+    chatgpt.favorite = true;
+    chatgpt.enabled = false;
+    chatgpt.profileId = "existing-chatgpt-profile";
+    previous.providers.push({
+      id: "gemma-local",
+      name: "Gemma4-26B",
+      type: "local-api",
+      apiType: "openai",
+      host: "localhost",
+      port: 11434,
+      models: ["Gemma4-26B"],
+      selectedModel: "Gemma4-26B",
+      categoryIds: ["local-ai"],
+      favorite: true,
+      enabled: true
+    });
+    for (let index = 0; index < 5; index++) {
+      previous.providers.push({
+        id: "custom-site-" + index,
+        name: "Custom AI " + index,
+        type: "website",
+        url: "https://custom-ai-" + index + ".example/",
+        profileId: "custom-site-profile-" + index,
+        categoryIds: ["chatbot"],
+        favorite: index === 0,
+        enabled: true
+      });
+    }
+
+    expect(previous.providers).toHaveLength(26);
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify(previous), "utf8");
+
+    const store = new CatalogStore(filePath);
+    const upgraded = await store.initialize();
+    expect(upgraded.providers).toHaveLength(38);
+    expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
+    expect(upgraded.providers.find((provider) => provider.id === "alice-ai")).toMatchObject({
+      enabled: true, categoryIds: ["chatbot"]
+    });
+    expect(upgraded.providers.find((provider) => provider.id === "gigachat")).toMatchObject({
+      enabled: true, categoryIds: ["chatbot"]
+    });
+    expect(upgraded.providers.find((provider) => provider.id === "nvidia-nim")?.enabled).toBe(false);
+    expect(upgraded.providers.find((provider) => provider.id === "chatgpt")).toMatchObject({
+      favorite: true, enabled: false, profileId: "existing-chatgpt-profile"
+    });
+    expect(upgraded.providers.find((provider) => provider.id === "gemma-local")).toMatchObject({
+      host: "localhost", port: 11434, selectedModel: "Gemma4-26B", favorite: true
+    });
+
+    await store.transact((current) => ({
+      ...current,
+      providers: current.providers.filter((provider) => provider.id !== "alice-ai")
+    }));
+    const reloaded = new CatalogStore(filePath);
+    const afterUserDeletion = await reloaded.initialize();
+    expect(afterUserDeletion.catalogSeedVersion).toBe(2);
+    expect(afterUserDeletion.providers.some((provider) => provider.id === "alice-ai")).toBe(false);
+    expect(afterUserDeletion.providers).toHaveLength(37);
+  });
+
   it("writes config with owner-only permissions", async () => {
     const filePath = await createTemporaryCatalogPath();
     const store = new CatalogStore(filePath);

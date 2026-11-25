@@ -35,6 +35,7 @@ export type Provider = WebsiteProvider | LocalApiProvider;
 
 export interface CatalogState {
   version: 1;
+  catalogSeedVersion?: number;
   categories: Category[];
   providers: Provider[];
 }
@@ -106,6 +107,7 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
 export function createDefaultCatalog(): CatalogState {
   return {
     version: 1,
+    catalogSeedVersion: 2,
     categories: DEFAULT_CATEGORIES.map((item) => ({ ...item })),
     providers: DEFAULT_WEBSITES.map((item) => ({
       ...item,
@@ -395,6 +397,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function assertCatalogState(value: unknown): asserts value is CatalogState {
   if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.categories) || !Array.isArray(value.providers)) {
     throw new CatalogError("INVALID_CATALOG", "Catalog document has an unsupported structure or version");
+  }
+
+  if (value.catalogSeedVersion !== undefined &&
+      (typeof value.catalogSeedVersion !== "number" || !Number.isInteger(value.catalogSeedVersion) || value.catalogSeedVersion < 1)) {
+    throw new CatalogError("INVALID_CATALOG", "Catalog seed version is invalid");
   }
 
   const categoryIds = new Set<string>();
