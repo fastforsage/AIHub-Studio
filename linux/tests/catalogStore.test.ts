@@ -132,47 +132,37 @@ describe("CatalogStore", () => {
   });
 
 
-  it("adds new built-in services to customized catalogs once without changing user entries", async () => {
+  it("adds new built-in services to a 26-entry customized catalog exactly once", async () => {
     const filePath = await createTemporaryCatalogPath();
     const { mkdir, writeFile } = await import("node:fs/promises");
     const { dirname } = await import("node:path");
-    const { createDefaultCatalog } = await import("../src/catalog/catalogModel");
-    const defaults = createDefaultCatalog();
-    const additions = [
-      "alice-ai", "gigachat",
-      "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
-      "cerebras-inference", "sambanova-cloud", "modelscope",
-      "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+    const previousProviders: import("../src/catalog/catalogModel").Provider[] = [
+      {
+        id: "chatgpt",
+        name: "ChatGPT",
+        type: "website",
+        url: "https://chatgpt.com/",
+        profileId: "existing-chatgpt-profile",
+        categoryIds: ["chatbot"],
+        favorite: true,
+        enabled: false
+      },
+      {
+        id: "gemma-local",
+        name: "Gemma4-26B",
+        type: "local-api",
+        apiType: "openai",
+        host: "localhost",
+        port: 11434,
+        models: ["Gemma4-26B"],
+        selectedModel: "Gemma4-26B",
+        categoryIds: ["local-ai"],
+        favorite: true,
+        enabled: true
+      }
     ];
-    const previous = {
-      version: 1,
-      catalogSeedVersion: 1,
-      categories: defaults.categories.filter((category) => category.id !== "api-providers"),
-      providers: defaults.providers.filter((provider) => !additions.includes(provider.id)).map((provider) => ({
-        ...provider,
-        categoryIds: provider.categoryIds.filter((id) => id !== "api-providers")
-      }))
-    };
-    const chatgpt = previous.providers.find((provider) => provider.id === "chatgpt");
-    if (!chatgpt || chatgpt.type !== "website") throw new Error("ChatGPT seed fixture is missing");
-    chatgpt.favorite = true;
-    chatgpt.enabled = false;
-    chatgpt.profileId = "existing-chatgpt-profile";
-    previous.providers.push({
-      id: "gemma-local",
-      name: "Gemma4-26B",
-      type: "local-api",
-      apiType: "openai",
-      host: "localhost",
-      port: 11434,
-      models: ["Gemma4-26B"],
-      selectedModel: "Gemma4-26B",
-      categoryIds: ["local-ai"],
-      favorite: true,
-      enabled: true
-    });
-    for (let index = 0; index < 5; index++) {
-      previous.providers.push({
+    for (let index = 0; index < 24; index++) {
+      previousProviders.push({
         id: "custom-site-" + index,
         name: "Custom AI " + index,
         type: "website",
@@ -183,7 +173,15 @@ describe("CatalogStore", () => {
         enabled: true
       });
     }
-
+    const previous = {
+      version: 1,
+      catalogSeedVersion: 1,
+      categories: [
+        { id: "chatbot", name: "chatbot" },
+        { id: "local-ai", name: "Local AI" }
+      ],
+      providers: previousProviders
+    };
     expect(previous.providers).toHaveLength(26);
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, JSON.stringify(previous), "utf8");
