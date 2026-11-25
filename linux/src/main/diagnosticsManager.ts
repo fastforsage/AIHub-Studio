@@ -40,6 +40,7 @@ function validateSettings(value: unknown): LoggingSettings {
 
 function redact(input: string): string {
   return input
+    .replace(/(["']?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)["']?\s*:\s*["']?)(?:Bearer\s+)?[^"',}\s]+/gi, "$1[REDACTED]")
     .replace(/(authorization\s*[:=]\s*)Bearer\s+[^\s,;]+/gi, "$1Bearer [REDACTED]")
     .replace(/(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)(\s*[:=]\s*)[^\s,;]+/gi, "$1$2[REDACTED]")
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [REDACTED]")
