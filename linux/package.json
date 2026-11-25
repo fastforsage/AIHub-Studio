@@ -11,7 +11,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "smoke": "electron --no-sandbox smoke/browser-smoke.cjs",
-    "package:pacman": "npm run build && electron-builder --linux pacman --x64 --publish never"
+    "package:dir": "npm run build && electron-builder --linux dir --x64 --publish never"
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -48,7 +48,7 @@
     "linux": {
       "target": [
         {
-          "target": "pacman",
+          "target": "dir",
           "arch": [
             "x64"
           ]
@@ -71,18 +71,6 @@
       },
       "maintainer": "AIHub Studio Contributors <github@users.noreply.github.com>",
       "vendor": "AIHub Studio"
-    },
-    "pacman": {
-      "depends": [
-        "gtk3",
-        "libnotify",
-        "nss",
-        "libxss",
-        "libxtst",
-        "xdg-utils",
-        "at-spi2-core",
-        "libsecret"
-      ]
     }
   },
   "homepage": "https://github.com/fastforsage/AIHub-Studio",
