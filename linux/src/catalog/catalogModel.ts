@@ -257,6 +257,56 @@ export function updateProvider(
   return { ...state, providers: state.providers.map((provider) => provider.id === id ? updated : provider) };
 }
 
+
+export function updateLocalModels(
+  state: CatalogState,
+  id: string,
+  modelIds: string[]
+): CatalogState {
+  const provider = state.providers.find((item) => item.id === id);
+  if (!provider) throw new CatalogError("NOT_FOUND", "Connection was not found");
+  if (provider.type !== "local-api") {
+    throw new CatalogError("TYPE_MISMATCH", "Model discovery is only available for Local AI connections");
+  }
+  if (!Array.isArray(modelIds) || modelIds.some((model) => typeof model !== "string" || !model.trim())) {
+    throw new CatalogError("INVALID_MODELS", "Discovered model identifiers must be non-empty strings");
+  }
+
+  const models = [...new Set(modelIds.map((model) => model.trim()))];
+  const selectedModel = provider.selectedModel && models.includes(provider.selectedModel)
+    ? provider.selectedModel
+    : models[0];
+
+  return {
+    ...state,
+    providers: state.providers.map((item) => item.id === id && item.type === "local-api"
+      ? { ...item, models, selectedModel }
+      : item)
+  };
+}
+
+export function selectLocalModel(
+  state: CatalogState,
+  id: string,
+  modelId: string
+): CatalogState {
+  const provider = state.providers.find((item) => item.id === id);
+  if (!provider) throw new CatalogError("NOT_FOUND", "Connection was not found");
+  if (provider.type !== "local-api") {
+    throw new CatalogError("TYPE_MISMATCH", "Model selection is only available for Local AI connections");
+  }
+  if (!provider.models.includes(modelId)) {
+    throw new CatalogError("UNKNOWN_MODEL", "Selected model is not present in the discovered model list");
+  }
+
+  return {
+    ...state,
+    providers: state.providers.map((item) => item.id === id && item.type === "local-api"
+      ? { ...item, selectedModel: modelId }
+      : item)
+  };
+}
+
 export function deleteProvider(state: CatalogState, id: string): CatalogState {
   if (!state.providers.some((provider) => provider.id === id)) {
     throw new CatalogError("NOT_FOUND", "Connection was not found");
@@ -324,13 +374,15 @@ export function assertCatalogState(value: unknown): asserts value is CatalogStat
     } else if (item.type === "local-api") {
       if (item.apiType !== "openai" || typeof item.host !== "string" ||
           typeof item.port !== "number" || !Array.isArray(item.models) ||
-          item.models.some((model) => typeof model !== "string")) {
+          item.models.some((model) => typeof model !== "string" || !model.trim()) ||
+          new Set(item.models).size !== item.models.length) {
         throw new CatalogError("INVALID_CATALOG", "Catalog contains an invalid local API connection");
       }
       validateHost(item.host);
       validatePort(item.port);
-      if (item.selectedModel !== undefined && typeof item.selectedModel !== "string") {
-        throw new CatalogError("INVALID_CATALOG", "Selected model must be a string");
+      if (item.selectedModel !== undefined &&
+          (typeof item.selectedModel !== "string" || !item.models.includes(item.selectedModel))) {
+        throw new CatalogError("INVALID_CATALOG", "Selected model must exist in the discovered model list");
       }
     } else {
       throw new CatalogError("INVALID_CATALOG", "Catalog contains an unknown connection type");
