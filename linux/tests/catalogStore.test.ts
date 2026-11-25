@@ -53,7 +53,8 @@ describe("CatalogStore", () => {
       categories: current.categories.filter((category) => category.id !== "api-providers"),
       providers: current.providers.filter((provider) => ![
         "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
-        "modelscope", "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+        "cerebras-inference", "sambanova-cloud", "modelscope",
+        "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
       ].includes(provider.id)).map((provider) => ({
         ...provider,
         categoryIds: provider.categoryIds.filter((id) => id !== "api-providers"),

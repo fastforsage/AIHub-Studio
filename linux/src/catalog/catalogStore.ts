@@ -31,10 +31,24 @@ export class CatalogStore {
       const defaultCategoryIds = new Set(currentDefaults.categories.map((category) => category.id));
       const isLegacyStarterLayout = parsed.categories.length === legacyDefaultIds.size &&
         parsed.categories.every((category) => legacyDefaultIds.has(category.id));
-      const isPreviousCuratedCatalog = parsed.providers.length === previousProviderIds.size &&
-        parsed.providers.every((provider) => previousProviderIds.has(provider.id)) &&
-        parsed.categories.length === currentDefaults.categories.length &&
-        parsed.categories.every((category) => defaultCategoryIds.has(category.id));
+      const previousTwentyProviderIds = new Set(currentDefaults.providers
+        .filter((provider) => !newProviderIds.has(provider.id) && ![
+          "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
+          "modelscope", "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+        ].includes(provider.id))
+        .map((provider) => provider.id));
+      const previousElevenCategoryIds = new Set(currentDefaults.categories
+        .filter((category) => category.id !== "api-providers")
+        .map((category) => category.id));
+      const isPreviousCuratedCatalog =
+        (parsed.providers.length === previousProviderIds.size &&
+          parsed.providers.every((provider) => previousProviderIds.has(provider.id)) &&
+          parsed.categories.length === currentDefaults.categories.length &&
+          parsed.categories.every((category) => defaultCategoryIds.has(category.id))) ||
+        (parsed.providers.length === previousTwentyProviderIds.size &&
+          parsed.providers.every((provider) => previousTwentyProviderIds.has(provider.id)) &&
+          parsed.categories.length === previousElevenCategoryIds.size &&
+          parsed.categories.every((category) => previousElevenCategoryIds.has(category.id)));
 
       if (isLegacyStarterLayout || isPreviousCuratedCatalog) {
         const legacyCategoryMap: Record<string, string> = {
