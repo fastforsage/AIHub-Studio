@@ -47,3 +47,30 @@ jobs:
 
       - name: Chromium WebContentsView smoke test
         run: xvfb-run -a npm run smoke
+
+      - name: Build native Arch package
+        run: npm run package:pacman
+
+      - name: Validate and install package in Arch Linux container
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD/release:/packages:ro" \
+            archlinux:base bash -euc '
+              pacman -Sy --noconfirm
+              package="$(find /packages -maxdepth 1 -type f \\( -name "*.pacman" -o -name "*.pkg.tar.zst" \\) -print -quit)"
+              test -n "$package"
+              pacman -U --noconfirm "$package"
+              package_name="$(pacman -Qp "$package" | awk "{print \\$1}")"
+              pacman -Q "$package_name"
+              installed_files="$(pacman -Ql "$package_name")"
+              printf "%s\\n" "$installed_files" | grep -E "/usr/share/applications/.*\\.desktop$"
+              printf "%s\\n" "$installed_files" | grep -E "/opt/.*aihub-studio"
+            '
+
+      - name: Upload Arch package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AIHub-Studio-Linux-Arch-x64
+          path: linux/release/*
+          if-no-files-found: error
