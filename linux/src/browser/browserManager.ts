@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { BrowserWindow, WebContentsView, session } from "electron";
 import type { WebsiteProvider } from "../catalog/catalogModel";
 import { normalizeBrowserUrl, profilePartition, clampBrowserBounds } from "./browserUtils";
+import { normalizeProxyServer, toElectronProxyConfig } from "./proxyConfig";
 import type { BrowserBounds, BrowserManagerState, BrowserTabInfo } from "./browserTypes";
 
 interface BrowserTabRecord {
@@ -22,7 +23,9 @@ const HIDDEN_BOUNDS: BrowserBounds = { x: 0, y: 0, width: 0, height: 0 };
 
 export class BrowserManager {
   private readonly tabs = new Map<string, BrowserTabRecord>();
-  private readonly configuredPartitions = new Set<string>();
+  private readonly configuredPartitions = new Map<string, Promise<void>>();
+  private readonly sessionsByPartition = new Map<string, Electron.Session>();
+  private proxyServer: string | null = null;
   private activeTabId: string | null = null;
   private viewportBounds: BrowserBounds = HIDDEN_BOUNDS;
 
@@ -54,7 +57,7 @@ export class BrowserManager {
 
     const partition = profilePartition(provider.profileId);
     const browserSession = session.fromPartition(partition);
-    this.configureSession(partition, browserSession);
+    await this.configureSession(partition, browserSession);
 
     const view = new WebContentsView({
       webPreferences: {
@@ -215,13 +218,58 @@ export class BrowserManager {
     return this.getState();
   }
 
-  private configureSession(partition: string, browserSession: Electron.Session): void {
-    if (this.configuredPartitions.has(partition)) return;
+  getProxyServer(): string | null {
+    return this.proxyServer;
+  }
 
-    // Browser permissions are deny-by-default until an explicit permission UI is designed.
-    browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
-    browserSession.setPermissionCheckHandler(() => false);
-    this.configuredPartitions.add(partition);
+  async setProxyServer(input: string): Promise<string | null> {
+    const normalized = normalizeProxyServer(input);
+    if (input.trim() && !normalized) {
+      throw new Error("Proxy must be an HTTP, HTTPS, SOCKS4 or SOCKS5 address without credentials or a path");
+    }
+
+    const previous = this.proxyServer;
+    this.proxyServer = normalized;
+    try {
+      for (const browserSession of this.sessionsByPartition.values()) {
+        await browserSession.setProxy(toElectronProxyConfig(normalized));
+        await browserSession.closeAllConnections();
+      }
+    } catch {
+      this.proxyServer = previous;
+      await Promise.allSettled([...this.sessionsByPartition.values()].map(async (browserSession) => {
+        await browserSession.setProxy(toElectronProxyConfig(previous));
+        await browserSession.closeAllConnections();
+      }));
+      throw new Error("The proxy could not be applied to all browser profiles");
+    }
+
+    return this.proxyServer;
+  }
+
+  private async configureSession(partition: string, browserSession: Electron.Session): Promise<void> {
+    const existing = this.configuredPartitions.get(partition);
+    if (existing) {
+      await existing;
+      return;
+    }
+
+    const configuration = (async () => {
+      // Browser permissions are deny-by-default until an explicit permission UI is designed.
+      browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+      browserSession.setPermissionCheckHandler(() => false);
+      this.sessionsByPartition.set(partition, browserSession);
+      await browserSession.setProxy(toElectronProxyConfig(this.proxyServer));
+    })();
+
+    this.configuredPartitions.set(partition, configuration);
+    try {
+      await configuration;
+    } catch (error) {
+      this.configuredPartitions.delete(partition);
+      this.sessionsByPartition.delete(partition);
+      throw error;
+    }
   }
 
   private attachEvents(tab: BrowserTabRecord): void {
