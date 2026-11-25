@@ -673,3 +673,84 @@ h1 { margin: 12px 0 8px; color: #f4f5fa; font-size: 32px; font-weight: 650; lett
   .diagnostics-log-entry .log-message { grid-column: 1 / -1; }
   .diagnostics-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+
+/* Branded provider icons inspired by service identities */
+.provider-brand-icon {
+  display: inline-grid; flex: 0 0 34px; width: 34px; height: 34px;
+  place-items: center; overflow: hidden; border: 1px solid #404a61; border-radius: 10px;
+  color: #eef2ff; background: linear-gradient(145deg, #303a52, #202838);
+  font-weight: 800; font-size: 16px; line-height: 1; box-shadow: inset 0 1px 0 #ffffff12, 0 3px 10px #0003;
+}
+.provider-brand-icon-small { flex-basis: 21px; width: 21px; height: 21px; border-radius: 7px; font-size: 11px; }
+.provider-brand-icon-medium { flex-basis: 34px; width: 34px; height: 34px; }
+.provider-brand-icon-large { flex-basis: 42px; width: 42px; height: 42px; border-radius: 12px; font-size: 20px; }
+.provider-brand-yandex { color: #fff; border-color: #f24c4c; background: linear-gradient(145deg, #ff554e, #bd2028); }
+.provider-brand-sber { color: #ebfff5; border-color: #2ba77a; background: linear-gradient(145deg, #1ab77c, #087c68 58%, #2c8fbd); }
+.provider-brand-openai { color: #e6f0ff; background: linear-gradient(145deg, #33435b, #1a2738); }
+.provider-brand-anthropic { color: #f2d8bb; background: linear-gradient(145deg, #705846, #332820); }
+.provider-brand-google { color: #fff; background: linear-gradient(145deg, #3678e6, #2b448c); }
+.provider-brand-x { color: #f4f5f7; background: linear-gradient(145deg, #363c45, #15191f); }
+.provider-brand-deepseek { color: #b3d7ff; background: linear-gradient(145deg, #2361c3, #152b65); }
+.provider-brand-perplexity { color: #c4fff1; background: linear-gradient(145deg, #147e83, #174d5f); }
+.provider-brand-microsoft { color: #d5e9ff; background: linear-gradient(145deg, #335aaf, #27305c); }
+.provider-brand-mistral { color: #ffd6a1; background: linear-gradient(145deg, #ab5b22, #563116); }
+.provider-brand-openrouter { color: #f1e8ff; background: linear-gradient(145deg, #7959ad, #3a2e58); }
+.provider-brand-kimi { color: #dce6ff; background: linear-gradient(145deg, #3565c6, #233a7b); }
+.provider-brand-qwen { color: #e6d4ff; background: linear-gradient(145deg, #7651c6, #3b327c); }
+.provider-brand-poe { color: #fff; background: linear-gradient(145deg, #6f70d9, #373b91); }
+.provider-brand-suno { color: #ffe1ae; background: linear-gradient(145deg, #b04d28, #5d2d32); }
+.provider-brand-elevenlabs { color: #fff0d5; background: linear-gradient(145deg, #665342, #2b2829); }
+.provider-brand-deepl { color: #e1edff; background: linear-gradient(145deg, #2461bd, #18396e); }
+.provider-brand-gamma { color: #f0e1ff; background: linear-gradient(145deg, #8756d9, #46317b); }
+.provider-brand-nvidia { color: #ddffae; background: linear-gradient(145deg, #527e28, #244018); }
+.provider-brand-groq { color: #ffe0c3; background: linear-gradient(145deg, #bf5429, #6b2b1f); }
+.provider-brand-cloudflare { color: #ffe0b9; background: linear-gradient(145deg, #b86b2d, #663c25); }
+.provider-brand-cohere { color: #d8ffc7; background: linear-gradient(145deg, #5d8c44, #30482d); }
+.provider-brand-cerebras { color: #e1e8ff; background: linear-gradient(145deg, #5266b3, #273665); }
+.provider-brand-sambanova { color: #e4e0ff; background: linear-gradient(145deg, #6d5eb3, #38315f); }
+.provider-brand-modelscope { color: #d9f5ff; background: linear-gradient(145deg, #277d9b, #19465e); }
+.provider-brand-huggingface { color: #29241e; background: linear-gradient(145deg, #ffda7c, #c79238); }
+.provider-brand-opencode { color: #e0e6f0; background: linear-gradient(145deg, #545f70, #262c38); }
+.provider-brand-kilo { color: #e9e1ff; background: linear-gradient(145deg, #7953b9, #42316c); }
+.provider-brand-deepwiki { color: #c6f6ff; background: linear-gradient(145deg, #276e7c, #19424e); }
+.provider-brand-generic { color: #dce2f7; }
+
+/* Availability and regional status in catalog */
+.availability-toolbar {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 18px;
+  margin-bottom: 15px; padding: 14px 16px; border: 1px solid #34405a;
+  border-radius: 10px; background: linear-gradient(115deg, #202a41, #191f2c 70%);
+}
+.availability-toolbar-copy { display: grid; min-width: 0; gap: 6px; }
+.availability-toolbar-copy > strong { display: flex; align-items: center; gap: 9px; color: #e5ebff; font-size: 12px; }
+.availability-toolbar-copy > span { color: #9da9c1; font-size: 10px; line-height: 1.5; }
+.availability-toolbar-copy > small { max-width: 800px; color: #71819d; font-size: 8px; line-height: 1.5; }
+.availability-pulse { width: 9px; height: 9px; border-radius: 50%; background: #43c48a; box-shadow: 0 0 0 4px #43c48a20, 0 0 12px #43c48a66; }
+.availability-summary { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 2px 0; font-size: 9px; font-weight: 650; }
+.availability-count-good { color: #79d9a4; }
+.availability-count-warn { color: #e6c078; }
+.availability-count-region { color: #d7a3ff; }
+.availability-count-bad { color: #ed929c; }
+.availability-check-button { flex: 0 0 auto; min-height: 36px; white-space: nowrap; }
+.availability-badge { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; color: #aab7c9; font-size: 9px; font-weight: 700; }
+.availability-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #7b8799; }
+.availability-available { color: #7bd5a0; }
+.availability-available .availability-dot { background: #49c985; box-shadow: 0 0 8px #49c98566; }
+.availability-slow { color: #e5c078; }
+.availability-slow .availability-dot { background: #e0ad4a; }
+.availability-protected { color: #a9bcfa; }
+.availability-protected .availability-dot { background: #819cec; }
+.availability-regional-restriction { color: #d6a1fb; }
+.availability-regional-restriction .availability-dot { background: #b67ce7; }
+.availability-unavailable { color: #ee949c; }
+.availability-unavailable .availability-dot { background: #e16b78; }
+.connection-hint-stack { display: grid; min-width: 0; gap: 4px; }
+.connection-hint-stack small { max-width: 290px; overflow: hidden; color: #8290a8; font-size: 8px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.connection-card-footer { min-width: 0; }
+.connection-card-footer .connection-hint-stack { flex: 1; }
+.catalog-provider-option { gap: 7px; }
+.catalog-provider-option .provider-brand-icon { flex: 0 0 21px; }
+.catalog-local-icon { display: inline-grid; flex: 0 0 21px; width: 21px; height: 21px; place-items: center; border: 1px solid #315747; border-radius: 7px; color: #9cdbb9; background: #274235; font-size: 11px; }
+.settings-workspace-tab .settings-tab-icon { color: #d3ddff; border: 1px solid #42558e; background: linear-gradient(145deg, #3e5ca4, #26375d); }
+@media (max-width: 760px) { .availability-toolbar { align-items: stretch; flex-direction: column; } .availability-check-button { align-self: flex-start; } }
