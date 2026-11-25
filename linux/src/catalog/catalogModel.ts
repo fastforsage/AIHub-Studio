@@ -1,0 +1,341 @@
+import { randomUUID } from "node:crypto";
+import { normalizeWebsiteUrl } from "../shared/webUrl";
+
+export type ProviderKind = "website" | "local-api";
+
+export interface Category {
+  id: string;
+  name: string;
+}
+
+interface ProviderBase {
+  id: string;
+  name: string;
+  categoryIds: string[];
+  favorite: boolean;
+  enabled: boolean;
+}
+
+export interface WebsiteProvider extends ProviderBase {
+  type: "website";
+  url: string;
+  profileId: string;
+}
+
+export interface LocalApiProvider extends ProviderBase {
+  type: "local-api";
+  apiType: "openai";
+  host: string;
+  port: number;
+  models: string[];
+  selectedModel?: string;
+}
+
+export type Provider = WebsiteProvider | LocalApiProvider;
+
+export interface CatalogState {
+  version: 1;
+  categories: Category[];
+  providers: Provider[];
+}
+
+export type IdFactory = () => string;
+
+export class CatalogError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string
+  ) {
+    super(message);
+    this.name = "CatalogError";
+  }
+}
+
+export const DEFAULT_CATEGORIES: ReadonlyArray<Category> = [
+  { id: "ai", name: "AI" },
+  { id: "local-ai", name: "Local AI" },
+  { id: "dev", name: "Dev" },
+  { id: "community", name: "Community" },
+  { id: "design", name: "Design" },
+  { id: "email", name: "Email" },
+  { id: "video", name: "Video" }
+];
+
+export function createDefaultCatalog(): CatalogState {
+  return {
+    version: 1,
+    categories: DEFAULT_CATEGORIES.map((item) => ({ ...item })),
+    providers: []
+  };
+}
+
+function requireText(value: string, field: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new CatalogError("INVALID_INPUT", field + " must not be empty");
+  }
+  return normalized;
+}
+
+function ensureUniqueName(
+  name: string,
+  values: Array<{ id: string; name: string }>,
+  exceptId?: string
+): void {
+  const normalized = name.toLocaleLowerCase();
+  if (values.some((value) => value.id !== exceptId && value.name.toLocaleLowerCase() === normalized)) {
+    throw new CatalogError("DUPLICATE_NAME", "An item with this name already exists");
+  }
+}
+
+function requireCategoryIds(state: CatalogState, categoryIds: string[]): string[] {
+  const unique = [...new Set(categoryIds)];
+  if (unique.length !== categoryIds.length) {
+    throw new CatalogError("DUPLICATE_CATEGORY", "Category assignment contains duplicates");
+  }
+  for (const id of unique) {
+    if (!state.categories.some((category) => category.id === id)) {
+      throw new CatalogError("UNKNOWN_CATEGORY", "Unknown category: " + id);
+    }
+  }
+  return unique;
+}
+
+function validateHost(hostInput: string): string {
+  const host = requireText(hostInput, "Host");
+  if (/[/\\\s?#@]/.test(host) || /^[a-z][a-z\d+.-]*:/i.test(host)) {
+    throw new CatalogError("INVALID_HOST", "Host must contain only a hostname or IP address");
+  }
+
+  const urlHost = host.includes(":") && !host.startsWith("[") ? "[" + host + "]" : host;
+  try {
+    const parsed = new URL("http://" + urlHost + ":11434");
+    if (!parsed.hostname) throw new Error("missing hostname");
+  } catch {
+    throw new CatalogError("INVALID_HOST", "Host is not a valid hostname or IP address");
+  }
+  return host;
+}
+
+function validatePort(port: number): number {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new CatalogError("INVALID_PORT", "Port must be an integer from 1 to 65535");
+  }
+  return port;
+}
+
+export function addCategory(
+  state: CatalogState,
+  nameInput: string,
+  idFactory: IdFactory = randomUUID
+): CatalogState {
+  const name = requireText(nameInput, "Category name");
+  ensureUniqueName(name, state.categories);
+  const id = idFactory();
+  if (state.categories.some((category) => category.id === id) || state.providers.some((provider) => provider.id === id)) {
+    throw new CatalogError("DUPLICATE_ID", "Generated identifier already exists");
+  }
+  return { ...state, categories: [...state.categories, { id, name }] };
+}
+
+export function renameCategory(state: CatalogState, id: string, nameInput: string): CatalogState {
+  const current = state.categories.find((category) => category.id === id);
+  if (!current) throw new CatalogError("NOT_FOUND", "Category was not found");
+  const name = requireText(nameInput, "Category name");
+  ensureUniqueName(name, state.categories, id);
+  return {
+    ...state,
+    categories: state.categories.map((category) => category.id === id ? { ...category, name } : category)
+  };
+}
+
+export function deleteCategory(state: CatalogState, id: string): CatalogState {
+  if (!state.categories.some((category) => category.id === id)) {
+    throw new CatalogError("NOT_FOUND", "Category was not found");
+  }
+  return {
+    ...state,
+    categories: state.categories.filter((category) => category.id !== id),
+    providers: state.providers.map((provider) => ({
+      ...provider,
+      categoryIds: provider.categoryIds.filter((categoryId) => categoryId !== id)
+    }))
+  };
+}
+
+export interface AddWebsiteInput {
+  name: string;
+  url: string;
+  categoryIds?: string[];
+}
+
+export function addWebsiteProvider(
+  state: CatalogState,
+  input: AddWebsiteInput,
+  idFactory: IdFactory = randomUUID
+): CatalogState {
+  const name = requireText(input.name, "Website name");
+  ensureUniqueName(name, state.providers);
+  const url = normalizeWebsiteUrl(input.url);
+  if (!url) throw new CatalogError("INVALID_URL", "Only valid HTTP or HTTPS website URLs are supported");
+
+  const categoryIds = requireCategoryIds(state, input.categoryIds ?? ["ai"]);
+  const id = idFactory();
+  if (state.providers.some((provider) => provider.id === id) || state.categories.some((category) => category.id === id)) {
+    throw new CatalogError("DUPLICATE_ID", "Generated identifier already exists");
+  }
+
+  const provider: WebsiteProvider = {
+    id, name, type: "website", url, categoryIds, favorite: false, enabled: true, profileId: id
+  };
+  return { ...state, providers: [...state.providers, provider] };
+}
+
+export interface AddLocalApiInput {
+  name: string;
+  apiType?: "openai";
+  host: string;
+  port: number;
+  categoryIds?: string[];
+}
+
+export function addLocalApiProvider(
+  state: CatalogState,
+  input: AddLocalApiInput,
+  idFactory: IdFactory = randomUUID
+): CatalogState {
+  const name = requireText(input.name, "Connection name");
+  ensureUniqueName(name, state.providers);
+  if (input.apiType !== undefined && input.apiType !== "openai") {
+    throw new CatalogError("UNSUPPORTED_API", "Only OpenAI-compatible API is currently supported");
+  }
+
+  const host = validateHost(input.host);
+  const port = validatePort(input.port);
+  const categoryIds = requireCategoryIds(state, input.categoryIds ?? ["local-ai"]);
+  const id = idFactory();
+  if (state.providers.some((provider) => provider.id === id) || state.categories.some((category) => category.id === id)) {
+    throw new CatalogError("DUPLICATE_ID", "Generated identifier already exists");
+  }
+
+  const provider: LocalApiProvider = {
+    id, name, type: "local-api", apiType: "openai", host, port,
+    categoryIds, favorite: false, enabled: true, models: []
+  };
+  return { ...state, providers: [...state.providers, provider] };
+}
+
+export type ProviderUpdate =
+  | { type: "website"; name: string; url: string; categoryIds: string[] }
+  | { type: "local-api"; name: string; host: string; port: number; categoryIds: string[] };
+
+export function updateProvider(
+  state: CatalogState,
+  id: string,
+  update: ProviderUpdate
+): CatalogState {
+  const current = state.providers.find((provider) => provider.id === id);
+  if (!current) throw new CatalogError("NOT_FOUND", "Connection was not found");
+  if (current.type !== update.type) {
+    throw new CatalogError("TYPE_MISMATCH", "Connection type cannot be changed");
+  }
+
+  const name = requireText(update.name, "Connection name");
+  ensureUniqueName(name, state.providers, id);
+  const categoryIds = requireCategoryIds(state, update.categoryIds);
+
+  let updated: Provider;
+  if (update.type === "website") {
+    const url = normalizeWebsiteUrl(update.url);
+    if (!url) throw new CatalogError("INVALID_URL", "Only valid HTTP or HTTPS website URLs are supported");
+    updated = { ...current, name, url, categoryIds };
+  } else {
+    if (update.host === undefined) throw new CatalogError("INVALID_HOST", "Host is required");
+    const host = validateHost(update.host);
+    const port = validatePort(update.port);
+    updated = { ...current, name, host, port, categoryIds };
+  }
+
+  return { ...state, providers: state.providers.map((provider) => provider.id === id ? updated : provider) };
+}
+
+export function deleteProvider(state: CatalogState, id: string): CatalogState {
+  if (!state.providers.some((provider) => provider.id === id)) {
+    throw new CatalogError("NOT_FOUND", "Connection was not found");
+  }
+  return { ...state, providers: state.providers.filter((provider) => provider.id !== id) };
+}
+
+export function setProviderFavorite(state: CatalogState, id: string, favorite: boolean): CatalogState {
+  if (!state.providers.some((provider) => provider.id === id)) {
+    throw new CatalogError("NOT_FOUND", "Connection was not found");
+  }
+  return {
+    ...state,
+    providers: state.providers.map((provider) => provider.id === id ? { ...provider, favorite } : provider)
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function assertCatalogState(value: unknown): asserts value is CatalogState {
+  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.categories) || !Array.isArray(value.providers)) {
+    throw new CatalogError("INVALID_CATALOG", "Catalog document has an unsupported structure or version");
+  }
+
+  const categoryIds = new Set<string>();
+  const categoryNames = new Set<string>();
+  for (const item of value.categories) {
+    if (!isRecord(item) || typeof item.id !== "string" || !item.id || typeof item.name !== "string" || !item.name.trim()) {
+      throw new CatalogError("INVALID_CATALOG", "Catalog contains an invalid category");
+    }
+    if (categoryIds.has(item.id) || categoryNames.has(item.name.toLocaleLowerCase())) {
+      throw new CatalogError("INVALID_CATALOG", "Catalog contains duplicate category identifiers or names");
+    }
+    categoryIds.add(item.id);
+    categoryNames.add(item.name.toLocaleLowerCase());
+  }
+
+  const providerIds = new Set<string>();
+  const providerNames = new Set<string>();
+  for (const item of value.providers) {
+    if (!isRecord(item) || typeof item.id !== "string" || !item.id || typeof item.name !== "string" ||
+        !item.name.trim() || !Array.isArray(item.categoryIds) || typeof item.favorite !== "boolean" ||
+        typeof item.enabled !== "boolean") {
+      throw new CatalogError("INVALID_CATALOG", "Catalog contains an invalid connection");
+    }
+    if (providerIds.has(item.id) || providerNames.has(item.name.toLocaleLowerCase()) || categoryIds.has(item.id)) {
+      throw new CatalogError("INVALID_CATALOG", "Catalog contains duplicate connection identifiers or names");
+    }
+    providerIds.add(item.id);
+    providerNames.add(item.name.toLocaleLowerCase());
+
+    for (const categoryId of item.categoryIds) {
+      if (typeof categoryId !== "string" || !categoryIds.has(categoryId)) {
+        throw new CatalogError("INVALID_CATALOG", "Connection references a missing category");
+      }
+    }
+
+    if (item.type === "website") {
+      if (typeof item.url !== "string" || !normalizeWebsiteUrl(item.url) ||
+          typeof item.profileId !== "string" || !item.profileId) {
+        throw new CatalogError("INVALID_CATALOG", "Catalog contains an invalid website connection");
+      }
+    } else if (item.type === "local-api") {
+      if (item.apiType !== "openai" || typeof item.host !== "string" ||
+          typeof item.port !== "number" || !Array.isArray(item.models) ||
+          item.models.some((model) => typeof model !== "string")) {
+        throw new CatalogError("INVALID_CATALOG", "Catalog contains an invalid local API connection");
+      }
+      validateHost(item.host);
+      validatePort(item.port);
+      if (item.selectedModel !== undefined && typeof item.selectedModel !== "string") {
+        throw new CatalogError("INVALID_CATALOG", "Selected model must be a string");
+      }
+    } else {
+      throw new CatalogError("INVALID_CATALOG", "Catalog contains an unknown connection type");
+    }
+  }
+}
