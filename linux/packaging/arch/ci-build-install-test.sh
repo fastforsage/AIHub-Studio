@@ -28,6 +28,7 @@ fi
 
 package="${packages[0]}"
 package_name="$(pacman -Qp "$package" | awk '{print $1}')"
+export CARCH="$(uname -m)"
 source "$build_dir/PKGBUILD"
 pacman -S --noconfirm --needed "${depends[@]}"
 printf '%s\n' "Installing ${package_name} through pacman..."
