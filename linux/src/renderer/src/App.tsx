@@ -114,6 +114,22 @@ function App() {
   }, [catalogApi]);
 
   useEffect(() => {
+    if (workspaceMode !== "settings" || !diagnosticsApi) return;
+    let mounted = true;
+    Promise.all([diagnosticsApi.getStatus(), diagnosticsApi.getRecentLogs(200, logFilter)])
+      .then(([status, entries]) => {
+        if (!mounted) return;
+        setDiagnosticsStatus(status);
+        setLoggingSettings(status.settings);
+        setLogEntries(entries);
+      })
+      .catch((reason: unknown) => {
+        if (mounted) setError(errorMessage(reason));
+      });
+    return () => { mounted = false; };
+  }, [workspaceMode, diagnosticsApi, logFilter]);
+
+  useEffect(() => {
     if (!browserApi) return;
     let mounted = true;
     const unsubscribe = browserApi.onChanged((state) => {
