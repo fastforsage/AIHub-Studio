@@ -77,7 +77,9 @@ const mocks = vi.hoisted(() => {
       if (!state.sessions.has(partition)) {
         state.sessions.set(partition, {
           setPermissionRequestHandler: vi.fn(),
-          setPermissionCheckHandler: vi.fn()
+          setPermissionCheckHandler: vi.fn(),
+          setProxy: vi.fn(async () => undefined),
+          closeAllConnections: vi.fn(async () => undefined)
         });
       }
       return state.sessions.get(partition);
@@ -140,6 +142,39 @@ describe("BrowserManager", () => {
       webviewTag: false
     });
     expect(view.webContents.loadURL).toHaveBeenCalledWith("https://example.com/chatgpt");
+  });
+
+  it("applies system proxy mode before loading a new profile", async () => {
+    await manager.openWebsite(website("site-a"));
+    const browserSession = [...mocks.state.sessions.values()][0];
+    expect(browserSession.setProxy).toHaveBeenCalledWith({ mode: "system" });
+    expect(browserSession.setPermissionRequestHandler).toHaveBeenCalledOnce();
+    expect(browserSession.setPermissionCheckHandler).toHaveBeenCalledOnce();
+  });
+
+  it("applies proxy changes to existing sessions and closes pooled connections", async () => {
+    await manager.openWebsite(website("site-a"));
+    const browserSession = [...mocks.state.sessions.values()][0];
+
+    const configured = await manager.setProxyServer("127.0.0.1:8080");
+    expect(configured).toBe("http://127.0.0.1:8080");
+    expect(browserSession.setProxy).toHaveBeenLastCalledWith({
+      mode: "fixed_servers",
+      proxyRules: "http://127.0.0.1:8080"
+    });
+    expect(browserSession.closeAllConnections).toHaveBeenCalledOnce();
+
+    await manager.setProxyServer("");
+    expect(manager.getProxyServer()).toBeNull();
+    expect(browserSession.setProxy).toHaveBeenLastCalledWith({ mode: "system" });
+    expect(browserSession.closeAllConnections).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects invalid proxy values without replacing the active proxy", async () => {
+    await manager.setProxyServer("http://127.0.0.1:8080");
+    await expect(manager.setProxyServer("http://user:secret@proxy:8080"))
+      .rejects.toThrow("without credentials");
+    expect(manager.getProxyServer()).toBe("http://127.0.0.1:8080");
   });
 
   it("uses a stable persistent session per profile", async () => {
