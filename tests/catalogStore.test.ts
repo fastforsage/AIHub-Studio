@@ -222,7 +222,7 @@ describe("CatalogStore", () => {
     const store = new CatalogStore(filePath);
     await store.initialize();
     const info = await stat(filePath);
-    expect(info.mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(info.mode & 0o777).toBe(0o600);
   });
 
   it("serializes concurrent updates without losing either change", async () => {
