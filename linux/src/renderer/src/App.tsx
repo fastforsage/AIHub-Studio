@@ -12,6 +12,7 @@ import type { LocalChatMessage } from "../../local-ai/localAiManager";
 import { formatBuildLabel } from "../../shared/versionLabel";
 import { buildWorkspaceTabs, type WorkspaceTab } from "../../shared/workspaceTabs";
 import { getInitiallyExpandedCategories, toggleExpandedCategory } from "../../shared/catalogNavigation";
+import type { DiagnosticsStatus, LogEntry, LogLevel, LoggingSettings } from "../../shared/diagnosticsApi";
 
 type MenuTarget =
   | { kind: "root" }
@@ -55,6 +56,7 @@ function App() {
   const catalogApi = window.aihub?.catalog;
   const browserApi = window.aihub?.browser;
   const localAiApi = window.aihub?.localAi;
+  const diagnosticsApi = window.aihub?.diagnostics;
   const browserViewportRef = useRef<HTMLDivElement>(null);
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
   const [catalogSelection, setCatalogSelection] = useState<string[]>([]);
@@ -84,6 +86,13 @@ function App() {
   const [proxyServer, setProxyServer] = useState("");
   const [proxySaving, setProxySaving] = useState(false);
   const [proxyNotice, setProxyNotice] = useState<string | null>(null);
+  const [loggingSettings, setLoggingSettings] = useState<LoggingSettings>({
+    level: "info", fileEnabled: true, maxFileSizeMb: 10, maxFiles: 7, retentionDays: 7
+  });
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState<DiagnosticsStatus | null>(null);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const [logFilter, setLogFilter] = useState<LogLevel | "all">("all");
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
