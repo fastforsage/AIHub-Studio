@@ -62,30 +62,44 @@ export const DEFAULT_CATEGORIES: ReadonlyArray<Category> = [
   { id: "presentation-maker", name: "presentation maker" },
   { id: "image-generator", name: "image generator" },
   { id: "many-in-one", name: "many in one" },
+  { id: "api-providers", name: "API providers and aggregators" },
   { id: "local-ai", name: "Local AI" }
 ];
 
-const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; categoryId: string }> = [
-  { id: "chatgpt", name: "ChatGPT", url: "https://chatgpt.com/", categoryId: "chatbot" },
-  { id: "claude", name: "Claude", url: "https://claude.ai/", categoryId: "chatbot" },
-  { id: "gemini", name: "Gemini", url: "https://gemini.google.com/", categoryId: "chatbot" },
-  { id: "grok", name: "Grok", url: "https://grok.com/", categoryId: "chatbot" },
-  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/", categoryId: "chatbot" },
-  { id: "perplexity", name: "Perplexity", url: "https://www.perplexity.ai/", categoryId: "chatbot" },
-  { id: "copilot", name: "Copilot", url: "https://copilot.microsoft.com/", categoryId: "chatbot" },
-  { id: "mistral", name: "Mistral", url: "https://chat.mistral.ai/", categoryId: "chatbot" },
-  { id: "openrouter", name: "OpenRouter Chat", url: "https://openrouter.ai/chat", categoryId: "chatbot" },
-  { id: "kimi", name: "Kimi", url: "https://www.kimi.com/", categoryId: "chatbot" },
-  { id: "qwen", name: "Qwen", url: "https://chat.qwen.ai/", categoryId: "chatbot" },
-  { id: "google-ai-studio", name: "Google AI Studio", url: "https://aistudio.google.com/", categoryId: "chatbot" },
-  { id: "poe", name: "Poe", url: "https://poe.com/", categoryId: "chatbot" },
-  { id: "suno", name: "Suno", url: "https://suno.com/", categoryId: "music-generator" },
-  { id: "elevenlabs", name: "ElevenLabs", url: "https://elevenlabs.io/", categoryId: "voice-generator" },
-  { id: "notebooklm", name: "NotebookLM", url: "https://notebooklm.google.com/", categoryId: "research-assistant" },
-  { id: "deepwiki", name: "DeepWiki", url: "https://deepwiki.com/", categoryId: "research-assistant" },
-  { id: "deepl", name: "DeepL", url: "https://www.deepl.com/translator", categoryId: "translator" },
-  { id: "gamma", name: "Gamma", url: "https://gamma.app/", categoryId: "presentation-maker" },
-  { id: "google-labs", name: "Google Labs", url: "https://labs.google/", categoryId: "many-in-one" }
+export const POPULAR_PROVIDER_IDS: ReadonlyArray<string> = [
+  "chatgpt", "claude", "gemini", "deepseek", "qwen", "kimi",
+  "grok", "perplexity", "copilot", "mistral", "openrouter", "google-ai-studio"
+];
+
+const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; categoryIds: string[] }> = [
+  { id: "chatgpt", name: "ChatGPT", url: "https://chatgpt.com/", categoryIds: ["chatbot"] },
+  { id: "claude", name: "Claude", url: "https://claude.ai/", categoryIds: ["chatbot"] },
+  { id: "gemini", name: "Gemini", url: "https://gemini.google.com/", categoryIds: ["chatbot"] },
+  { id: "grok", name: "Grok", url: "https://grok.com/", categoryIds: ["chatbot"] },
+  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/", categoryIds: ["chatbot"] },
+  { id: "perplexity", name: "Perplexity", url: "https://www.perplexity.ai/", categoryIds: ["chatbot"] },
+  { id: "copilot", name: "Copilot", url: "https://copilot.microsoft.com/", categoryIds: ["chatbot"] },
+  { id: "mistral", name: "Mistral", url: "https://chat.mistral.ai/", categoryIds: ["chatbot", "api-providers"] },
+  { id: "openrouter", name: "OpenRouter Chat", url: "https://openrouter.ai/chat", categoryIds: ["chatbot"] },
+  { id: "kimi", name: "Kimi", url: "https://www.kimi.com/", categoryIds: ["chatbot"] },
+  { id: "qwen", name: "Qwen", url: "https://chat.qwen.ai/", categoryIds: ["chatbot"] },
+  { id: "google-ai-studio", name: "Google AI Studio", url: "https://aistudio.google.com/", categoryIds: ["chatbot", "api-providers"] },
+  { id: "poe", name: "Poe", url: "https://poe.com/", categoryIds: ["chatbot"] },
+  { id: "suno", name: "Suno", url: "https://suno.com/", categoryIds: ["music-generator"] },
+  { id: "elevenlabs", name: "ElevenLabs", url: "https://elevenlabs.io/", categoryIds: ["voice-generator"] },
+  { id: "notebooklm", name: "NotebookLM", url: "https://notebooklm.google.com/", categoryIds: ["research-assistant"] },
+  { id: "deepwiki", name: "DeepWiki", url: "https://deepwiki.com/", categoryIds: ["research-assistant"] },
+  { id: "deepl", name: "DeepL", url: "https://www.deepl.com/translator", categoryIds: ["translator"] },
+  { id: "gamma", name: "Gamma", url: "https://gamma.app/", categoryIds: ["presentation-maker"] },
+  { id: "google-labs", name: "Google Labs", url: "https://labs.google/", categoryIds: ["many-in-one"] },
+  { id: "nvidia-nim", name: "NVIDIA NIM", url: "https://build.nvidia.com/", categoryIds: ["api-providers"] },
+  { id: "groqcloud", name: "GroqCloud", url: "https://console.groq.com/", categoryIds: ["api-providers"] },
+  { id: "cloudflare-workers-ai", name: "Cloudflare Workers AI", url: "https://developers.cloudflare.com/workers-ai/", categoryIds: ["api-providers"] },
+  { id: "cohere", name: "Cohere", url: "https://dashboard.cohere.com/", categoryIds: ["api-providers"] },
+  { id: "modelscope", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers"] },
+  { id: "huggingface-inference", name: "Hugging Face Inference Providers", url: "https://huggingface.co/inference-providers", categoryIds: ["api-providers"] },
+  { id: "opencode-zen", name: "OpenCode Zen", url: "https://opencode.ai/", categoryIds: ["api-providers"] },
+  { id: "kilo-ai-gateway", name: "Kilo AI Gateway", url: "https://kilo.ai/", categoryIds: ["api-providers"] }
 ];
 
 export function createDefaultCatalog(): CatalogState {
@@ -95,9 +109,9 @@ export function createDefaultCatalog(): CatalogState {
     providers: DEFAULT_WEBSITES.map((item) => ({
       ...item,
       type: "website" as const,
-      categoryIds: [item.categoryId],
+      categoryIds: [...item.categoryIds],
       favorite: false,
-      enabled: true,
+      enabled: POPULAR_PROVIDER_IDS.includes(item.id),
       profileId: item.id
     }))
   };
@@ -355,6 +369,21 @@ export function setProviderFavorite(state: CatalogState, id: string, favorite: b
   return {
     ...state,
     providers: state.providers.map((provider) => provider.id === id ? { ...provider, favorite } : provider)
+  };
+}
+
+export function setEnabledProviders(state: CatalogState, enabledProviderIds: string[]): CatalogState {
+  const selected = new Set(enabledProviderIds);
+  if (selected.size !== enabledProviderIds.length) {
+    throw new CatalogError("DUPLICATE_PROVIDER", "Provider selection contains duplicates");
+  }
+  const knownIds = new Set(state.providers.map((provider) => provider.id));
+  for (const id of selected) {
+    if (!knownIds.has(id)) throw new CatalogError("NOT_FOUND", "Connection was not found: " + id);
+  }
+  return {
+    ...state,
+    providers: state.providers.map((provider) => ({ ...provider, enabled: selected.has(provider.id) }))
   };
 }
 

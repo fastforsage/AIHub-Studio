@@ -12,7 +12,8 @@ const catalog: CatalogApi = {
   addLocalApi: (input) => ipcRenderer.invoke("catalog:provider:add-local-api", input),
   updateProvider: (id, update) => ipcRenderer.invoke("catalog:provider:update", { id, update }),
   deleteProvider: (id) => ipcRenderer.invoke("catalog:provider:delete", { id }),
-  setFavorite: (id, favorite) => ipcRenderer.invoke("catalog:provider:favorite", { id, favorite })
+  setFavorite: (id, favorite) => ipcRenderer.invoke("catalog:provider:favorite", { id, favorite }),
+  setEnabledProviders: (providerIds) => ipcRenderer.invoke("catalog:providers:enabled", { providerIds })
 };
 
 const browser: BrowserApi = {
@@ -42,7 +43,7 @@ const localAi: LocalAiApi = {
 
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
-  version: "0.1.3",
+  version: "0.1.5",
   catalog: Object.freeze(catalog),
   browser: Object.freeze(browser),
   localAi: Object.freeze(localAi)

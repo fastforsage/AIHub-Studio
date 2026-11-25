@@ -15,4 +15,5 @@ export interface CatalogApi {
   updateProvider(id: string, update: ProviderUpdate): Promise<CatalogState>;
   deleteProvider(id: string): Promise<CatalogState>;
   setFavorite(id: string, favorite: boolean): Promise<CatalogState>;
+  setEnabledProviders(providerIds: string[]): Promise<CatalogState>;
 }

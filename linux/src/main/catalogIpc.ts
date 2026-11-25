@@ -7,6 +7,7 @@ import {
   deleteProvider,
   renameCategory,
   setProviderFavorite,
+  setEnabledProviders,
   updateProvider
 } from "../catalog/catalogModel";
 import { CatalogStore } from "../catalog/catalogStore";
@@ -141,5 +142,11 @@ export function registerCatalogIpc(store: CatalogStore, isTrusted: TrustedSender
     return store.transact((current) =>
       setProviderFavorite(current, stringField(input, "id"), input.favorite as boolean)
     );
+  });
+
+  ipcMain.handle("catalog:providers:enabled", (event, payload: unknown) => {
+    guard(event);
+    const input = record(payload);
+    return store.transact((current) => setEnabledProviders(current, stringArrayField(input, "providerIds")));
   });
 }

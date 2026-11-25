@@ -4,7 +4,8 @@ import { dirname, join } from "node:path";
 import {
   assertCatalogState,
   CatalogState,
-  createDefaultCatalog
+  createDefaultCatalog,
+  POPULAR_PROVIDER_IDS
 } from "./catalogModel";
 
 export class CatalogStore {
@@ -25,11 +26,45 @@ export class CatalogStore {
       const isUntouchedLegacyCatalog = parsed.providers.length === 0 &&
         parsed.categories.length === legacyDefaultIds.size &&
         parsed.categories.every((category) => legacyDefaultIds.has(category.id));
-      // Upgrade only the untouched starter catalog. Never overwrite a user's custom entries.
-      this.state = isUntouchedLegacyCatalog
-        ? createDefaultCatalog()
-        : structuredClone(parsed);
-      if (isUntouchedLegacyCatalog) await this.write(this.state);
+      const currentDefaults = createDefaultCatalog();
+      const previousDefaultIds = new Set(currentDefaults.providers
+        .filter((provider) => ![
+          "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
+          "modelscope", "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+        ].includes(provider.id))
+        .map((provider) => provider.id));
+      const previousCategoryIds = new Set(currentDefaults.categories
+        .filter((category) => category.id !== "api-providers")
+        .map((category) => category.id));
+      const isPreviousCuratedCatalog = parsed.providers.length === previousDefaultIds.size &&
+        parsed.providers.every((provider) => previousDefaultIds.has(provider.id)) &&
+        parsed.categories.length === previousCategoryIds.size &&
+        parsed.categories.every((category) => previousCategoryIds.has(category.id));
+
+      // Upgrade known untouched catalogs while preserving provider edits and category names.
+      if (isUntouchedLegacyCatalog) {
+        this.state = currentDefaults;
+      } else if (isPreviousCuratedCatalog) {
+        const previousProviders = new Map(parsed.providers.map((provider) => [provider.id, provider]));
+        const previousCategories = new Map(parsed.categories.map((category) => [category.id, category]));
+        this.state = {
+          ...currentDefaults,
+          categories: currentDefaults.categories.map((category) => previousCategories.get(category.id) ?? category),
+          providers: currentDefaults.providers.map((provider) => {
+            const previous = previousProviders.get(provider.id);
+            if (!previous) return provider;
+            return {
+              ...provider,
+              ...previous,
+              categoryIds: [...new Set([...previous.categoryIds, ...provider.categoryIds])],
+              enabled: POPULAR_PROVIDER_IDS.includes(provider.id)
+            };
+          })
+        };
+      } else {
+        this.state = structuredClone(parsed);
+      }
+      if (isUntouchedLegacyCatalog || isPreviousCuratedCatalog) await this.write(this.state);
     } catch (error) {
       if (isMissingFile(error)) {
         this.state = createDefaultCatalog();

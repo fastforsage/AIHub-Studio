@@ -27,11 +27,12 @@ describe("CatalogStore", () => {
     expect(initial.categories.map((category) => category.name)).toEqual([
       "chatbot", "music generator", "voice generator", "video generator",
       "writing helper", "research assistant", "translator", "presentation maker",
-      "image generator", "many in one", "Local AI"
+      "image generator", "many in one", "API providers and aggregators", "Local AI"
     ]);
     expect(initial.providers.map((provider) => provider.name)).toContain("ChatGPT");
     expect(initial.providers.map((provider) => provider.name)).toContain("Claude");
-    expect(initial.providers).toHaveLength(20);
+    expect(initial.providers).toHaveLength(28);
+    expect(initial.providers.filter((provider) => provider.enabled)).toHaveLength(12);
 
     await store.transact((current) => addCategory(current, "Research", () => "research"));
 
@@ -40,6 +41,35 @@ describe("CatalogStore", () => {
     expect(loaded.categories.at(-1)).toEqual({ id: "research", name: "Research" });
   });
 
+
+  it("upgrades the previous curated catalog with API providers and the popular-only selection", async () => {
+    const filePath = await createTemporaryCatalogPath();
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    const { createDefaultCatalog } = await import("../src/catalog/catalogModel");
+    const current = createDefaultCatalog();
+    const previous = {
+      ...current,
+      categories: current.categories.filter((category) => category.id !== "api-providers"),
+      providers: current.providers.filter((provider) => ![
+        "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
+        "modelscope", "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+      ].includes(provider.id)).map((provider) => ({
+        ...provider,
+        categoryIds: provider.categoryIds.filter((id) => id !== "api-providers"),
+        enabled: true
+      }))
+    };
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify(previous), "utf8");
+
+    const store = new CatalogStore(filePath);
+    const upgraded = await store.initialize();
+    expect(upgraded.providers).toHaveLength(28);
+    expect(upgraded.providers.filter((provider) => provider.enabled)).toHaveLength(12);
+    expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
+    expect(upgraded.providers.find((provider) => provider.id === "mistral")?.categoryIds).toContain("api-providers");
+  });
 
   it("migrates an untouched legacy starter catalog to the curated catalog", async () => {
     const filePath = await createTemporaryCatalogPath();
@@ -59,11 +89,11 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.providers).toHaveLength(20);
+    expect(migrated.providers).toHaveLength(28);
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
-    expect(persisted.providers).toHaveLength(20);
+    expect(persisted.providers).toHaveLength(28);
   });
 
   it("writes config with owner-only permissions", async () => {

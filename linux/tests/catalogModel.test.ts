@@ -5,6 +5,7 @@ import {
   addWebsiteProvider,
   CatalogError,
   createDefaultCatalog,
+  setEnabledProviders,
   deleteCategory,
   deleteProvider,
   renameCategory,
@@ -22,11 +23,23 @@ describe("catalog categories", () => {
     expect(catalog.categories.map((category) => category.name)).toEqual([
       "chatbot", "music generator", "voice generator", "video generator",
       "writing helper", "research assistant", "translator", "presentation maker",
-      "image generator", "many in one", "Local AI"
+      "image generator", "many in one", "API providers and aggregators", "Local AI"
     ]);
     expect(catalog.providers.map((provider) => provider.name)).toContain("ChatGPT");
     expect(catalog.providers.map((provider) => provider.name)).toContain("Claude");
-    expect(catalog.providers).toHaveLength(20);
+    expect(catalog.providers).toHaveLength(28);
+    expect(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id)).toEqual([
+      "chatgpt", "claude", "gemini", "deepseek", "qwen", "kimi",
+      "grok", "perplexity", "copilot", "mistral", "openrouter", "google-ai-studio"
+    ]);
+  });
+
+  it("changes the visible service selection without deleting catalog entries", () => {
+    const initial = createDefaultCatalog();
+    const selected = setEnabledProviders(initial, ["chatgpt", "groqcloud"]);
+    expect(selected.providers.filter((provider) => provider.enabled).map((provider) => provider.id)).toEqual(["chatgpt", "groqcloud"]);
+    expect(selected.providers).toHaveLength(initial.providers.length);
+    expect(() => setEnabledProviders(initial, ["missing-provider"])).toThrowError(CatalogError);
   });
 
   it("adds a trimmed category", () => {

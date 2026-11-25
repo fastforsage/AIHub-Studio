@@ -1,10 +1,11 @@
 import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  AddLocalApiInput,
-  AddWebsiteInput,
-  CatalogState,
-  Provider,
-  ProviderUpdate
+import {
+  POPULAR_PROVIDER_IDS,
+  type AddLocalApiInput,
+  type AddWebsiteInput,
+  type CatalogState,
+  type Provider,
+  type ProviderUpdate
 } from "../../catalog/catalogModel";
 import type { BrowserManagerState } from "../../browser/browserTypes";
 import type { LocalChatMessage } from "../../local-ai/localAiManager";
@@ -40,6 +41,7 @@ const EMPTY_CATALOG: CatalogState = {
     { id: "presentation-maker", name: "presentation maker" },
     { id: "image-generator", name: "image generator" },
     { id: "many-in-one", name: "many in one" },
+    { id: "api-providers", name: "API providers and aggregators" },
     { id: "local-ai", name: "Local AI" }
   ],
   providers: []
@@ -55,6 +57,9 @@ function App() {
   const localAiApi = window.aihub?.localAi;
   const browserViewportRef = useRef<HTMLDivElement>(null);
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
+  const [catalogSelection, setCatalogSelection] = useState<string[]>([]);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogSaving, setCatalogSaving] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<string[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
@@ -90,6 +95,7 @@ function App() {
     catalogApi.get().then((state) => {
       if (!cancelled) {
         setCatalog(state);
+        setCatalogSelection(state.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
         setExpandedCategoryIds(getInitiallyExpandedCategories(state.categories, state.providers));
         setError(null);
       }
@@ -171,11 +177,10 @@ function App() {
       ? "local:" + localChatProviderId
       : null;
   const visibleProviders = useMemo(() => {
-    if (activeCategory === "favorites") {
-      return catalog.providers.filter((provider) => provider.favorite);
-    }
-    if (activeCategory === "all") return catalog.providers;
-    return catalog.providers.filter((provider) => provider.categoryIds.includes(activeCategory));
+    const enabledProviders = catalog.providers.filter((provider) => provider.enabled);
+    if (activeCategory === "favorites") return enabledProviders.filter((provider) => provider.favorite);
+    if (activeCategory === "all") return enabledProviders;
+    return enabledProviders.filter((provider) => provider.categoryIds.includes(activeCategory));
   }, [catalog, activeCategory]);
 
   useEffect(() => {
@@ -205,6 +210,7 @@ function App() {
         ])]);
       }
       setCatalog(next);
+      setCatalogSelection(next.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
       setModal(null);
       setMenu(null);
       setNotice("Changes saved");
@@ -442,6 +448,38 @@ function App() {
     void runBrowserAction(() => browserApi.navigate(activeBrowserTab.id, addressValue));
   }
 
+  async function saveCatalogSelection(): Promise<void> {
+    if (!catalogApi || catalogSaving) return;
+    setCatalogSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await catalogApi.setEnabledProviders(catalogSelection);
+      setCatalog(next);
+      setCatalogSelection(next.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
+      setExpandedCategoryIds(getInitiallyExpandedCategories(next.categories, next.providers.filter((provider) => provider.enabled)));
+      if (selectedProviderId && !next.providers.some((provider) => provider.id === selectedProviderId && provider.enabled)) setSelectedProviderId(null);
+      setNotice("Catalog selection saved");
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setCatalogSaving(false);
+    }
+  }
+
+  function toggleCatalogProvider(providerId: string): void {
+    setCatalogSelection((current) => current.includes(providerId)
+      ? current.filter((id) => id !== providerId)
+      : [...current, providerId]);
+  }
+
+  function setCategorySelection(categoryId: string, selected: boolean): void {
+    const ids = catalog.providers.filter((provider) => provider.categoryIds.includes(categoryId)).map((provider) => provider.id);
+    setCatalogSelection((current) => selected
+      ? [...new Set([...current, ...ids])]
+      : current.filter((id) => !ids.includes(id)));
+  }
+
   async function saveProxySettings(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!browserApi || proxySaving) return;
@@ -524,10 +562,10 @@ function App() {
 
         <div className="sidebar-label">WORKSPACE</div>
         <button className={workspaceMode === "catalog" && activeCategory === "all" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("all"); }}>
-          <span className="nav-icon">▦</span><span>AI Catalog</span><span className="item-count">{catalog.providers.length}</span>
+          <span className="nav-icon">▦</span><span>AI Catalog</span><span className="item-count">{catalog.providers.filter((item) => item.enabled).length}</span>
         </button>
         <button className={workspaceMode === "catalog" && activeCategory === "favorites" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("favorites"); }}>
-          <span className="nav-icon favorite-icon">★</span><span>Favorites</span><span className="item-count">{catalog.providers.filter((item) => item.favorite).length}</span>
+          <span className="nav-icon favorite-icon">★</span><span>Favorites</span><span className="item-count">{catalog.providers.filter((item) => item.enabled && item.favorite).length}</span>
         </button>
 
         <div className="sidebar-divider" />
@@ -537,7 +575,7 @@ function App() {
         </div>
         <div className="category-list" aria-label="AI categories">
           {catalog.categories.map((category) => {
-            const categoryProviders = catalog.providers.filter((provider) => provider.categoryIds.includes(category.id));
+            const categoryProviders = catalog.providers.filter((provider) => provider.enabled && provider.categoryIds.includes(category.id));
             const expanded = expandedCategoryIds.includes(category.id);
             return (
               <div className="category-tree" key={category.id}>
@@ -583,7 +621,11 @@ function App() {
         </div>
 
         <div className="sidebar-spacer" />
-        <button className={workspaceMode === "settings" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => setWorkspaceMode("settings")}>
+        <button className={workspaceMode === "settings" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => {
+          setCatalogSelection(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
+          setCatalogSearch("");
+          setWorkspaceMode("settings");
+        }}>
           <span className="nav-icon">⚙</span><span>Settings</span>
         </button>
         <div className="sidebar-footer">
@@ -719,7 +761,65 @@ function App() {
               </div>
 
               {error && <div className="alert alert-error" role="alert">{error}</div>}
+              {notice && <div className="alert alert-success" role="status">{notice}</div>}
               {proxyNotice && <div className="alert alert-success" role="status">{proxyNotice}</div>}
+
+              <section className="settings-card catalog-settings-card">
+                <div className="settings-card-heading">
+                  <div className="settings-card-icon">▦</div>
+                  <div>
+                    <h2>AI catalog</h2>
+                    <p>Choose which services appear in the left sidebar. Unselected services remain available here.</p>
+                  </div>
+                </div>
+                <div className="catalog-selection-toolbar">
+                  <input aria-label="Search catalog" value={catalogSearch}
+                    onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search all AI services…" />
+                  <span>{catalogSelection.length} / {catalog.providers.length} selected</span>
+                </div>
+                <div className="catalog-selection-actions">
+                  <button className="secondary-button" type="button"
+                    onClick={() => setCatalogSelection([...new Set([...POPULAR_PROVIDER_IDS, ...catalog.providers.filter((provider) => provider.type === "local-api" && provider.enabled).map((provider) => provider.id)])])}>Popular set</button>
+                  <button className="secondary-button" type="button" onClick={() => setCatalogSelection(catalog.providers.map((provider) => provider.id))}>Select all</button>
+                  <button className="secondary-button" type="button" onClick={() => setCatalogSelection([])}>Clear selection</button>
+                </div>
+                <div className="catalog-category-list">
+                  {catalog.categories.map((category) => {
+                    const categoryProviders = catalog.providers.filter((provider) =>
+                      provider.categoryIds.includes(category.id) &&
+                      provider.name.toLocaleLowerCase().includes(catalogSearch.trim().toLocaleLowerCase())
+                    );
+                    if (categoryProviders.length === 0) return null;
+                    const selectedCount = categoryProviders.filter((provider) => catalogSelection.includes(provider.id)).length;
+                    return (
+                      <details className="catalog-category" key={category.id} open={catalogSearch.trim().length > 0 || selectedCount > 0}>
+                        <summary>
+                          <span className="catalog-category-title">{category.name}</span>
+                          <span className="catalog-category-count">{selectedCount} / {categoryProviders.length}</span>
+                        </summary>
+                        <div className="catalog-category-tools">
+                          <button type="button" onClick={() => setCategorySelection(category.id, true)}>Select category</button>
+                          <button type="button" onClick={() => setCategorySelection(category.id, false)}>Clear category</button>
+                        </div>
+                        <div className="catalog-provider-options">
+                          {categoryProviders.map((provider) => (
+                            <label className="catalog-provider-option" key={provider.id}>
+                              <input type="checkbox" checked={catalogSelection.includes(provider.id)}
+                                onChange={() => toggleCatalogProvider(provider.id)} />
+                              <span>{provider.name}</span>
+                              <small>{provider.type === "website" ? "Website" : "Local API"}</small>
+                            </label>
+                          ))}
+                        </div>
+                      </details>
+                    );
+                  })}
+                </div>
+                <div className="settings-actions">
+                  <button className="primary-button" type="button" disabled={catalogSaving}
+                    onClick={() => void saveCatalogSelection()}>{catalogSaving ? "Saving…" : "Apply selection"}</button>
+                </div>
+              </section>
 
               <form className="settings-card" onSubmit={saveProxySettings}>
                 <div className="settings-card-heading">
