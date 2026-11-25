@@ -1,45 +1,87 @@
 name: Build Windows MSI
+
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "smoke/**"
+      - "package.json"
+      - "electron.vite.config.ts"
+      - "tsconfig.json"
+      - "vitest.config.mts"
+      - "installer/**"
+      - ".github/workflows/build-windows-msi.yml"
+
 permissions:
-  contents: write
+  contents: read
+
+env:
+  CI: true
+
 jobs:
-  build:
+  windows-x64:
+    name: Windows 10 x64 tests and MSI
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
-          architecture: x64
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
-      - name: Build standalone application
+          node-version: 24.22.3
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Unit tests
+        run: npm test
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Electron production build
+        run: npm run build
+
+      - name: Chromium WebContentsView smoke test
+        run: npm run smoke
+
+      - name: Build Windows x64 application
+        run: npm run package:win
+
+      - name: Stage installer payload
         shell: pwsh
         run: |
-          python -m py_compile app/main.py
-          pyinstaller --noconfirm --clean --windowed --name AIHubStudio --collect-all PySide6 --hidden-import PySide6.QtWebEngineWidgets --hidden-import PySide6.QtWebEngineCore app/main.py
           New-Item -ItemType Directory -Force publish | Out-Null
-          Copy-Item -Recurse dist/AIHubStudio/* publish/
-      - name: Install pinned WiX Toolset v5
+          Copy-Item -Path "release/win-unpacked/*" -Destination publish -Recurse -Force
+          if (-not (Test-Path "publish/AIHub Studio.exe")) { throw "Electron executable missing from Windows payload" }
+
+      - name: Install pinned WiX Toolset
         shell: pwsh
         run: |
           dotnet tool install --tool-path .wix wix --version 5.0.2
           .\\.wix\\wix.exe --version
+
       - name: Build x64 MSI
         shell: pwsh
         run: .\\.wix\\wix.exe build installer/Product.wxs -arch x64 -out AIHubStudio-Setup-x64.msi
-      - uses: actions/upload-artifact@v4
+
+      - name: Verify MSI
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "AIHubStudio-Setup-x64.msi")) { throw "MSI was not produced" }
+          $item = Get-Item "AIHubStudio-Setup-x64.msi"
+          if ($item.Length -lt 1048576) { throw "MSI is unexpectedly small ($($item.Length) bytes)" }
+          Write-Host "MSI verified: $($item.Length) bytes"
+
+      - name: Upload Windows MSI
+        uses: actions/upload-artifact@v4
         with:
           name: AIHubStudio-Windows10-x64-MSI
           path: AIHubStudio-Setup-x64.msi
           if-no-files-found: error
-      - name: Attach MSI to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: AIHubStudio-Setup-x64.msi
+          retention-days: 14

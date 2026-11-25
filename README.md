@@ -1,22 +1,41 @@
 # AIHub Studio
 
-Windows 10 x64 desktop prototype for connecting to self-hosted AI services and a remote Linux GPU server.
+Cross-platform desktop workspace for cloud AI websites and local OpenAI-compatible models. The shared application is Electron + bundled Chromium + React + TypeScript.
 
-## Status
-Early prototype, not a full IDE yet. A source-code editor, integrated terminal, project manager, and native Docker API client are not implemented.
+## UI and functionality
 
-## Architecture
-- Windows client: PySide6 desktop shell with a single active Qt WebEngine chat surface, an Open WebUI-first assistant list, and persistent browser sessions.
-- Linux GPU host: FastAPI agent for AMD ROCm telemetry; GPU metrics are polled only from this remote agent (no local `nvidia-smi` polling).
-- Dockhand and Open WebUI: opened using their web interfaces.
-- Server addresses are configured locally in the application; no private hostnames, IP addresses, or ports are published in this repository.
+- Persistent left AI catalog with expandable categories and Favorites.
+- Add / Change / Del actions for categories and providers directly in the sidebar.
+- Cloud AI websites open as tabs in one shared workspace, with persistent Chromium profile and cookies.
+- Local AI connections use OpenAI-compatible `/v1/models` discovery and `/v1/chat/completions`.
+- Configurable HTTP, HTTPS, SOCKS4 and SOCKS5 proxy.
+- Settings and diagnostics/log viewer.
+- Secure renderer isolation and validated IPC bridge.
 
-## Build
-Use GitHub Actions → **Build Windows MSI** → **Run workflow**. Download the `AIHubStudio-Windows10-x64-MSI` artifact after the run completes.
+## Windows 10 x64
 
-## Configuration and privacy
-Configure protocol, DNS names/IP addresses, and ports for Dockhand, Open WebUI, and the GPU agent in the application's **Settings** tab. The AI area uses one active Qt WebEngine view with Open WebUI pinned above the searchable cloud-assistant list; assistants can be reordered and marked as favorites. Browser cookies and site storage persist under `%APPDATA%\AIHubStudio\web-profile`. The settings file is stored under `%APPDATA%\AIHubStudio\settings.json`; sensitive GPU Agent and proxy values are encrypted locally with Windows DPAPI, without a Windows Credential Manager prompt. The in-app log viewer reads `%APPDATA%\AIHubStudio\AIHubStudio.log`.
+The Windows build uses the same UI and Electron/Chromium runtime as Linux. App configuration is stored under `%APPDATA%\\AIHubStudio`; browser data under `%LOCALAPPDATA%\\AIHubStudio\\Data`; logs under `%LOCALAPPDATA%\\AIHubStudio\\Logs`.
 
-Do not commit local settings, bearer tokens, passwords, private DNS names, or private IP addresses. Keep the GPU agent reachable only over a trusted LAN/VPN and do not expose the Docker API to the public Internet.
+GitHub Actions workflow **Build Windows MSI** runs unit tests, TypeScript checks, Electron build, Chromium smoke test, creates a Windows x64 unpacked application and packages it as an MSI with pinned WiX Toolset 5.0.2.
 
-See [BUILD_MSI_RU.md](BUILD_MSI_RU.md) for build instructions.
+## Development
+
+Requires Node.js 24.22.x.
+
+```powershell
+npm install
+npm run dev
+npm test
+npm run typecheck
+npm run build
+npm run smoke
+npm run package:win
+```
+
+## Linux
+
+The original Linux implementation and Arch/CachyOS packaging workflow remain in `linux/`. The root application shares its Electron/React source and can be packaged for Linux with `npm run package:linux`.
+
+## Scope notes
+
+The current Linux-derived MVP does not yet include conversation capture/archive, SQLite history, attachment extraction/export, Dockhand integration or remote GPU telemetry. Those are separate follow-up subsystems, not silently claimed as implemented.
