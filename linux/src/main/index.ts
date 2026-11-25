@@ -3,10 +3,12 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserManager } from "../browser/browserManager";
 import { BrowserSettingsStore } from "../browser/browserSettingsStore";
+import { LocalAiManager } from "../local-ai/localAiManager";
 import { CatalogStore } from "../catalog/catalogStore";
 import { resolveAppPaths } from "../shared/appPaths";
 import { registerBrowserIpc } from "./browserIpc";
 import { registerCatalogIpc } from "./catalogIpc";
+import { registerLocalAiIpc } from "./localAiIpc";
 
 const paths = resolveAppPaths(process.env);
 const sessionDataPath = join(paths.data, "sessions");
@@ -85,6 +87,7 @@ async function bootstrap(): Promise<void> {
 
   registerCatalogIpc(catalogStore, isTrustedRenderer);
   registerBrowserIpc(browserManager, catalogStore, browserSettings, isTrustedRenderer);
+  registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
   createMainWindow();
 }
 
