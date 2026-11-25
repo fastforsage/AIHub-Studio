@@ -1,0 +1,67 @@
+# Maintainer: AIHub Studio Contributors <github@users.noreply.github.com>
+pkgname=aihub-studio
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Chromium-based workspace for cloud AI websites and local language models"
+arch=('x86_64')
+url="https://github.com/fastforsage/AIHub-Studio"
+license=('unknown')
+depends=(
+  'alsa-lib'
+  'at-spi2-core'
+  'cairo'
+  'cups'
+  'dbus'
+  'gdk-pixbuf2'
+  'glib2'
+  'gtk3'
+  'libdrm'
+  'libnotify'
+  'libsecret'
+  'libx11'
+  'libxcb'
+  'libxcomposite'
+  'libxdamage'
+  'libxext'
+  'libxfixes'
+  'libxkbcommon'
+  'libxrandr'
+  'libxrender'
+  'libxshmfence'
+  'libxss'
+  'libxtst'
+  'mesa'
+  'nss'
+  'pango'
+  'xdg-utils'
+)
+source=("aihub-studio-${pkgver}-linux-${CARCH}.tar.gz")
+sha256sums=('SKIP')
+options=('!strip')
+
+package() {
+  install -d "${pkgdir}/opt/aihub-studio"
+  cp -a "${srcdir}/linux-unpacked/." "${pkgdir}/opt/aihub-studio/"
+
+  if [[ ! -x "${pkgdir}/opt/aihub-studio/aihub-studio" ]]; then
+    error "Electron application executable is missing"
+    return 1
+  fi
+
+  install -d "${pkgdir}/usr/bin"
+  ln -s /opt/aihub-studio/aihub-studio "${pkgdir}/usr/bin/aihub-studio"
+
+  install -Dm644 /dev/stdin "${pkgdir}/usr/share/applications/aihub-studio.desktop" <<'DESKTOP'
+[Desktop Entry]
+Type=Application
+Name=AIHub Studio
+GenericName=AI Workspace
+Comment=Cloud AI websites and local language models in one workspace
+Exec=aihub-studio %U
+Icon=applications-development
+Terminal=false
+Categories=Development;Utility;
+Keywords=AI;LLM;Chat;Chromium;Local AI;
+StartupNotify=true
+DESKTOP
+}
