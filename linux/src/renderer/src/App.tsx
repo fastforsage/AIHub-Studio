@@ -1,12 +1,12 @@
 import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import {
-  POPULAR_PROVIDER_IDS,
-  type AddLocalApiInput,
+import type {
+  AddLocalApiInput,
   type AddWebsiteInput,
   type CatalogState,
   type Provider,
   type ProviderUpdate
 } from "../../catalog/catalogModel";
+import { POPULAR_PROVIDER_IDS } from "../../catalog/catalogDefaults";
 import type { BrowserManagerState } from "../../browser/browserTypes";
 import type { LocalChatMessage } from "../../local-ai/localAiManager";
 import { formatBuildLabel } from "../../shared/versionLabel";

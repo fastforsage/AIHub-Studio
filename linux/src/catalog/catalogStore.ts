@@ -4,9 +4,9 @@ import { dirname, join } from "node:path";
 import {
   assertCatalogState,
   CatalogState,
-  createDefaultCatalog,
-  POPULAR_PROVIDER_IDS
+  createDefaultCatalog
 } from "./catalogModel";
+import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
 export class CatalogStore {
   private state: CatalogState | null = null;

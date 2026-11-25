@@ -66,10 +66,7 @@ export const DEFAULT_CATEGORIES: ReadonlyArray<Category> = [
   { id: "local-ai", name: "Local AI" }
 ];
 
-export const POPULAR_PROVIDER_IDS: ReadonlyArray<string> = [
-  "chatgpt", "claude", "gemini", "deepseek", "qwen", "kimi",
-  "grok", "perplexity", "copilot", "mistral", "openrouter", "google-ai-studio"
-];
+import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
 const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; categoryIds: string[] }> = [
   { id: "chatgpt", name: "ChatGPT", url: "https://chatgpt.com/", categoryIds: ["chatbot"] },
