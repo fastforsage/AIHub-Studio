@@ -33,6 +33,10 @@ The original Linux implementation and Arch/CachyOS packaging workflow remain in 
 ## Scope notes
 
 The current alpha does not include automatic conversation capture/archive, SQLite chat history, attachment extraction/export, Dockhand integration or remote GPU telemetry.
+## License
+
+This project is distributed under the [MIT License](LICENSE). Third-party dependencies and provider trademarks remain subject to their respective licenses and terms.
+
 ---
 
 ## Отказ от ответственности / Disclaimer
