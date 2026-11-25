@@ -3,6 +3,7 @@ import type { BrowserApi } from "../shared/browserApi";
 import type { CatalogApi } from "../shared/catalogApi";
 import type { LocalAiApi } from "../shared/localAiApi";
 import type { DiagnosticsApi } from "../shared/diagnosticsApi";
+import type { ServiceAvailabilityApi } from "../shared/availabilityApi";
 
 const catalog: CatalogApi = {
   get: () => ipcRenderer.invoke("catalog:get"),
@@ -54,11 +55,16 @@ const diagnostics: DiagnosticsApi = {
   openLogDirectory: () => ipcRenderer.invoke("diagnostics:folder:open")
 };
 
+const availability: ServiceAvailabilityApi = {
+  checkCatalog: () => ipcRenderer.invoke("availability:check-catalog")
+};
+
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
   version: "0.1.5",
   catalog: Object.freeze(catalog),
   browser: Object.freeze(browser),
   localAi: Object.freeze(localAi),
-  diagnostics: Object.freeze(diagnostics)
+  diagnostics: Object.freeze(diagnostics),
+  availability: Object.freeze(availability)
 }));
