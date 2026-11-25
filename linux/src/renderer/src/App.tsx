@@ -51,6 +51,7 @@ function App() {
   const browserViewportRef = useRef<HTMLDivElement>(null);
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
   const [activeCategory, setActiveCategory] = useState("all");
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<string[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const [menu, setMenu] = useState<ContextMenuState>(null);
   const [modal, setModal] = useState<ModalState>(null);
@@ -84,6 +85,9 @@ function App() {
     catalogApi.get().then((state) => {
       if (!cancelled) {
         setCatalog(state);
+        setExpandedCategoryIds(state.categories
+          .filter((category) => state.providers.some((provider) => provider.categoryIds.includes(category.id)))
+          .map((category) => category.id));
         setError(null);
       }
     }).catch((reason: unknown) => {
@@ -158,13 +162,11 @@ function App() {
     () => buildWorkspaceTabs(browserState.tabs, catalog.providers, openLocalTabIds),
     [browserState.tabs, catalog.providers, openLocalTabIds]
   );
-  const activeWorkspaceTabKey = workspaceMode === "catalog"
-    ? "catalog"
-    : workspaceMode === "browser" && activeBrowserTab
-      ? "website:" + activeBrowserTab.id
-      : workspaceMode === "local-chat" && localChatProviderId
-        ? "local:" + localChatProviderId
-        : null;
+  const activeWorkspaceTabKey = workspaceMode === "browser" && activeBrowserTab
+    ? "website:" + activeBrowserTab.id
+    : workspaceMode === "local-chat" && localChatProviderId
+      ? "local:" + localChatProviderId
+      : null;
   const visibleProviders = useMemo(() => {
     if (activeCategory === "favorites") {
       return catalog.providers.filter((provider) => provider.favorite);
@@ -190,6 +192,15 @@ function App() {
     setNotice(null);
     try {
       const next = await operation();
+      const newlyAddedProviders = next.providers.filter((provider) =>
+        !catalog.providers.some((existing) => existing.id === provider.id)
+      );
+      if (newlyAddedProviders.length > 0) {
+        setExpandedCategoryIds((current) => [...new Set([
+          ...current,
+          ...newlyAddedProviders.flatMap((provider) => provider.categoryIds)
+        ])]);
+      }
       setCatalog(next);
       setModal(null);
       setMenu(null);
@@ -523,20 +534,53 @@ function App() {
           <div className="sidebar-label">CATEGORIES</div>
           <button className="icon-button" type="button" title="Add category" onClick={() => openModal({ kind: "category-add" })} onContextMenu={(event) => showContextMenu(event, { kind: "root" })}>＋</button>
         </div>
-        <div className="category-list">
-          {catalog.categories.map((category) => (
-            <button
-              key={category.id}
-              className={activeCategory === category.id ? "category-item category-item-active" : "category-item"}
-              type="button"
-              onClick={() => { setWorkspaceMode("catalog"); setActiveCategory(category.id); }}
-              onContextMenu={(event) => showContextMenu(event, { kind: "category", id: category.id })}
-            >
-              <span className="folder-icon">▰</span>
-              <span className="category-name">{category.name}</span>
-              <span className="item-count">{catalog.providers.filter((item) => item.categoryIds.includes(category.id)).length}</span>
-            </button>
-          ))}
+        <div className="category-list" aria-label="AI categories">
+          {catalog.categories.map((category) => {
+            const categoryProviders = catalog.providers.filter((provider) => provider.categoryIds.includes(category.id));
+            const expanded = expandedCategoryIds.includes(category.id);
+            return (
+              <div className="category-tree" key={category.id}>
+                <div className={activeCategory === category.id ? "category-tree-row category-tree-row-active" : "category-tree-row"}
+                  onContextMenu={(event) => showContextMenu(event, { kind: "category", id: category.id })}>
+                  <button className="category-expand" type="button"
+                    aria-label={(expanded ? "Collapse " : "Expand ") + category.name}
+                    aria-expanded={expanded} disabled={categoryProviders.length === 0}
+                    onClick={() => setExpandedCategoryIds((current) =>
+                      current.includes(category.id)
+                        ? current.filter((id) => id !== category.id)
+                        : [...current, category.id]
+                    )}>{expanded ? "▾" : "▸"}</button>
+                  <button className={activeCategory === category.id ? "category-item category-item-active" : "category-item"}
+                    type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory(category.id); }}
+                    onContextMenu={(event) => showContextMenu(event, { kind: "category", id: category.id })}>
+                    <span className="folder-icon">▰</span>
+                    <span className="category-name">{category.name}</span>
+                    <span className="item-count">{categoryProviders.length}</span>
+                  </button>
+                </div>
+                {expanded && categoryProviders.length > 0 && (
+                  <div className="category-children">
+                    {categoryProviders.map((provider) => (
+                      <button key={provider.id} className="category-provider" type="button"
+                        title={provider.type === "website" ? provider.url : provider.name}
+                        onClick={() => {
+                          setSelectedProviderId(provider.id);
+                          if (provider.type === "website") void openWebsite(provider);
+                          else void openLocalChat(provider);
+                        }}
+                        onContextMenu={(event) => showContextMenu(event, { kind: "provider", id: provider.id })}>
+                        <span className={provider.type === "website" ? "category-provider-icon website-provider-icon" : "category-provider-icon local-provider-icon"}>
+                          {provider.type === "website" ? "◉" : "⌘"}
+                        </span>
+                        <span className="category-provider-name">{provider.name}</span>
+                        {provider.favorite && <span className="category-provider-star">★</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="sidebar-spacer" />
@@ -551,30 +595,27 @@ function App() {
 
       <main className="main-area">
         <header className="workspace-topbar">
-          <div className="workspace-tabs" role="tablist" aria-label="Workspace tabs">
+          <div className="workspace-tabs" role="tablist" aria-label="Open AI workspaces">
             {workspaceTabs.map((tab) => {
               const active = activeWorkspaceTabKey === tab.key;
               return (
                 <div key={tab.key} className={active ? "workspace-tab workspace-tab-active" : "workspace-tab"}>
                   <button className="workspace-tab-select" type="button" role="tab" aria-selected={active}
                     title={tab.kind === "website" ? tab.url : tab.title} onClick={() => activateWorkspaceTab(tab)}>
-                    <span className={tab.kind === "local-ai" ? "workspace-tab-icon local-tab-icon" : tab.kind === "website" ? "workspace-tab-icon website-tab-icon" : "workspace-tab-icon catalog-tab-icon"}>
-                      {tab.kind === "catalog" ? "▦" : tab.kind === "local-ai" ? "⌘" : "◉"}
+                    <span className={tab.kind === "local-ai" ? "workspace-tab-icon local-tab-icon" : "workspace-tab-icon website-tab-icon"}>
+                      {tab.kind === "local-ai" ? "⌘" : "◉"}
                     </span>
                     <span className="workspace-tab-label">{tab.title}</span>
                     {tab.kind === "website" && tab.loading && <span className="workspace-tab-loading">◌</span>}
                   </button>
-                  {tab.kind !== "catalog" && <button className="workspace-tab-close" type="button"
-                    title={"Close " + tab.title} aria-label={"Close " + tab.title} onClick={() => closeWorkspaceTab(tab)}>×</button>}
+                  <button className="workspace-tab-close" type="button"
+                    title={"Close " + tab.title} aria-label={"Close " + tab.title}
+                    onClick={() => closeWorkspaceTab(tab)}>×</button>
                 </div>
               );
             })}
             <button className="workspace-new-tab" type="button" title="Add website or Local AI" aria-label="Add website or Local AI"
               onClick={(event) => { setWorkspaceMode("catalog"); setActiveCategory("all"); showContextMenu(event, { kind: "root" }); }}>＋</button>
-          </div>
-          <div className="workspace-topbar-actions">
-            {workspaceMode === "catalog" && <button className="primary-button top-add" type="button"
-              onClick={(event) => showContextMenu(event, { kind: "root" })}>＋ Add</button>}
           </div>
         </header>
 

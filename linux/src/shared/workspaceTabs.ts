@@ -2,7 +2,6 @@ import type { BrowserTabInfo } from "../browser/browserTypes";
 import type { Provider } from "../catalog/catalogModel";
 
 export type WorkspaceTab =
-  | { kind: "catalog"; key: "catalog"; title: string }
   | { kind: "website"; key: string; browserTabId: string; title: string; url: string; loading: boolean }
   | { kind: "local-ai"; key: string; providerId: string; title: string };
 
@@ -26,7 +25,6 @@ export function buildWorkspaceTabs(
   }
 
   return [
-    { kind: "catalog", key: "catalog", title: "AI Catalog" },
     ...browserTabs.map((tab): WorkspaceTab => ({
       kind: "website", key: "website:" + tab.id, browserTabId: tab.id,
       title: tab.title || new URL(tab.url).hostname, url: tab.url, loading: tab.loading

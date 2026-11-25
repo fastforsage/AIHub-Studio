@@ -13,22 +13,24 @@ const localProvider = (id: string, name: string): Provider => ({
 });
 
 describe("buildWorkspaceTabs", () => {
-  it("keeps the catalog pinned before website and local AI tabs", () => {
+  it("contains only website and local AI tabs, with no catalogue tab", () => {
     const tabs = buildWorkspaceTabs(
       [browserTab("chatgpt", "ChatGPT"), browserTab("claude", "Claude")],
       [localProvider("ollama", "Ollama")], ["ollama"]
     );
-    expect(tabs.map((tab) => tab.key)).toEqual(["catalog", "website:chatgpt", "website:claude", "local:ollama"]);
+    expect(tabs.map((tab) => tab.key)).toEqual(["website:chatgpt", "website:claude", "local:ollama"]);
   });
   it("preserves browser status and falls back to hostname when title is empty", () => {
     const tab = browserTab("openwebui", "");
     tab.loading = true;
-    expect(buildWorkspaceTabs([tab], [], [])[1]).toMatchObject({
+    expect(buildWorkspaceTabs([tab], [], [])[0]).toMatchObject({
       kind: "website", key: "website:openwebui", title: "openwebui.example.com", loading: true
     });
   });
   it("removes stale local connections and deduplicates local chat tabs", () => {
-    const tabs = buildWorkspaceTabs([], [localProvider("ollama", "Ollama")], ["ollama", "deleted-provider", "ollama"]);
-    expect(tabs.map((tab) => tab.key)).toEqual(["catalog", "local:ollama"]);
+    const tabs = buildWorkspaceTabs([], [localProvider("ollama", "Ollama")], [
+      "ollama", "deleted-provider", "ollama"
+    ]);
+    expect(tabs.map((tab) => tab.key)).toEqual(["local:ollama"]);
   });
 });
