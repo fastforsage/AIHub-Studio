@@ -236,24 +236,22 @@ export function updateProvider(
 ): CatalogState {
   const current = state.providers.find((provider) => provider.id === id);
   if (!current) throw new CatalogError("NOT_FOUND", "Connection was not found");
-  if (current.type !== update.type) {
-    throw new CatalogError("TYPE_MISMATCH", "Connection type cannot be changed");
-  }
 
   const name = requireText(update.name, "Connection name");
   ensureUniqueName(name, state.providers, id);
   const categoryIds = requireCategoryIds(state, update.categoryIds);
 
   let updated: Provider;
-  if (update.type === "website") {
+  if (current.type === "website" && update.type === "website") {
     const url = normalizeWebsiteUrl(update.url);
     if (!url) throw new CatalogError("INVALID_URL", "Only valid HTTP or HTTPS website URLs are supported");
     updated = { ...current, name, url, categoryIds };
-  } else {
-    if (update.host === undefined) throw new CatalogError("INVALID_HOST", "Host is required");
+  } else if (current.type === "local-api" && update.type === "local-api") {
     const host = validateHost(update.host);
     const port = validatePort(update.port);
     updated = { ...current, name, host, port, categoryIds };
+  } else {
+    throw new CatalogError("TYPE_MISMATCH", "Connection type cannot be changed");
   }
 
   return { ...state, providers: state.providers.map((provider) => provider.id === id ? updated : provider) };
