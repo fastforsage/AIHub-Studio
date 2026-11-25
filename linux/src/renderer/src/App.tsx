@@ -1,10 +1,10 @@
 import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AddLocalApiInput,
-  type AddWebsiteInput,
-  type CatalogState,
-  type Provider,
-  type ProviderUpdate
+  AddWebsiteInput,
+  CatalogState,
+  Provider,
+  ProviderUpdate
 } from "../../catalog/catalogModel";
 import { POPULAR_PROVIDER_IDS } from "../../catalog/catalogDefaults";
 import type { BrowserManagerState } from "../../browser/browserTypes";
