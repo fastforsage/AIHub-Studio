@@ -68,7 +68,9 @@
           "Terminal": false,
           "Type": "Application"
         }
-      }
+      },
+      "maintainer": "AIHub Studio Contributors <github@users.noreply.github.com>",
+      "vendor": "AIHub Studio"
     },
     "pacman": {
       "depends": [
@@ -82,5 +84,11 @@
         "libsecret"
       ]
     }
+  },
+  "homepage": "https://github.com/fastforsage/AIHub-Studio",
+  "author": {
+    "name": "AIHub Studio Contributors",
+    "email": "github@users.noreply.github.com",
+    "url": "https://github.com/fastforsage/AIHub-Studio"
   }
 }
