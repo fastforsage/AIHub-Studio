@@ -59,7 +59,10 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [browserState, setBrowserState] = useState<BrowserManagerState>({ tabs: [], activeTabId: null });
-  const [workspaceMode, setWorkspaceMode] = useState<"catalog" | "browser">("catalog");
+  const [workspaceMode, setWorkspaceMode] = useState<"catalog" | "browser" | "settings">("catalog");
+  const [proxyServer, setProxyServer] = useState("");
+  const [proxySaving, setProxySaving] = useState(false);
+  const [proxyNotice, setProxyNotice] = useState<string | null>(null);
   const [addressValue, setAddressValue] = useState("");
 
   useEffect(() => {
@@ -87,6 +90,11 @@ function App() {
     });
     browserApi.get().then((state) => {
       if (mounted) setBrowserState(state);
+    }).catch((reason: unknown) => {
+      if (mounted) setError(errorMessage(reason));
+    });
+    browserApi.getProxyServer().then((value) => {
+      if (mounted) setProxyServer(value ?? "");
     }).catch((reason: unknown) => {
       if (mounted) setError(errorMessage(reason));
     });
@@ -313,6 +321,23 @@ function App() {
     void runBrowserAction(() => browserApi.navigate(activeBrowserTab.id, addressValue));
   }
 
+  async function saveProxySettings(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!browserApi || proxySaving) return;
+    setProxySaving(true);
+    setProxyNotice(null);
+    setError(null);
+    try {
+      const normalized = await browserApi.setProxyServer(proxyServer);
+      setProxyServer(normalized ?? "");
+      setProxyNotice(normalized ? "Proxy applied to all Chromium profiles." : "System proxy settings restored.");
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setProxySaving(false);
+    }
+  }
+
   function closeBrowserTab(tabId: string): void {
     if (!browserApi) return;
     void runBrowserAction(async () => {
@@ -334,10 +359,10 @@ function App() {
         </div>
 
         <div className="sidebar-label">WORKSPACE</div>
-        <button className={activeCategory === "all" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("all"); }}>
+        <button className={workspaceMode === "catalog" && activeCategory === "all" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("all"); }}>
           <span className="nav-icon">▦</span><span>AI Catalog</span><span className="item-count">{catalog.providers.length}</span>
         </button>
-        <button className={activeCategory === "favorites" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("favorites"); }}>
+        <button className={workspaceMode === "catalog" && activeCategory === "favorites" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("favorites"); }}>
           <span className="nav-icon favorite-icon">★</span><span>Favorites</span><span className="item-count">{catalog.providers.filter((item) => item.favorite).length}</span>
         </button>
 
@@ -363,13 +388,16 @@ function App() {
         </div>
 
         <div className="sidebar-spacer" />
+        <button className={workspaceMode === "settings" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => setWorkspaceMode("settings")}>
+          <span className="nav-icon">⚙</span><span>Settings</span>
+        </button>
         <div className="sidebar-footer">Chromium workspace · {window.aihub?.platform ?? "Linux"}</div>
       </aside>
 
       <main className="main-area">
         <header className="topbar">
-          <div className="breadcrumb"><span className="muted">Workspace</span><span className="breadcrumb-separator">/</span><strong>{activeCategoryName}</strong></div>
-          <button className="primary-button top-add" type="button" onClick={(event) => showContextMenu(event, { kind: "root" })}>＋ Add</button>
+          <div className="breadcrumb"><span className="muted">Workspace</span><span className="breadcrumb-separator">/</span><strong>{workspaceMode === "settings" ? "Settings" : workspaceMode === "browser" ? "Browser" : activeCategoryName}</strong></div>
+          {workspaceMode === "catalog" && <button className="primary-button top-add" type="button" onClick={(event) => showContextMenu(event, { kind: "root" })}>＋ Add</button>}
         </header>
 
         <section className="content-area">
@@ -406,6 +434,48 @@ function App() {
               <div className="browser-viewport" ref={browserViewportRef}>
                 {!activeBrowserTab && <div className="browser-empty">Open a cloud website from the AI catalog.</div>}
               </div>
+            </div>
+          ) : workspaceMode === "settings" ? (
+            <div className="settings-page">
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">APPLICATION SETTINGS</div>
+                  <h1>Settings</h1>
+                  <p className="welcome-copy">Configure how Chromium connects to websites.</p>
+                </div>
+              </div>
+
+              {error && <div className="alert alert-error" role="alert">{error}</div>}
+              {proxyNotice && <div className="alert alert-success" role="status">{proxyNotice}</div>}
+
+              <form className="settings-card" onSubmit={saveProxySettings}>
+                <div className="settings-card-heading">
+                  <div className="settings-card-icon">⇄</div>
+                  <div>
+                    <h2>Browser proxy</h2>
+                    <p>One proxy configuration shared by all Cloud Site browser profiles.</p>
+                  </div>
+                </div>
+
+                <label className="form-field">
+                  <span>Proxy server</span>
+                  <input
+                    value={proxyServer}
+                    onChange={(event) => setProxyServer(event.target.value)}
+                    placeholder="http://127.0.0.1:8080 or socks5://127.0.0.1:1080"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
+                <div className="settings-help">
+                  Supports HTTP, HTTPS, SOCKS4 and SOCKS5. Leave empty to use the system proxy settings.
+                  Proxy credentials are not accepted in this field.
+                </div>
+                <div className="settings-actions">
+                  <button className="secondary-button" type="button" disabled={proxySaving} onClick={() => setProxyServer("")}>Clear</button>
+                  <button className="primary-button" type="submit" disabled={proxySaving}>{proxySaving ? "Applying…" : "Apply proxy"}</button>
+                </div>
+              </form>
             </div>
           ) : (
             <>
