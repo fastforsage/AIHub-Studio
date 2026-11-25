@@ -18,11 +18,15 @@
 
 The preceding main build (0.1.9) passed the Windows CI pipeline: 143 tests across 15 test files, TypeScript check, Electron production build, Chromium WebContentsView smoke test, Windows x64 packaging, WiX MSI build, and MSI artifact verification.
 
-Alpha 0.1.10 is a documentation and release-label update on top of that baseline. A new CI run must pass before this release candidate is treated as validated.
+Alpha 0.1.10 is a documentation and release-label update on top of that baseline. The Windows CI run completed successfully on 2026-11-25 (run #14, commit `cf302e8cd6109fa543b05ee5953c8cb903b33d4a`). All 143 tests across 15 test files passed. TypeScript check, Electron production build, Chromium WebContentsView smoke test, Windows x64 packaging, WiX MSI build, and MSI verification all passed. The MSI artifact is `AIHubStudio-Windows10-x64-MSI` (136,843,395 bytes): [download from GitHub Actions](https://github.com/fastforsage/AIHub-Studio/actions/runs/45684725937). The artifact is retained until 2026-12-09.
 
 ## Known limitations
 
 Conversation capture/archive, SQLite chat history, attachment extraction/export, Dockhand integration, and remote GPU telemetry are not included in this alpha.
+
+## License
+
+The project is distributed under the MIT License. See [LICENSE](LICENSE).
 
 ## Disclaimer
 
