@@ -127,6 +127,15 @@ function App() {
         if (mounted) setError(errorMessage(reason));
       });
     return () => { mounted = false; };
+  }, [workspaceMode, diagnosticsApi]);
+
+  useEffect(() => {
+    if (workspaceMode !== "settings" || !diagnosticsApi) return;
+    let mounted = true;
+    diagnosticsApi.getRecentLogs(200, logFilter)
+      .then((entries) => { if (mounted) setLogEntries(entries); })
+      .catch((reason: unknown) => { if (mounted) setError(errorMessage(reason)); });
+    return () => { mounted = false; };
   }, [workspaceMode, diagnosticsApi, logFilter]);
 
   useEffect(() => {
