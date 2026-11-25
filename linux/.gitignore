@@ -1,0 +1,10 @@
+node_modules/
+out/
+release/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+packaging/arch/pkgsrc/*.tar.gz

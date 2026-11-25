@@ -1,0 +1,82 @@
+{
+  "name": "aihub-studio-linux",
+  "version": "0.1.8",
+  "private": true,
+  "description": "AIHub Studio Linux desktop application",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "smoke": "electron --no-sandbox smoke/browser-smoke.cjs",
+    "package:dir": "npm run build && electron-builder --linux dir --x64 --publish never"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "electron": "45.5.0",
+    "electron-vite": "6.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0",
+    "vitest": "^4.0.13",
+    "electron-builder": "26.18.1"
+  },
+  "engines": {
+    "node": ">=24.22.0 <25"
+  },
+  "productName": "AIHub Studio",
+  "desktopName": "aihub-studio",
+  "build": {
+    "appId": "io.github.fastforsage.aihubstudio",
+    "productName": "AIHub Studio",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Development",
+      "executableName": "aihub-studio",
+      "syncDesktopName": true,
+      "synopsis": "Unified workspace for cloud AI websites and local language models",
+      "description": "AIHub Studio is a Chromium-based desktop workspace for cloud AI websites and local OpenAI-compatible language models.",
+      "desktop": {
+        "entry": {
+          "Name": "AIHub Studio",
+          "Comment": "Unified workspace for cloud AI websites and local language models",
+          "Categories": "Development;Utility;",
+          "Keywords": "AI;LLM;Chat;Chromium;Local AI;",
+          "Terminal": false,
+          "Type": "Application"
+        }
+      },
+      "maintainer": "AIHub Studio Contributors <github@users.noreply.github.com>",
+      "vendor": "AIHub Studio"
+    }
+  },
+  "homepage": "https://github.com/fastforsage/AIHub-Studio",
+  "author": {
+    "name": "AIHub Studio Contributors",
+    "email": "github@users.noreply.github.com",
+    "url": "https://github.com/fastforsage/AIHub-Studio"
+  }
+}

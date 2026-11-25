@@ -1,0 +1,85 @@
+name: Linux foundation checks
+
+on:
+  push:
+    branches:
+      - feature/linux-chromium-rewrite
+    paths:
+      - "linux/**"
+      - ".github/workflows/linux-ci.yml"
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "linux/**"
+      - ".github/workflows/linux-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AIHUB_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+  AIHUB_PKGREL: ${{ github.run_number }}
+
+jobs:
+  verify:
+    name: Unit tests, typecheck, Chromium smoke and Arch package
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.3
+
+      - name: Read application version
+        id: app_version
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Build Electron application
+        run: npm run build
+
+      - name: Chromium WebContentsView smoke test
+        run: xvfb-run -a npm run smoke
+
+      - name: Build unpacked Electron application
+        run: npm run package:dir
+
+      - name: Build and install native Arch package
+        run: |
+          set -euo pipefail
+          bash -n packaging/arch/ci-build-install-test.sh
+          bash -n packaging/arch/PKGBUILD
+          mkdir -p packaging/arch/pkgsrc
+          cp packaging/arch/PKGBUILD packaging/arch/pkgsrc/PKGBUILD
+          APP_VERSION="$(node -p 'require("./package.json").version')"
+          tar -C release -czf "packaging/arch/pkgsrc/aihub-studio-${APP_VERSION}-linux-x86_64.tar.gz" linux-unpacked
+          docker run --rm \
+            -e AIHUB_PKGREL="$AIHUB_PKGREL" \
+            -v "$PWD/packaging/arch/pkgsrc:/packagesrc:ro" \
+            -v "$PWD/release:/packages/out" \
+            -v "$PWD/packaging/arch/ci-build-install-test.sh:/ci-build-install-test.sh:ro" \
+            archlinux:base bash /ci-build-install-test.sh
+
+      - name: Upload Arch package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AIHub-Studio-Linux-Arch-x64-v${{ steps.app_version.outputs.version }}-build-${{ github.run_number }}.${{ github.run_attempt }}
+          path: linux/release/*.pkg.tar.zst
+          if-no-files-found: error
