@@ -10,5 +10,7 @@ export interface BrowserApi {
   forward(tabId: string): Promise<BrowserManagerState>;
   reload(tabId: string): Promise<BrowserManagerState>;
   setViewportBounds(bounds: BrowserBounds): Promise<BrowserManagerState>;
+  getProxyServer(): Promise<string | null>;
+  setProxyServer(value: string): Promise<string | null>;
   onChanged(listener: (state: BrowserManagerState) => void): () => void;
 }
