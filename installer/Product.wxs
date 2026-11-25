@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="AIHub Studio" Manufacturer="FastForsage" Version="0.1.8" UpgradeCode="B7C79E5A-6A13-4B65-8A1E-4DAA9E89B012" Scope="perMachine">
+  <Package Name="AIHub Studio" Manufacturer="FastForsage" Version="0.1.9" UpgradeCode="B7C79E5A-6A13-4B65-8A1E-4DAA9E89B012" Scope="perMachine">
     <SummaryInformation Description="AIHub Studio for Windows 10 x64" Manufacturer="FastForsage" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of AIHub Studio is already installed." />
     <MediaTemplate EmbedCab="yes" />
