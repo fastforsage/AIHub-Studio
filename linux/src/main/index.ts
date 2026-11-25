@@ -17,7 +17,7 @@ import { registerServiceAvailabilityIpc } from "./serviceAvailabilityIpc";
 
 const isLinuxWayland =
   process.platform === "linux" &&
-  process.env.XDG_SESSION_TYPE?.toLocaleLowerCase() === "wayland";
+  (process.env.XDG_SESSION_TYPE?.toLocaleLowerCase() === "wayland" || Boolean(process.env.WAYLAND_DISPLAY));
 
 if (isLinuxWayland) {
   // Some KDE/KWin Wayland compositors do not expose the color-management

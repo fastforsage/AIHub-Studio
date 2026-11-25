@@ -65,6 +65,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const upgraded = await store.initialize();
+    expect(upgraded.catalogSeedVersion).toBe(2);
     expect(upgraded.providers).toHaveLength(32);
     expect(upgraded.providers.filter((provider) => provider.enabled)).toHaveLength(14);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
@@ -89,6 +90,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
+    expect(migrated.catalogSeedVersion).toBe(2);
     expect(migrated.providers).toHaveLength(32);
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);

@@ -131,6 +131,7 @@ export class CatalogStore {
         }
         this.state = {
           version: 1,
+          catalogSeedVersion: CURRENT_CATALOG_SEED_VERSION,
           categories,
           providers: mergedProviders
         };
