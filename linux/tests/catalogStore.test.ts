@@ -105,7 +105,7 @@ describe("CatalogStore", () => {
     const store = new CatalogStore(filePath);
     await store.initialize();
     await store.transact((current) => addWebsiteProvider(current, {
-      name: "Example", url: "example.com"
+      name: "Example", url: "example.com", categoryIds: ["chatbot"]
     }, () => "example"));
 
     const parsed = JSON.parse(await readFile(filePath, "utf8"));
