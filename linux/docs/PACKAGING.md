@@ -2,22 +2,33 @@
 
 ## Arch Linux and CachyOS
 
-The first distributable format is the native Arch package produced by electron-builder's pacman target.
+The Linux release uses a native Arch package built with `makepkg` from the repository's `packaging/arch/PKGBUILD`.
 
 - Target architecture: x86_64.
-- Build tool: electron-builder 26.18.1.
-- Output directory: linux/release/.
-- Install command: sudo pacman -U ./<package>.pacman.
-- Package metadata declares the GTK, NSS, X11 compatibility, desktop integration, accessibility and Secret Service dependencies used by Electron.
+- Electron application staging: electron-builder 26.18.1 `dir` target.
+- Package builder: Arch `makepkg`.
+- Package format: `.pkg.tar.zst`.
+- Output: `linux/release/`.
+- Install: `sudo pacman -U ./<package>.pkg.tar.zst`.
 
-The upstream electron-builder documentation currently marks the pacman target as beta. CI therefore performs a real package install inside a clean Arch Linux container, verifies pacman metadata and checks that the desktop entry and application executable are installed.
+The PKGBUILD installs the bundled Electron/Chromium application into `/opt/aihub-studio`, provides `/usr/bin/aihub-studio`, and installs a desktop entry into `/usr/share/applications/`.
 
-## Build command
+CI runs `makepkg` in a clean Arch Linux container, installs declared runtime dependencies, installs the resulting package with `pacman`, and verifies the launcher, desktop entry and application executable before publishing the package artifact.
 
-    npm run package:pacman
+## Build the unpacked Electron application
 
-This command first creates the Electron production build and then packages it for x86_64 Arch systems.
+    npm run package:dir
 
-## Scope
+This generates `release/linux-unpacked/`.
 
-The package is a native package for pacman. An AUR PKGBUILD and signed repository distribution are separate future release-engineering tasks; they are not needed to install this package directly.
+## Native package
+
+From an Arch Linux environment, prepare a tarball containing the `linux-unpacked/` directory using the naming convention in the CI workflow, then run:
+
+    makepkg --noconfirm
+
+The CI script `packaging/arch/ci-build-install-test.sh` demonstrates the build and clean-container installation test.
+
+## Future distribution
+
+The checked-in PKGBUILD is the source of truth for Arch packaging and can later be submitted to AUR or used in a signed repository. Neither AUR publication nor repository signing is part of this initial MVP.
