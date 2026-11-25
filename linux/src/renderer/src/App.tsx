@@ -1,4 +1,4 @@
-import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AddLocalApiInput,
   AddWebsiteInput,
@@ -6,6 +6,7 @@ import type {
   Provider,
   ProviderUpdate
 } from "../../catalog/catalogModel";
+import type { BrowserManagerState } from "../../browser/browserTypes";
 
 type MenuTarget =
   | { kind: "root" }
@@ -42,6 +43,8 @@ function errorMessage(error: unknown): string {
 
 function App() {
   const catalogApi = window.aihub?.catalog;
+  const browserApi = window.aihub?.browser;
+  const browserViewportRef = useRef<HTMLDivElement>(null);
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
   const [activeCategory, setActiveCategory] = useState("all");
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
@@ -55,6 +58,9 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [browserState, setBrowserState] = useState<BrowserManagerState>({ tabs: [], activeTabId: null });
+  const [workspaceMode, setWorkspaceMode] = useState<"catalog" | "browser">("catalog");
+  const [addressValue, setAddressValue] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -73,10 +79,56 @@ function App() {
     return () => { cancelled = true; };
   }, [catalogApi]);
 
+  useEffect(() => {
+    if (!browserApi) return;
+    let mounted = true;
+    const unsubscribe = browserApi.onChanged((state) => {
+      if (mounted) setBrowserState(state);
+    });
+    browserApi.get().then((state) => {
+      if (mounted) setBrowserState(state);
+    }).catch((reason: unknown) => {
+      if (mounted) setError(errorMessage(reason));
+    });
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [browserApi]);
+
+  useEffect(() => {
+    if (!browserApi) return;
+    const viewport = workspaceMode === "browser" ? browserViewportRef.current : null;
+    if (!viewport) {
+      void browserApi.setViewportBounds({ x: 0, y: 0, width: 0, height: 0 }).catch(() => undefined);
+      return;
+    }
+
+    const updateBounds = () => {
+      const rect = viewport.getBoundingClientRect();
+      void browserApi.setViewportBounds({
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height
+      }).catch((reason: unknown) => setError(errorMessage(reason)));
+    };
+
+    updateBounds();
+    const observer = new ResizeObserver(updateBounds);
+    observer.observe(viewport);
+    window.addEventListener("resize", updateBounds);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateBounds);
+    };
+  }, [browserApi, workspaceMode, browserState.activeTabId, browserState.tabs.length]);
+
   const selectedProvider = catalog.providers.find((provider) => provider.id === selectedProviderId) ?? null;
   const modalProvider = modal?.kind === "provider-edit" ? catalog.providers.find((provider) => provider.id === modal.id) ?? null : null;
   const contextProviderId = menu && menu.target.kind === "provider" ? menu.target.id : null;
   const contextProvider = contextProviderId ? catalog.providers.find((provider) => provider.id === contextProviderId) ?? null : null;
+  const activeBrowserTab = browserState.tabs.find((tab) => tab.id === browserState.activeTabId) ?? null;
   const visibleProviders = useMemo(() => {
     if (activeCategory === "favorites") {
       return catalog.providers.filter((provider) => provider.favorite);
@@ -84,6 +136,10 @@ function App() {
     if (activeCategory === "all") return catalog.providers;
     return catalog.providers.filter((provider) => provider.categoryIds.includes(activeCategory));
   }, [catalog, activeCategory]);
+
+  useEffect(() => {
+    setAddressValue(activeBrowserTab?.url ?? "");
+  }, [activeBrowserTab?.id, activeBrowserTab?.url]);
 
   const activeCategoryName = activeCategory === "all"
     ? "All AI"
@@ -228,6 +284,44 @@ function App() {
     );
   }
 
+  async function runBrowserAction(operation: () => Promise<BrowserManagerState>): Promise<void> {
+    try {
+      const next = await operation();
+      setBrowserState(next);
+      setError(null);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  }
+
+  async function openWebsite(provider: Provider): Promise<void> {
+    if (provider.type !== "website" || !browserApi) return;
+    setError(null);
+    try {
+      const next = await browserApi.openWebsite(provider.id);
+      setBrowserState(next);
+      setAddressValue(provider.url);
+      setWorkspaceMode("browser");
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  }
+
+  function submitAddress(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    if (!activeBrowserTab || !browserApi) return;
+    void runBrowserAction(() => browserApi.navigate(activeBrowserTab.id, addressValue));
+  }
+
+  function closeBrowserTab(tabId: string): void {
+    if (!browserApi) return;
+    void runBrowserAction(async () => {
+      const next = await browserApi.close(tabId);
+      if (next.tabs.length === 0) setWorkspaceMode("catalog");
+      return next;
+    });
+  }
+
   return (
     <div className="app-shell" onClick={() => menu && setMenu(null)}>
       <aside className="sidebar">
@@ -240,10 +334,10 @@ function App() {
         </div>
 
         <div className="sidebar-label">WORKSPACE</div>
-        <button className={activeCategory === "all" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => setActiveCategory("all")}>
+        <button className={activeCategory === "all" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("all"); }}>
           <span className="nav-icon">▦</span><span>AI Catalog</span><span className="item-count">{catalog.providers.length}</span>
         </button>
-        <button className={activeCategory === "favorites" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => setActiveCategory("favorites")}>
+        <button className={activeCategory === "favorites" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("favorites"); }}>
           <span className="nav-icon favorite-icon">★</span><span>Favorites</span><span className="item-count">{catalog.providers.filter((item) => item.favorite).length}</span>
         </button>
 
@@ -279,6 +373,42 @@ function App() {
         </header>
 
         <section className="content-area">
+          {workspaceMode === "browser" ? (
+            <div className="browser-workspace">
+              <div className="browser-tab-strip">
+                <div className="browser-tabs">
+                  {browserState.tabs.map((tab) => (
+                    <div key={tab.id} className={tab.id === browserState.activeTabId ? "browser-tab browser-tab-active" : "browser-tab"}>
+                      <button type="button" className="browser-tab-title" onClick={() => browserApi && void runBrowserAction(() => browserApi.activate(tab.id))}>
+                        <span className="browser-tab-loading">{tab.loading ? "◌" : "◉"}</span>
+                        <span>{tab.title || tab.url}</span>
+                      </button>
+                      <button type="button" className="browser-tab-close" aria-label={"Close " + tab.title} onClick={() => closeBrowserTab(tab.id)}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <button className="browser-back-catalog" type="button" onClick={() => setWorkspaceMode("catalog")}>Catalog</button>
+              </div>
+
+              <div className="browser-toolbar">
+                <button className="browser-control" type="button" title="Back" disabled={!activeBrowserTab?.canGoBack} onClick={() => activeBrowserTab && browserApi && void runBrowserAction(() => browserApi.back(activeBrowserTab.id))}>←</button>
+                <button className="browser-control" type="button" title="Forward" disabled={!activeBrowserTab?.canGoForward} onClick={() => activeBrowserTab && browserApi && void runBrowserAction(() => browserApi.forward(activeBrowserTab.id))}>→</button>
+                <button className="browser-control" type="button" title="Reload" disabled={!activeBrowserTab} onClick={() => activeBrowserTab && browserApi && void runBrowserAction(() => browserApi.reload(activeBrowserTab.id))}>↻</button>
+                <form className="browser-address-form" onSubmit={submitAddress}>
+                  <span className="address-lock">⌑</span>
+                  <input aria-label="Website address" value={addressValue} onChange={(event) => setAddressValue(event.target.value)} placeholder="Enter website address" disabled={!activeBrowserTab} />
+                  <button type="submit" disabled={!activeBrowserTab}>Go</button>
+                </form>
+                <span className="browser-load-state">{activeBrowserTab?.loading ? "Loading" : activeBrowserTab?.error ? "Error" : "Ready"}</span>
+              </div>
+
+              {activeBrowserTab?.error && <div className="browser-error" role="alert">{activeBrowserTab.error}</div>}
+              <div className="browser-viewport" ref={browserViewportRef}>
+                {!activeBrowserTab && <div className="browser-empty">Open a cloud website from the AI catalog.</div>}
+              </div>
+            </div>
+          ) : (
+            <>
           <div className="page-heading">
             <div>
               <div className="eyebrow">AI WORKSPACE</div>
@@ -342,9 +472,10 @@ function App() {
                   <div className="detail-line"><span>Categories</span><strong>{selectedProvider.categoryIds.map((id) => catalog.categories.find((item) => item.id === id)?.name).filter(Boolean).join(", ") || "All AI"}</strong></div>
                   <div className="detail-actions">
                     <button className="secondary-button" type="button" onClick={() => openModal({ kind: "provider-edit", id: selectedProvider.id })}>Change</button>
+                    {selectedProvider.type === "website" && <button className="primary-button" type="button" onClick={() => void openWebsite(selectedProvider)}>Open in Chromium</button>}
                     <button className="secondary-button" type="button" onClick={() => void commit(() => catalogApi!.setFavorite(selectedProvider.id, !selectedProvider.favorite))}>{selectedProvider.favorite ? "Unfavorite" : "Add to Favorites"}</button>
                   </div>
-                  <p className="detail-hint">Browser tabs and live Local AI chat transport are added in their next implementation stages. This stage manages the connection catalog only.</p>
+                  <p className="detail-hint">{selectedProvider.type === "website" ? "Open the site in a persistent isolated Chromium profile." : "Local API message transport and model discovery are the next implementation stage."}</p>
                 </>
               ) : (
                 <div className="detail-placeholder">
@@ -355,6 +486,8 @@ function App() {
               )}
             </aside>
           </div>
+            </>
+          )}
         </section>
       </main>
 
