@@ -110,7 +110,8 @@ export class BrowserManager {
   }
 
   activate(tabId: string): BrowserManagerState {
-    this.requireTab(tabId);
+    const tab = this.requireTab(tabId);
+    if (!tab) return this.getState();
     this.activeTabId = tabId;
     this.updateViews();
     this.publish();
@@ -139,6 +140,7 @@ export class BrowserManager {
 
   async navigate(tabId: string, input: string): Promise<BrowserManagerState> {
     const tab = this.requireTab(tabId);
+    if (!tab) return this.getState();
     const url = normalizeBrowserUrl(input);
     if (!url) throw new Error("Only HTTP and HTTPS addresses are allowed");
 
@@ -165,7 +167,9 @@ export class BrowserManager {
 
   back(tabId: string): BrowserManagerState {
     const tab = this.requireTab(tabId);
-    if (tab.view.webContents.navigationHistory.canGoBack()) {
+    if (!tab) return this.getState();
+    const contents = this.getLiveContents(tab);
+    if (contents?.navigationHistory.canGoBack()) {
       tab.view.webContents.navigationHistory.goBack();
     }
     this.publish();
@@ -174,7 +178,9 @@ export class BrowserManager {
 
   forward(tabId: string): BrowserManagerState {
     const tab = this.requireTab(tabId);
-    if (tab.view.webContents.navigationHistory.canGoForward()) {
+    if (!tab) return this.getState();
+    const contents = this.getLiveContents(tab);
+    if (contents?.navigationHistory.canGoForward()) {
       tab.view.webContents.navigationHistory.goForward();
     }
     this.publish();
@@ -183,7 +189,8 @@ export class BrowserManager {
 
   reload(tabId: string): BrowserManagerState {
     const tab = this.requireTab(tabId);
-    tab.view.webContents.reload();
+    if (!tab) return this.getState();
+    this.getLiveContents(tab)?.reload();
     return this.getState();
   }
 
@@ -381,14 +388,14 @@ export class BrowserManager {
     }
   }
 
-  private requireTab(tabId: string): BrowserTabRecord {
+  private requireTab(tabId: string): BrowserTabRecord | null {
     const tab = this.tabs.get(tabId);
-    if (!tab) throw new Error("Browser tab was not found");
+    if (!tab) return null;
     if (!this.getLiveContents(tab)) {
       this.discardTab(tabId, tab);
       this.updateViews();
       this.publish();
-      throw new Error("Browser tab is no longer available. Reopen it from the AI catalog.");
+      return null;
     }
     return tab;
   }
