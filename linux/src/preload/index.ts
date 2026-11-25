@@ -24,6 +24,8 @@ const browser: BrowserApi = {
   forward: (tabId) => ipcRenderer.invoke("browser:forward", { tabId }),
   reload: (tabId) => ipcRenderer.invoke("browser:reload", { tabId }),
   setViewportBounds: (bounds) => ipcRenderer.invoke("browser:set-viewport", bounds),
+  getProxyServer: () => ipcRenderer.invoke("browser:proxy:get"),
+  setProxyServer: (proxyServer) => ipcRenderer.invoke("browser:proxy:set", { proxyServer }),
   onChanged: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) => listener(state);
     ipcRenderer.on("browser:changed", handler);
