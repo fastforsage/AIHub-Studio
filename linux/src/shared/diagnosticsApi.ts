@@ -21,6 +21,7 @@ export interface DiagnosticsStatus {
   settings: LoggingSettings;
   currentFileBytes: number;
   rotatedFiles: number;
+  lastWriteError: string | null;
 }
 
 export interface DiagnosticsApi {
