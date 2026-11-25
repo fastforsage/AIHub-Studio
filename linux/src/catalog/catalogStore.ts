@@ -21,7 +21,15 @@ export class CatalogStore {
       const raw = await readFile(this.filePath, "utf8");
       const parsed: unknown = JSON.parse(raw);
       assertCatalogState(parsed);
-      this.state = structuredClone(parsed);
+      const legacyDefaultIds = new Set(["ai", "local-ai", "dev", "community", "design", "email", "video"]);
+      const isUntouchedLegacyCatalog = parsed.providers.length === 0 &&
+        parsed.categories.length === legacyDefaultIds.size &&
+        parsed.categories.every((category) => legacyDefaultIds.has(category.id));
+      // Upgrade only the untouched starter catalog. Never overwrite a user's custom entries.
+      this.state = isUntouchedLegacyCatalog
+        ? createDefaultCatalog()
+        : structuredClone(parsed);
+      if (isUntouchedLegacyCatalog) await this.write(this.state);
     } catch (error) {
       if (isMissingFile(error)) {
         this.state = createDefaultCatalog();
