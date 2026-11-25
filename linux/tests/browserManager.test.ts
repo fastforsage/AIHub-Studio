@@ -241,13 +241,15 @@ describe("BrowserManager", () => {
     expect(parent.removed).toContain(staleView);
   });
 
-  it("rejects activation of a stale tab with a recoverable error instead of crashing", async () => {
+  it("ignores stale tab activation and cleans up its detached Chromium view", async () => {
     await manager.openWebsite(website("site-a"));
     const tabId = manager.getState().tabs[0].id;
-    mocks.state.views[0].webContents = undefined;
+    const staleView = mocks.state.views[0];
+    staleView.webContents = undefined;
 
-    expect(() => manager.activate(tabId)).toThrow("Browser tab is no longer available");
+    expect(() => manager.activate(tabId)).not.toThrow();
     expect(manager.getState()).toEqual({ tabs: [], activeTabId: null });
+    expect(parent.removed).toContain(staleView);
   });
 
   it("keeps a tab hidden until a non-zero viewport is supplied", async () => {
