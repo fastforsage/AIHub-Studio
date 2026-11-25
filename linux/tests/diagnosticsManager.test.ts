@@ -49,6 +49,7 @@ describe("DiagnosticsManager", () => {
     const manager = await createManager();
     manager.log("info", "auth", "api_key=secret-value Authorization: Bearer abc.def.ghi");
     manager.log("debug", "test", "debug detail");
+    manager.log("info", "provider", "Request metadata", { api_key: "json-secret", nested: { access_token: "nested-secret" }, authorization: "Bearer json-bearer-secret" });
     await manager.flush();
 
     const entries = await manager.getRecentLogs(20, "info");
@@ -58,6 +59,10 @@ describe("DiagnosticsManager", () => {
     expect(authEntry?.message).not.toContain("secret-value");
     expect(authEntry?.message).not.toContain("abc.def.ghi");
     expect(authEntry?.message).toContain("[REDACTED]");
+    const providerEntry = entries.find((entry) => entry.scope === "provider");
+    expect(providerEntry?.message).not.toContain("json-secret");
+    expect(providerEntry?.message).not.toContain("nested-secret");
+    expect(providerEntry?.message).not.toContain("json-bearer-secret");
   });
 
   it("filters log levels and supports disabling file output", async () => {
