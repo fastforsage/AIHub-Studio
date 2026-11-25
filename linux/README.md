@@ -1,22 +1,39 @@
 # AIHub Studio Linux
 
-Independent Linux rewrite of AIHub Studio using Electron, Chromium, React and TypeScript.
+Independent Linux rewrite of AIHub Studio using Electron, bundled Chromium, React and TypeScript.
 
 Target: Arch Linux / CachyOS x86_64, Wayland and X11.
 
-## Current scope
-The current foundation stage contains:
-- Electron main process and hardened preload bridge;
-- React workspace shell;
-- XDG-compliant application paths;
-- AI catalog, category management and persistent Local AI/Cloud Site configuration;
-- secure Browser Manager based on WebContentsView and persistent isolated profiles;
-- global browser proxy settings;
-- unit tests and Linux CI.
+## Implemented
 
-The next stage adds the OpenAI-compatible Local AI request client and automatic model discovery. Message capture and chat archiving are explicitly out of scope for now.
+- Electron desktop runtime with isolated preload bridge;
+- XDG-compliant application paths;
+- categorized AI catalog with Add / Change / Del context menus;
+- Cloud Site entries and OpenAI-compatible Local AI entries;
+- persistent catalog configuration;
+- embedded Chromium tabs using WebContentsView;
+- persistent isolated browser profiles per website provider;
+- global HTTP, HTTPS, SOCKS4 and SOCKS5 proxy configuration;
+- automatic Local AI model discovery via /v1/models;
+- model selection and chat via /v1/chat/completions;
+- local chat state is temporary and is not archived or persisted;
+- unit tests, Electron Chromium smoke test, TypeScript check and Arch package installation CI.
+
+## Local AI defaults
+
+The Add Local AI form starts with:
+
+- Name: Local LLM
+- API type: openai (OpenAI-compatible)
+- Host: localhost
+- Port: 11434
+- Category: Local AI
+- Models: automatic discovery
+
+The app requests model discovery only when the user opens the connection or presses Refresh models. It does not automatically start a local inference server.
 
 ## Development
+
 Use Node.js 24 LTS and npm.
 
     npm install
@@ -24,5 +41,14 @@ Use Node.js 24 LTS and npm.
     npm test
     npm run typecheck
     npm run build
+    npm run smoke
 
-See docs/ for the requirements, architecture, security baseline and Arch installation notes.
+## Build native Arch package
+
+    npm run package:pacman
+
+The package is written to release/. Install it on Arch/CachyOS with:
+
+    sudo pacman -U ./<package>.pacman
+
+See docs/ for architecture, security, Local AI API behavior, Browser Manager and installation.
