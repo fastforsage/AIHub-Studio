@@ -1,5 +1,6 @@
 import type { BrowserApi } from "../../shared/browserApi";
 import type { CatalogApi } from "../../shared/catalogApi";
+import type { LocalAiApi } from "../../shared/localAiApi";
 
 export {};
 
@@ -10,6 +11,7 @@ declare global {
       version: string;
       catalog: CatalogApi;
       browser: BrowserApi;
+      localAi: LocalAiApi;
     };
   }
 }
