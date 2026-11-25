@@ -1,5 +1,5 @@
-const HTTP_PROTOCOL = /^https?:\\/\\//i;
-const EXPLICIT_PROTOCOL = /^[a-z][a-z\\d+.-]*:/i;
+const HTTP_PROTOCOL = /^https?:\/\//i;
+const EXPLICIT_PROTOCOL = /^[a-z][a-z\d+.-]*:/i;
 
 export function normalizeWebsiteUrl(input: string): string | null {
   const value = input.trim();
