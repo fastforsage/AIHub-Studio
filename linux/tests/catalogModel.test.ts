@@ -183,7 +183,7 @@ describe("Local AI model catalog state", () => {
   it("clears selected model when the server reports no models", () => {
     const first = updateLocalModels(localCatalog(), "local", ["qwen3:8b"]);
     const refreshed = updateLocalModels(first, "local", []);
-    expect(refreshed.providers[0]).toMatchObject({
+    expect(refreshed.providers.find((provider) => provider.id === "local")).toMatchObject({
       models: [],
       selectedModel: undefined
     });
