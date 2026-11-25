@@ -22,6 +22,7 @@ describe("DiagnosticsManager", () => {
   it("initializes secure defaults and persists logging settings", async () => {
     const manager = await createManager();
     const status = await manager.getStatus();
+    expect(status.lastWriteError).toBeNull();
     expect(status.settings).toEqual({
       level: "info",
       fileEnabled: true,
