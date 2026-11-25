@@ -52,20 +52,54 @@ export class CatalogError extends Error {
 }
 
 export const DEFAULT_CATEGORIES: ReadonlyArray<Category> = [
-  { id: "ai", name: "AI" },
-  { id: "local-ai", name: "Local AI" },
-  { id: "dev", name: "Dev" },
-  { id: "community", name: "Community" },
-  { id: "design", name: "Design" },
-  { id: "email", name: "Email" },
-  { id: "video", name: "Video" }
+  { id: "chatbot", name: "chatbot" },
+  { id: "music-generator", name: "music generator" },
+  { id: "voice-generator", name: "voice generator" },
+  { id: "video-generator", name: "video generator" },
+  { id: "writing-helper", name: "writing helper" },
+  { id: "research-assistant", name: "research assistant" },
+  { id: "translator", name: "translator" },
+  { id: "presentation-maker", name: "presentation maker" },
+  { id: "image-generator", name: "image generator" },
+  { id: "many-in-one", name: "many in one" },
+  { id: "local-ai", name: "Local AI" }
+];
+
+const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; categoryId: string }> = [
+  { id: "chatgpt", name: "ChatGPT", url: "https://chatgpt.com/", categoryId: "chatbot" },
+  { id: "claude", name: "Claude", url: "https://claude.ai/", categoryId: "chatbot" },
+  { id: "gemini", name: "Gemini", url: "https://gemini.google.com/", categoryId: "chatbot" },
+  { id: "grok", name: "Grok", url: "https://grok.com/", categoryId: "chatbot" },
+  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/", categoryId: "chatbot" },
+  { id: "perplexity", name: "Perplexity", url: "https://www.perplexity.ai/", categoryId: "chatbot" },
+  { id: "copilot", name: "Copilot", url: "https://copilot.microsoft.com/", categoryId: "chatbot" },
+  { id: "mistral", name: "Mistral", url: "https://chat.mistral.ai/", categoryId: "chatbot" },
+  { id: "openrouter", name: "OpenRouter Chat", url: "https://openrouter.ai/chat", categoryId: "chatbot" },
+  { id: "kimi", name: "Kimi", url: "https://www.kimi.com/", categoryId: "chatbot" },
+  { id: "qwen", name: "Qwen", url: "https://chat.qwen.ai/", categoryId: "chatbot" },
+  { id: "google-ai-studio", name: "Google AI Studio", url: "https://aistudio.google.com/", categoryId: "chatbot" },
+  { id: "poe", name: "Poe", url: "https://poe.com/", categoryId: "chatbot" },
+  { id: "suno", name: "Suno", url: "https://suno.com/", categoryId: "music-generator" },
+  { id: "elevenlabs", name: "ElevenLabs", url: "https://elevenlabs.io/", categoryId: "voice-generator" },
+  { id: "notebooklm", name: "NotebookLM", url: "https://notebooklm.google.com/", categoryId: "research-assistant" },
+  { id: "deepwiki", name: "DeepWiki", url: "https://deepwiki.com/", categoryId: "research-assistant" },
+  { id: "deepl", name: "DeepL", url: "https://www.deepl.com/translator", categoryId: "translator" },
+  { id: "gamma", name: "Gamma", url: "https://gamma.app/", categoryId: "presentation-maker" },
+  { id: "google-labs", name: "Google Labs", url: "https://labs.google/", categoryId: "many-in-one" }
 ];
 
 export function createDefaultCatalog(): CatalogState {
   return {
     version: 1,
     categories: DEFAULT_CATEGORIES.map((item) => ({ ...item })),
-    providers: []
+    providers: DEFAULT_WEBSITES.map((item) => ({
+      ...item,
+      type: "website" as const,
+      categoryIds: [item.categoryId],
+      favorite: false,
+      enabled: true,
+      profileId: item.id
+    }))
   };
 }
 
