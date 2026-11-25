@@ -12,6 +12,8 @@ import { registerLocalAiIpc } from "./localAiIpc";
 import { removeNativeApplicationMenu } from "./nativeMenu";
 import { DiagnosticsManager } from "./diagnosticsManager";
 import { registerDiagnosticsIpc } from "./diagnosticsIpc";
+import { ServiceAvailabilityManager } from "./serviceAvailabilityManager";
+import { registerServiceAvailabilityIpc } from "./serviceAvailabilityIpc";
 
 const paths = resolveAppPaths(process.env);
 const sessionDataPath = join(paths.data, "sessions");
@@ -121,6 +123,7 @@ async function bootstrap(): Promise<void> {
   registerBrowserIpc(browserManager, catalogStore, browserSettings, isTrustedRenderer);
   registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
   registerDiagnosticsIpc(diagnosticsManager, isTrustedRenderer);
+  registerServiceAvailabilityIpc(new ServiceAvailabilityManager(() => catalogStore.get().providers), isTrustedRenderer);
   createMainWindow();
 }
 
