@@ -20,10 +20,10 @@ Chromium-вкладки через WebContentsView, изолированные p
 Глобальный proxy хранится отдельно в browser-settings.json и применяется ко всем существующим и новым профилям. Пустое значение включает системный proxy mode. Поддерживаются HTTP, HTTPS, SOCKS4 и SOCKS5 без встроенных credentials.
 
 ### Local AI Manager
-OpenAI-compatible HTTP client, проверка endpoint, обнаружение моделей, выбор модели и отправка запросов.
+OpenAI-compatible HTTP client в Electron Main Process. Выполняет GET /v1/models для обнаружения моделей и POST /v1/chat/completions для запроса ответа. Renderer получает только типизированные IPC-команды. Временная история локального чата хранится в React state и не записывается на диск.
 
 ### Configuration Manager
-Постоянные настройки категорий и подключений. Отдельно от будущего архива сообщений.
+Постоянные настройки категорий и подключений в catalog.json, browser proxy в browser-settings.json. Обе конфигурации хранятся атомарно с правами владельца и отдельно от временной истории локального чата.
 
 ## Модель каталога
 Общий базовый Provider:
@@ -52,6 +52,10 @@ Local API Provider содержит API type, host, port, обнаруженны
 - IPC валидируется в Main.
 - Не хранить секреты в логах.
 - Внешний веб-контент не считается доверенным.
+
+## Packaging
+
+Нативный Arch-пакет создаётся electron-builder pacman target. CI ставит пакет в чистый Arch Linux container и проверяет pacman metadata, desktop entry и приложение. Pacman target upstream отмечен как beta, поэтому требуется проверка на целевой CachyOS.
 
 ## Отложенные подсистемы
 Capture Engine, извлечение сообщений, нормализация, архив переписок, дедупликация, Dockhand и GPU мониторинг не входят в текущую реализацию. Текущие компоненты не должны требовать их наличия.
