@@ -1,4 +1,5 @@
 import { app, BrowserWindow, IpcMainInvokeEvent } from "electron";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { resolveAppPaths } from "../shared/appPaths";
 import { CatalogStore } from "../catalog/catalogStore";
@@ -6,6 +7,10 @@ import { registerCatalogIpc } from "./catalogIpc";
 
 const paths = resolveAppPaths(process.env);
 const sessionDataPath = join(paths.data, "sessions");
+
+for (const directory of [paths.config, paths.data, paths.state, sessionDataPath]) {
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+}
 
 app.setName("AIHub Studio");
 app.setPath("userData", paths.config);
