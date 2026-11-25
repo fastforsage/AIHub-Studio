@@ -1,0 +1,45 @@
+name: Linux foundation checks
+
+on:
+  push:
+    branches:
+      - feature/linux-chromium-rewrite
+    paths:
+      - "linux/**"
+      - ".github/workflows/linux-ci.yml"
+  pull_request:
+    paths:
+      - "linux/**"
+      - ".github/workflows/linux-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Unit tests, typecheck and Electron build
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.3
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Build Electron application
+        run: npm run build
