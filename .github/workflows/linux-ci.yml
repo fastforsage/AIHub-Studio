@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   verify:
-    name: Unit tests, typecheck and Electron build
+    name: Unit tests, typecheck, Chromium smoke and Arch package
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -48,24 +48,24 @@ jobs:
       - name: Chromium WebContentsView smoke test
         run: xvfb-run -a npm run smoke
 
-      - name: Install pacman package build utilities
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libarchive-tools
+      - name: Build unpacked Electron application
+        run: npm run package:dir
 
-      - name: Build native Arch package
-        run: npm run package:pacman
-
-      - name: Validate and install package in Arch Linux container
+      - name: Build and install native Arch package
         run: |
+          set -euo pipefail
+          bash -n packaging/arch/ci-build-install-test.sh
+          mkdir -p packaging/arch/pkgsrc
+          tar -C release -czf "packaging/arch/pkgsrc/aihub-studio-0.1.0-linux-x86_64.tar.gz" linux-unpacked
           docker run --rm \
-            -v "$PWD/release:/packages:ro" \
-            -v "$PWD/packaging/arch/ci-install-test.sh:/ci-install-test.sh:ro" \
-            archlinux:base bash /ci-install-test.sh
+            -v "$PWD/packaging/arch/pkgsrc:/packagesrc:ro" \
+            -v "$PWD/release:/packages/out" \
+            -v "$PWD/packaging/arch/ci-build-install-test.sh:/ci-build-install-test.sh:ro" \
+            archlinux:base bash /ci-build-install-test.sh
 
       - name: Upload Arch package
         uses: actions/upload-artifact@v4
         with:
           name: AIHub-Studio-Linux-Arch-x64
-          path: linux/release/*
+          path: linux/release/*.pkg.tar.zst
           if-no-files-found: error
