@@ -46,7 +46,13 @@ button:disabled { cursor: default; opacity: .55; }
 .folder-icon { width: 16px; color: #8e99b1; text-align: center; }
 .category-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-spacer { flex: 1; }
-.sidebar-footer { padding: 13px 9px 3px; color: #687183; font-size: 9px; }
+.sidebar-footer { display: grid; gap: 5px; padding: 13px 9px 3px; color: #687183; font-size: 9px; }
+.sidebar-version { color: #a0a9c0; font-size: 9px; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.version-card { margin-top: 14px; }
+.version-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding-top: 15px; border-top: 1px solid #292e38; }
+.version-details div { display: grid; min-width: 0; gap: 5px; }
+.version-details dt { color: #818b9e; font-size: 10px; }
+.version-details dd { margin: 0; overflow-wrap: anywhere; color: #dce1ec; font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .main-area { flex: 1; min-width: 0; }
 .topbar {
   height: 58px; display: flex; align-items: center; justify-content: space-between;

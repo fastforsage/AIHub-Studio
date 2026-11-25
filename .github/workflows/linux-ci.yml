@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
 
+env:
+  AIHUB_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+  AIHUB_PKGREL: ${{ github.run_number }}
+
 jobs:
   verify:
     name: Unit tests, typecheck, Chromium smoke and Arch package
@@ -32,6 +36,12 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24.22.3
+
+      - name: Read application version
+        id: app_version
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -58,8 +68,10 @@ jobs:
           bash -n packaging/arch/PKGBUILD
           mkdir -p packaging/arch/pkgsrc
           cp packaging/arch/PKGBUILD packaging/arch/pkgsrc/PKGBUILD
-          tar -C release -czf "packaging/arch/pkgsrc/aihub-studio-0.1.0-linux-x86_64.tar.gz" linux-unpacked
+          APP_VERSION="$(node -p 'require("./package.json").version')"
+          tar -C release -czf "packaging/arch/pkgsrc/aihub-studio-${APP_VERSION}-linux-x86_64.tar.gz" linux-unpacked
           docker run --rm \
+            -e AIHUB_PKGREL="$AIHUB_PKGREL" \
             -v "$PWD/packaging/arch/pkgsrc:/packagesrc:ro" \
             -v "$PWD/release:/packages/out" \
             -v "$PWD/packaging/arch/ci-build-install-test.sh:/ci-build-install-test.sh:ro" \
@@ -68,6 +80,6 @@ jobs:
       - name: Upload Arch package
         uses: actions/upload-artifact@v4
         with:
-          name: AIHub-Studio-Linux-Arch-x64
+          name: AIHub-Studio-Linux-Arch-x64-v${{ steps.app_version.outputs.version }}-build-${{ github.run_number }}.${{ github.run_attempt }}
           path: linux/release/*.pkg.tar.zst
           if-no-files-found: error

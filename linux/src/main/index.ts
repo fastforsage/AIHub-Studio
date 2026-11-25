@@ -39,7 +39,7 @@ function createMainWindow(): BrowserWindow {
     minHeight: 680,
     show: false,
     backgroundColor: "#111318",
-    title: "AIHub Studio",
+    title: `AIHub Studio v${app.getVersion()}`,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,

@@ -8,6 +8,7 @@ import type {
 } from "../../catalog/catalogModel";
 import type { BrowserManagerState } from "../../browser/browserTypes";
 import type { LocalChatMessage } from "../../local-ai/localAiManager";
+import { formatBuildLabel } from "../../shared/versionLabel";
 
 type MenuTarget =
   | { kind: "root" }
@@ -482,7 +483,10 @@ function App() {
         <button className={workspaceMode === "settings" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => setWorkspaceMode("settings")}>
           <span className="nav-icon">⚙</span><span>Settings</span>
         </button>
-        <div className="sidebar-footer">Chromium workspace · {window.aihub?.platform ?? "Linux"}</div>
+        <div className="sidebar-footer">
+          <span>Chromium workspace · {window.aihub?.platform ?? "Linux"}</span>
+          <span className="sidebar-version">{formatBuildLabel(__APP_VERSION__, __APP_BUILD__)}</span>
+        </div>
       </aside>
 
       <main className="main-area">
@@ -638,6 +642,30 @@ function App() {
                   <button className="primary-button" type="submit" disabled={proxySaving}>{proxySaving ? "Applying…" : "Apply proxy"}</button>
                 </div>
               </form>
+
+              <section className="settings-card version-card" aria-label="Application version">
+                <div className="settings-card-heading">
+                  <div className="settings-card-icon">ⓘ</div>
+                  <div>
+                    <h2>About AIHub Studio</h2>
+                    <p>Version details to include when reporting a problem.</p>
+                  </div>
+                </div>
+                <dl className="version-details">
+                  <div>
+                    <dt>Application version</dt>
+                    <dd>v{__APP_VERSION__}</dd>
+                  </div>
+                  <div>
+                    <dt>Build number</dt>
+                    <dd>{__APP_BUILD__}</dd>
+                  </div>
+                  <div>
+                    <dt>Platform</dt>
+                    <dd>{window.aihub?.platform ?? "Linux"}</dd>
+                  </div>
+                </dl>
+              </section>
             </div>
           ) : (
             <>
