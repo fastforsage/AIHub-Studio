@@ -75,7 +75,8 @@ function App() {
 
   const selectedProvider = catalog.providers.find((provider) => provider.id === selectedProviderId) ?? null;
   const modalProvider = modal?.kind === "provider-edit" ? catalog.providers.find((provider) => provider.id === modal.id) ?? null : null;
-  const contextProvider = menu?.target.kind === "provider" ? catalog.providers.find((provider) => provider.id === menu.target.id) ?? null : null;
+  const contextProviderId = menu && menu.target.kind === "provider" ? menu.target.id : null;
+  const contextProvider = contextProviderId ? catalog.providers.find((provider) => provider.id === contextProviderId) ?? null : null;
   const visibleProviders = useMemo(() => {
     if (activeCategory === "favorites") {
       return catalog.providers.filter((provider) => provider.favorite);
