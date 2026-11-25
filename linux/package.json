@@ -56,7 +56,6 @@
       ],
       "category": "Development",
       "executableName": "aihub-studio",
-      "desktopName": "aihub-studio",
       "syncDesktopName": true,
       "synopsis": "Unified workspace for cloud AI websites and local language models",
       "description": "AIHub Studio is a Chromium-based desktop workspace for cloud AI websites and local OpenAI-compatible language models.",
