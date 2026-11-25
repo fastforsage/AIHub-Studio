@@ -33,7 +33,7 @@ describe("DiagnosticsManager", () => {
     const settingsPath = join(status.directory, "..", "..", "config", "logging-settings.json");
     const loaded = JSON.parse(await readFile(settingsPath, "utf8"));
     expect(loaded.level).toBe("info");
-    expect((await stat(settingsPath)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect((await stat(settingsPath)).mode & 0o777).toBe(0o600);
 
     await manager.updateSettings({
       level: "debug",
@@ -109,7 +109,7 @@ describe("DiagnosticsManager", () => {
 
     expect(await readFile(exportPath, "utf8")).toContain("example warning");
     expect(await readFile(reportPath, "utf8")).toContain("AIHub Studio diagnostic report");
-    expect((await stat(exportPath)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect((await stat(exportPath)).mode & 0o777).toBe(0o600);
   });
 
   it("rejects out-of-range rotation settings", async () => {
