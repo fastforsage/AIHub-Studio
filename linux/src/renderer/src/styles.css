@@ -14,8 +14,33 @@ button:disabled { cursor: default; opacity: .55; }
 .app-shell { display: flex; width: 100%; height: 100vh; min-height: 620px; overflow: hidden; background: #111318; }
 .sidebar {
   width: 258px; min-width: 258px; display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden;
   padding: 22px 14px 14px; background: #171a21; border-right: 1px solid #272b35;
 }
+.sidebar-settings-button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  margin: 0 0 14px;
+  border: 1px solid #39466e;
+  color: #edf0ff;
+  background: #252e49;
+}
+.sidebar-settings-button .nav-icon { color: #b7c3ff; }
+.sidebar-settings-button:hover { background: #303c60; }
+.sidebar-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin-right: -4px;
+  padding: 0 4px 10px 0;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+.sidebar-scroll::-webkit-scrollbar { width: 7px; }
+.sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-scroll::-webkit-scrollbar-thumb { border-radius: 8px; background: #394254; }
+.sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #53617b; }
 .brand { display: flex; align-items: center; gap: 11px; padding: 3px 9px 31px; }
 .brand-mark {
   width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px;
@@ -67,7 +92,10 @@ button:disabled { cursor: default; opacity: .55; }
 .folder-icon { width: 16px; color: #8e99b1; text-align: center; }
 .category-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-spacer { flex: 1; }
-.sidebar-footer { display: grid; gap: 5px; padding: 13px 9px 3px; color: #687183; font-size: 9px; }
+.sidebar-footer {
+  display: grid; flex: 0 0 auto; gap: 5px; margin-top: 9px; padding: 13px 9px 3px;
+  border-top: 1px solid #2a2e38; color: #687183; font-size: 9px;
+}
 .sidebar-version { color: #a0a9c0; font-size: 9px; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .version-card { margin-top: 14px; }
 .version-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding-top: 15px; border-top: 1px solid #292e38; }
@@ -189,8 +217,8 @@ h1 { margin: 12px 0 8px; color: #f4f5fa; font-size: 32px; font-weight: 650; lett
 .context-menu button:hover { background: #303747; }
 .context-menu .danger-menu-item { color: #e89aa3; }
 .context-divider { height: 1px; margin: 4px 3px; background: #383e4b; }
-.modal-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 22px; background: #080a0fbb; backdrop-filter: blur(5px); }
-.modal-card { width: min(480px, 100%); max-height: min(90vh, 760px); overflow: auto; padding: 23px; border: 1px solid #3a4050; border-radius: 13px; background: #1a1e27; box-shadow: 0 22px 70px #000b; }
+.modal-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; overflow-y: auto; overscroll-behavior: contain; padding: 22px; background: #080a0fbb; backdrop-filter: blur(5px); }
+.modal-card { width: min(480px, 100%); max-height: calc(100vh - 44px); overflow: auto; overscroll-behavior: contain; margin: auto; padding: 23px; border: 1px solid #3a4050; border-radius: 13px; background: #1a1e27; box-shadow: 0 22px 70px #000b; }
 .modal-heading { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 22px; }
 .modal-heading h2 { margin: 9px 0 0; color: #f0f2f8; font-size: 19px; }
 .close-button { font-size: 21px; }
