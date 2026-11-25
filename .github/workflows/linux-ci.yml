@@ -48,6 +48,11 @@ jobs:
       - name: Chromium WebContentsView smoke test
         run: xvfb-run -a npm run smoke
 
+      - name: Install pacman package build utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools
+
       - name: Build native Arch package
         run: npm run package:pacman
 
