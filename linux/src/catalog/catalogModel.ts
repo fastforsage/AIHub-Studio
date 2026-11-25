@@ -70,6 +70,8 @@ import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
 const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; categoryIds: string[] }> = [
   { id: "chatgpt", name: "ChatGPT", url: "https://chatgpt.com/", categoryIds: ["chatbot"] },
+  { id: "alice-ai", name: "Алиса AI — Яндекс", url: "https://alice.yandex.ru/", categoryIds: ["chatbot"] },
+  { id: "gigachat", name: "GigaChat — Сбер", url: "https://giga.chat/", categoryIds: ["chatbot"] },
   { id: "claude", name: "Claude", url: "https://claude.ai/", categoryIds: ["chatbot"] },
   { id: "gemini", name: "Gemini", url: "https://gemini.google.com/", categoryIds: ["chatbot"] },
   { id: "grok", name: "Grok", url: "https://grok.com/", categoryIds: ["chatbot"] },
