@@ -10,7 +10,8 @@
     "preview": "electron-vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "smoke": "electron --no-sandbox smoke/browser-smoke.cjs"
+    "smoke": "electron --no-sandbox smoke/browser-smoke.cjs",
+    "package:pacman": "npm run build && electron-builder --linux pacman --x64 --publish never"
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -25,9 +26,62 @@
     "electron-vite": "6.0.0",
     "typescript": "^5.9.3",
     "vite": "^8.0.0",
-    "vitest": "^4.0.13"
+    "vitest": "^4.0.13",
+    "electron-builder": "26.18.1"
   },
   "engines": {
     "node": ">=24.22.0 <25"
+  },
+  "productName": "AIHub Studio",
+  "desktopName": "aihub-studio",
+  "build": {
+    "appId": "io.github.fastforsage.aihubstudio",
+    "productName": "AIHub Studio",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        {
+          "target": "pacman",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Development",
+      "executableName": "aihub-studio",
+      "desktopName": "aihub-studio",
+      "syncDesktopName": true,
+      "synopsis": "Unified workspace for cloud AI websites and local language models",
+      "description": "AIHub Studio is a Chromium-based desktop workspace for cloud AI websites and local OpenAI-compatible language models.",
+      "desktop": {
+        "entry": {
+          "Name": "AIHub Studio",
+          "Comment": "Unified workspace for cloud AI websites and local language models",
+          "Categories": "Development;Utility;",
+          "Keywords": "AI;LLM;Chat;Chromium;Local AI;",
+          "Terminal": false,
+          "Type": "Application"
+        }
+      }
+    },
+    "pacman": {
+      "depends": [
+        "gtk3",
+        "libnotify",
+        "nss",
+        "libxss",
+        "libxtst",
+        "xdg-utils",
+        "at-spi2-core",
+        "libsecret"
+      ]
+    }
   }
 }
