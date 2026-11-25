@@ -20,11 +20,17 @@ pacman -U --noconfirm "$package"
 package_name="$(pacman -Qp "$package" | awk '{print $1}')"
 pacman -Q "$package_name"
 
-installed_files="$(pacman -Ql "$package_name")"
-printf '%s\n' "$installed_files" | grep -E '/usr/share/applications/[^ ]+\.desktop$'
-printf '%s\n' "$installed_files" | grep -E '/aihub-studio
+installed_files="$(pacman -Qlq "$package_name")"
+printf '%s\n' "$installed_files"
 
-printf 'Arch package installation check passed for %s\n' "$package_name"
+if ! printf '%s\n' "$installed_files" | grep -Fqx '/usr/share/applications/aihub-studio.desktop'; then
+  printf 'The AIHub Studio desktop entry was not installed\n' >&2
+  exit 1
+fi
 
+if ! printf '%s\n' "$installed_files" | grep -E '/aihub-studio$'; then
+  printf 'The AIHub Studio executable was not installed\n' >&2
+  exit 1
+fi
 
 printf 'Arch package installation check passed for %s\n' "$package_name"
