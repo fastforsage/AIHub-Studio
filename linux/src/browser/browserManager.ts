@@ -141,6 +141,8 @@ export class BrowserManager {
   async navigate(tabId: string, input: string): Promise<BrowserManagerState> {
     const tab = this.requireTab(tabId);
     if (!tab) return this.getState();
+    const contents = this.getLiveContents(tab);
+    if (!contents) return this.getState();
     const url = normalizeBrowserUrl(input);
     if (!url) throw new Error("Only HTTP and HTTPS addresses are allowed");
 
@@ -151,7 +153,7 @@ export class BrowserManager {
     this.publish();
 
     try {
-      await tab.view.webContents.loadURL(url);
+      await contents.loadURL(url);
     } catch {
       const current = this.tabs.get(tabId);
       if (current) {
