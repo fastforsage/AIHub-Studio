@@ -39,7 +39,7 @@ function classify(status: number, latency: number): { status: AvailabilityStatus
     : { status: "available", message: "Сайт отвечает." };
   if ([401, 403, 429].includes(status)) return {
     status: "protected",
-    message: "HTTP " + status + ": возможна защита от автоматических запросов, авторизация или ограничение частоты. Сервис не обязательно не работает."
+    message: "HTTP " + status + " может означать защиту от автоматических запросов, требование авторизации или ограничение частоты; это не доказывает, что сайт недоступен."
   };
   return { status: "unavailable", message: "Сервер ответил HTTP " + status + "." };
 }
