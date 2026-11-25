@@ -1,3 +1,5 @@
+import type { CatalogApi } from "../../shared/catalogApi";
+
 export {};
 
 declare global {
@@ -5,6 +7,7 @@ declare global {
     aihub?: {
       platform: string;
       version: string;
+      catalog: CatalogApi;
     };
   }
 }
