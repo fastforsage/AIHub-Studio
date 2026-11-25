@@ -9,10 +9,12 @@ The current foundation stage contains:
 - Electron main process and hardened preload bridge;
 - React workspace shell;
 - XDG-compliant application paths;
-- URL validation helper for website entries;
+- AI catalog, category management and persistent Local AI/Cloud Site configuration;
+- secure Browser Manager based on WebContentsView and persistent isolated profiles;
+- global browser proxy settings;
 - unit tests and Linux CI.
 
-The next stages add the sidebar catalog/categories, Browser Manager, and OpenAI-compatible Local AI. Message capture and chat archiving are explicitly out of scope for now.
+The next stage adds the OpenAI-compatible Local AI request client and automatic model discovery. Message capture and chat archiving are explicitly out of scope for now.
 
 ## Development
 Use Node.js 24 LTS and npm.
