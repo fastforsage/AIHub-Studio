@@ -75,6 +75,7 @@ function App() {
 
   const selectedProvider = catalog.providers.find((provider) => provider.id === selectedProviderId) ?? null;
   const modalProvider = modal?.kind === "provider-edit" ? catalog.providers.find((provider) => provider.id === modal.id) ?? null : null;
+  const contextProvider = menu?.target.kind === "provider" ? catalog.providers.find((provider) => provider.id === menu.target.id) ?? null : null;
   const visibleProviders = useMemo(() => {
     if (activeCategory === "favorites") {
       return catalog.providers.filter((provider) => provider.favorite);
@@ -374,7 +375,7 @@ function App() {
             </>}
             {menu.target.kind === "provider" && <>
               <button type="button" onClick={() => invokeMenuAction("provider-edit")}>✎ Change</button>
-              <button type="button" onClick={() => invokeMenuAction("favorite")}>★ {catalog.providers.find((item) => item.id === menu.target.id)?.favorite ? "Remove from Favorites" : "Add to Favorites"}</button>
+              <button type="button" onClick={() => invokeMenuAction("favorite")}>★ {contextProvider?.favorite ? "Remove from Favorites" : "Add to Favorites"}</button>
               <div className="context-divider" />
               <button className="danger-menu-item" type="button" onClick={() => invokeMenuAction("provider-delete")}>⌫ Del</button>
             </>}
