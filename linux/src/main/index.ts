@@ -1,4 +1,4 @@
-import { app, BrowserWindow, IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, IpcMainInvokeEvent, Menu } from "electron";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserManager } from "../browser/browserManager";
@@ -9,6 +9,7 @@ import { resolveAppPaths } from "../shared/appPaths";
 import { registerBrowserIpc } from "./browserIpc";
 import { registerCatalogIpc } from "./catalogIpc";
 import { registerLocalAiIpc } from "./localAiIpc";
+import { removeNativeApplicationMenu } from "./nativeMenu";
 
 const paths = resolveAppPaths(process.env);
 const sessionDataPath = join(paths.data, "sessions");
@@ -48,6 +49,7 @@ function createMainWindow(): BrowserWindow {
     }
   });
 
+  removeNativeApplicationMenu(Menu, window);
   mainWindow = window;
   window.once("ready-to-show", () => window.show());
   window.on("closed", () => {
