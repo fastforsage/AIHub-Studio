@@ -213,7 +213,7 @@ export function addWebsiteProvider(
   const url = normalizeWebsiteUrl(input.url);
   if (!url) throw new CatalogError("INVALID_URL", "Only valid HTTP or HTTPS website URLs are supported");
 
-  const categoryIds = requireCategoryIds(state, input.categoryIds ?? ["ai"]);
+  const categoryIds = requireCategoryIds(state, input.categoryIds ?? ["chatbot"]);
   const id = idFactory();
   if (state.providers.some((provider) => provider.id === id) || state.categories.some((category) => category.id === id)) {
     throw new CatalogError("DUPLICATE_ID", "Generated identifier already exists");
