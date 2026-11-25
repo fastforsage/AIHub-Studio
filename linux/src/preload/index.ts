@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { BrowserApi } from "../shared/browserApi";
 import type { CatalogApi } from "../shared/catalogApi";
 
 const catalog: CatalogApi = {
@@ -13,8 +14,26 @@ const catalog: CatalogApi = {
   setFavorite: (id, favorite) => ipcRenderer.invoke("catalog:provider:favorite", { id, favorite })
 };
 
+const browser: BrowserApi = {
+  get: () => ipcRenderer.invoke("browser:get"),
+  openWebsite: (providerId) => ipcRenderer.invoke("browser:open-website", { providerId }),
+  activate: (tabId) => ipcRenderer.invoke("browser:activate", { tabId }),
+  close: (tabId) => ipcRenderer.invoke("browser:close", { tabId }),
+  navigate: (tabId, url) => ipcRenderer.invoke("browser:navigate", { tabId, url }),
+  back: (tabId) => ipcRenderer.invoke("browser:back", { tabId }),
+  forward: (tabId) => ipcRenderer.invoke("browser:forward", { tabId }),
+  reload: (tabId) => ipcRenderer.invoke("browser:reload", { tabId }),
+  setViewportBounds: (bounds) => ipcRenderer.invoke("browser:set-viewport", bounds),
+  onChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) => listener(state);
+    ipcRenderer.on("browser:changed", handler);
+    return () => ipcRenderer.removeListener("browser:changed", handler);
+  }
+};
+
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
   version: "0.1.0",
-  catalog: Object.freeze(catalog)
+  catalog: Object.freeze(catalog),
+  browser: Object.freeze(browser)
 }));
