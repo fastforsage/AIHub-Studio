@@ -19,10 +19,14 @@ const id = (value: string) => () => value;
 describe("catalog categories", () => {
   it("creates the default category set", () => {
     const catalog = createDefaultCatalog();
-    expect(catalog.categories.map((category) => category.id)).toEqual([
-      "ai", "local-ai", "dev", "community", "design", "email", "video"
+    expect(catalog.categories.map((category) => category.name)).toEqual([
+      "chatbot", "music generator", "voice generator", "video generator",
+      "writing helper", "research assistant", "translator", "presentation maker",
+      "image generator", "many in one", "Local AI"
     ]);
-    expect(catalog.providers).toEqual([]);
+    expect(catalog.providers.map((provider) => provider.name)).toContain("ChatGPT");
+    expect(catalog.providers.map((provider) => provider.name)).toContain("Claude");
+    expect(catalog.providers).toHaveLength(20);
   });
 
   it("adds a trimmed category", () => {
@@ -31,23 +35,23 @@ describe("catalog categories", () => {
   });
 
   it("rejects duplicate category names case-insensitively", () => {
-    expect(() => addCategory(createDefaultCatalog(), "aI", id("new")))
+    expect(() => addCategory(createDefaultCatalog(), "CHATBOT", id("new")))
       .toThrowError(CatalogError);
   });
 
   it("renames a category without changing its identifier", () => {
-    const result = renameCategory(createDefaultCatalog(), "dev", "Development");
-    expect(result.categories.find((item) => item.id === "dev")?.name).toBe("Development");
+    const result = renameCategory(createDefaultCatalog(), "music-generator", "Development");
+    expect(result.categories.find((item) => item.id === "music-generator")?.name).toBe("Development");
   });
 
   it("deletes a category without deleting its providers", () => {
     const base = addWebsiteProvider(createDefaultCatalog(), {
-      name: "Example", url: "example.com", categoryIds: ["ai", "dev"]
+      name: "Example", url: "example.com", categoryIds: ["chatbot", "music-generator"]
     }, id("provider"));
-    const result = deleteCategory(base, "dev");
+    const result = deleteCategory(base, "music-generator");
     expect(result.categories.some((item) => item.id === "dev")).toBe(false);
     expect(result.providers).toHaveLength(1);
-    expect(result.providers[0].categoryIds).toEqual(["ai"]);
+    expect(result.providers[0].categoryIds).toEqual(["chatbot"]);
   });
 });
 
@@ -56,9 +60,9 @@ describe("catalog providers", () => {
     const result = addWebsiteProvider(createDefaultCatalog(), {
       name: "Example", url: "example.com"
     }, id("website"));
-    expect(result.providers[0]).toMatchObject({
+    expect(result.providers.find((provider) => provider.id === "website")).toMatchObject({
       id: "website", name: "Example", type: "website",
-      url: "https://example.com/", categoryIds: ["ai"], favorite: false, enabled: true,
+      url: "https://example.com/", categoryIds: ["chatbot"], favorite: false, enabled: true,
       profileId: "website"
     });
   });
@@ -73,7 +77,7 @@ describe("catalog providers", () => {
     const result = addLocalApiProvider(createDefaultCatalog(), {
       name: "Local LLM", apiType: "openai", host: "localhost", port: 11434
     }, id("local"));
-    expect(result.providers[0]).toMatchObject({
+    expect(result.providers.find((provider) => provider.id === "local")).toMatchObject({
       id: "local", name: "Local LLM", type: "local-api", apiType: "openai",
       host: "localhost", port: 11434, categoryIds: ["local-ai"],
       favorite: false, enabled: true, models: []
@@ -115,9 +119,9 @@ describe("catalog providers", () => {
       name: "Example", url: "example.com"
     }, id("website"));
     const result = updateProvider(first, "website", {
-      type: "website", name: "Example AI", url: "https://example.org", categoryIds: ["dev"]
+      type: "website", name: "Example AI", url: "https://example.org", categoryIds: ["music-generator"]
     });
-    expect(result.providers[0]).toMatchObject({
+    expect(result.providers.find((provider) => provider.id === "website")).toMatchObject({
       id: "website", name: "Example AI", url: "https://example.org/",
       profileId: "website", categoryIds: ["dev"]
     });
@@ -137,8 +141,8 @@ describe("catalog providers", () => {
       name: "Example", url: "example.com"
     }, id("website"));
     const favorited = setProviderFavorite(first, "website", true);
-    expect(favorited.providers[0].favorite).toBe(true);
-    expect(deleteProvider(favorited, "website").providers).toEqual([]);
+    expect(favorited.providers.find((provider) => provider.id === "website")?.favorite).toBe(true);
+    expect(deleteProvider(favorited, "website").providers.some((provider) => provider.id === "website")).toBe(false);
   });
 });
 
@@ -152,7 +156,7 @@ describe("Local AI model catalog state", () => {
 
   it("stores discovered models and selects the first available model", () => {
     const result = updateLocalModels(localCatalog(), "local", ["qwen3:8b", "llama3.2"]);
-    expect(result.providers[0]).toMatchObject({
+    expect(result.providers.find((provider) => provider.id === "local")).toMatchObject({
       models: ["qwen3:8b", "llama3.2"],
       selectedModel: "qwen3:8b"
     });
@@ -162,7 +166,7 @@ describe("Local AI model catalog state", () => {
     const first = updateLocalModels(localCatalog(), "local", ["qwen3:8b", "llama3.2"]);
     const selected = selectLocalModel(first, "local", "llama3.2");
     const refreshed = updateLocalModels(selected, "local", ["llama3.2", "deepseek-r1"]);
-    expect(refreshed.providers[0]).toMatchObject({
+    expect(refreshed.providers.find((provider) => provider.id === "local")).toMatchObject({
       models: ["llama3.2", "deepseek-r1"],
       selectedModel: "llama3.2"
     });
@@ -201,7 +205,7 @@ describe("Local AI model catalog state", () => {
 
   it("deduplicates discovered identifiers and rejects invalid values", () => {
     const result = updateLocalModels(localCatalog(), "local", ["qwen3:8b", "qwen3:8b"]);
-    expect(result.providers[0]).toMatchObject({ models: ["qwen3:8b"] });
+    expect(result.providers.find((provider) => provider.id === "local")).toMatchObject({ models: ["qwen3:8b"] });
     expect(() => updateLocalModels(localCatalog(), "local", [" "]))
       .toThrowError(CatalogError);
   });
