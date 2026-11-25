@@ -32,7 +32,7 @@ describe("CatalogStore", () => {
     expect(initial.providers.map((provider) => provider.name)).toContain("ChatGPT");
     expect(initial.providers.map((provider) => provider.name)).toContain("Claude");
     expect(initial.providers).toHaveLength(32);
-    expect(initial.providers.filter((provider) => provider.enabled)).toHaveLength(12);
+    expect(initial.providers.filter((provider) => provider.enabled)).toHaveLength(14);
 
     await store.transact((current) => addCategory(current, "Research", () => "research"));
 
@@ -58,7 +58,6 @@ describe("CatalogStore", () => {
       ].includes(provider.id)).map((provider) => ({
         ...provider,
         categoryIds: provider.categoryIds.filter((id) => id !== "api-providers"),
-        enabled: true
       }))
     };
     await mkdir(dirname(filePath), { recursive: true });
@@ -67,7 +66,7 @@ describe("CatalogStore", () => {
     const store = new CatalogStore(filePath);
     const upgraded = await store.initialize();
     expect(upgraded.providers).toHaveLength(32);
-    expect(upgraded.providers.filter((provider) => provider.enabled)).toHaveLength(12);
+    expect(upgraded.providers.filter((provider) => provider.enabled)).toHaveLength(14);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
     expect(upgraded.providers.find((provider) => provider.id === "mistral")?.categoryIds).toContain("api-providers");
   });
@@ -127,7 +126,7 @@ describe("CatalogStore", () => {
     expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.favorite).toBe(true);
     expect(migrated.providers.find((provider) => provider.id === "chatgpt")).toMatchObject({ type: "website", profileId: "legacy-chatgpt" });
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
-    expect(migrated.providers.filter((provider) => provider.enabled).length).toBe(14);
+    expect(migrated.providers.filter((provider) => provider.enabled).length).toBe(16);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
     expect(persisted.providers).toHaveLength(32);
   });
