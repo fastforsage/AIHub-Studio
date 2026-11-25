@@ -64,7 +64,7 @@ function App() {
   const [formUrl, setFormUrl] = useState("");
   const [formHost, setFormHost] = useState("localhost");
   const [formPort, setFormPort] = useState("11434");
-  const [formCategoryIds, setFormCategoryIds] = useState<string[]>(["ai"]);
+  const [formCategoryIds, setFormCategoryIds] = useState<string[]>(["chatbot"]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -233,7 +233,7 @@ function App() {
     } else if (next.kind === "website-add") {
       setFormName("");
       setFormUrl("");
-      setFormCategoryIds([next.categoryId ?? "ai"]);
+      setFormCategoryIds([next.categoryId ?? "chatbot"]);
     } else if (next.kind === "local-add") {
       setFormName("Local LLM");
       setFormHost("localhost");
