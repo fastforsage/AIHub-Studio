@@ -20,7 +20,9 @@ export class CatalogStore {
 
     try {
       const raw = await readFile(this.filePath, "utf8");
-      const parsed: unknown = JSON.parse(raw);
+      const parsedRaw: unknown = JSON.parse(raw);
+      const repaired = repairDuplicateProviderEntries(parsedRaw);
+      const parsed = repaired.catalog;
       assertCatalogState(parsed);
       const legacyDefaultIds = new Set(["ai", "local-ai", "dev", "community", "design", "email", "video"]);
       const currentDefaults = createDefaultCatalog();
@@ -126,6 +128,7 @@ export class CatalogStore {
         await this.write(this.state);
       } else {
         this.state = structuredClone(parsed);
+        if (repaired.changed) await this.write(this.state);
       }
     } catch (error) {
       if (isMissingFile(error)) {
@@ -181,6 +184,80 @@ export class CatalogStore {
       throw error;
     }
   }
+}
+
+function repairDuplicateProviderEntries(value: unknown): { catalog: unknown; changed: boolean } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { catalog: value, changed: false };
+  }
+  const document = value as Record<string, unknown>;
+  if (!Array.isArray(document.providers) || !Array.isArray(document.categories)) {
+    return { catalog: value, changed: false };
+  }
+
+  const categoryIds = new Set(document.categories.flatMap((item) =>
+    typeof item === "object" && item !== null && !Array.isArray(item) &&
+    typeof (item as Record<string, unknown>).id === "string"
+      ? [(item as Record<string, unknown>).id as string]
+      : []
+  ));
+  const providers: unknown[] = [];
+  let changed = false;
+  const normalize = (name: string) => name.trim().toLocaleLowerCase();
+
+  for (const rawProvider of document.providers) {
+    if (typeof rawProvider !== "object" || rawProvider === null || Array.isArray(rawProvider)) {
+      providers.push(rawProvider);
+      continue;
+    }
+    const provider = { ...(rawProvider as Record<string, unknown>) };
+    if (typeof provider.id !== "string" || typeof provider.name !== "string") {
+      providers.push(rawProvider);
+      continue;
+    }
+
+    const duplicate = providers.find((candidate) =>
+      typeof candidate === "object" && candidate !== null && !Array.isArray(candidate) &&
+      normalize(String((candidate as Record<string, unknown>).name ?? "")) === normalize(provider.name as string)
+    ) as Record<string, unknown> | undefined;
+
+    if (duplicate && duplicate.type === provider.type) {
+      const oldCategories = Array.isArray(duplicate.categoryIds) ? duplicate.categoryIds : [];
+      const newCategories = Array.isArray(provider.categoryIds) ? provider.categoryIds : [];
+      duplicate.categoryIds = [...new Set([...oldCategories, ...newCategories].filter((id) => typeof id === "string"))];
+      duplicate.favorite = duplicate.favorite === true || provider.favorite === true;
+      duplicate.enabled = duplicate.enabled === true || provider.enabled === true;
+      changed = true;
+      continue;
+    }
+
+    const idInUse = categoryIds.has(provider.id) || providers.some((candidate) =>
+      typeof candidate === "object" && candidate !== null && !Array.isArray(candidate) &&
+      (candidate as Record<string, unknown>).id === provider.id
+    );
+    if (idInUse) {
+      provider.id = randomUUID();
+      changed = true;
+    }
+
+    if (duplicate) {
+      const baseName = provider.name.trim() + (provider.type === "local-api" ? " (Local API)" : " (Website)");
+      let uniqueName = baseName;
+      let suffix = 2;
+      while (providers.some((candidate) =>
+        typeof candidate === "object" && candidate !== null && !Array.isArray(candidate) &&
+        normalize(String((candidate as Record<string, unknown>).name ?? "")) === normalize(uniqueName)
+      )) {
+        uniqueName = baseName + " " + suffix++;
+      }
+      provider.name = uniqueName;
+      changed = true;
+    }
+
+    providers.push(provider);
+  }
+
+  return { catalog: changed ? { ...document, providers } : value, changed };
 }
 
 function isMissingFile(error: unknown): boolean {
