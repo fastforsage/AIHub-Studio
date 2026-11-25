@@ -4,6 +4,12 @@ Cross-platform desktop workspace for cloud AI websites and local OpenAI-compatib
 
 > **Alpha 0.1.10:** This is an early test release. Expect bugs and provider-specific incompatibilities. See the [Russian documentation](docs/README.ru.md), [English documentation](docs/README.en.md), and [Alpha release notes](ALPHA-RELEASE-NOTES.md).
 
+## Download
+
+**[Download AIHub Studio 0.1.10-alpha.1 — Windows 10/11 x64](https://github.com/fastforsage/AIHub-Studio/releases/tag/AIHubStudio-Setup-x64)**
+
+The GitHub Release provides the Windows x64 installer package as a ZIP archive. Download and extract it, then run the included `AIHubStudio-Setup-x64.msi`.
+
 ## Documentation
 
 - [Документация на русском](docs/README.ru.md)
