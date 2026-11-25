@@ -26,7 +26,7 @@ export class CatalogStore {
       assertCatalogState(parsed);
       const legacyDefaultIds = new Set(["ai", "local-ai", "dev", "community", "design", "email", "video"]);
       const currentDefaults = createDefaultCatalog();
-      const newProviderIds = new Set(["cerebras-inference", "sambanova-cloud"]);
+      const newProviderIds = new Set(["alice-ai", "gigachat"]);
       const previousProviderIds = new Set(currentDefaults.providers
         .filter((provider) => !newProviderIds.has(provider.id))
         .map((provider) => provider.id));
@@ -36,7 +36,8 @@ export class CatalogStore {
       const previousTwentyProviderIds = new Set(currentDefaults.providers
         .filter((provider) => !newProviderIds.has(provider.id) && ![
           "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
-          "modelscope", "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+          "cerebras-inference", "sambanova-cloud", "modelscope",
+          "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
         ].includes(provider.id))
         .map((provider) => provider.id));
       const previousElevenCategoryIds = new Set(currentDefaults.categories
@@ -77,7 +78,7 @@ export class CatalogStore {
             ...provider,
             ...previous,
             categoryIds: [...new Set([...mappedPreviousCategories, ...provider.categoryIds])],
-            enabled: POPULAR_PROVIDER_IDS.includes(provider.id)
+            enabled: previous.enabled
           };
         });
         const defaultProviderIds = new Set(currentDefaults.providers.map((provider) => provider.id));
