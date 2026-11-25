@@ -849,7 +849,7 @@ function App() {
                     title={tab.kind === "website" ? tab.url : tab.title} onClick={() => activateWorkspaceTab(tab)}>
                     {tab.kind === "local-ai"
                       ? <span className="workspace-tab-icon local-tab-icon">⌘</span>
-                      : <ProviderBrandIcon providerId={catalog.providers.find((provider) => provider.id === tab.providerId)?.id ?? "website"} name={tab.title} size="small" />}
+                      : <ProviderBrandIcon providerId={browserState.tabs.find((browserTab) => browserTab.id === tab.browserTabId)?.providerId ?? "website"} name={tab.title} size="small" />}
                     <span className="workspace-tab-label">{tab.title}</span>
                     {tab.kind === "website" && tab.loading && <span className="workspace-tab-loading">◌</span>}
                   </button>
