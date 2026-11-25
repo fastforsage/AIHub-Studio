@@ -46,7 +46,7 @@ const BRANDS: Record<string, BrandDefinition> = {
 
 export function ProviderBrandIcon({ providerId, name, size = "medium" }: ProviderBrandIconProps) {
   const definition = BRANDS[providerId];
-  const glyph = definition?.glyph ?? name.trim().slice(0, 1).toUpperCase() || "?";
+  const glyph = definition?.glyph ?? (name.trim().slice(0, 1).toUpperCase() || "?");
   const brand = definition?.brand ?? "generic";
 
   return (
