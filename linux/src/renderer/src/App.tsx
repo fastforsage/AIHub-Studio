@@ -13,6 +13,8 @@ import { formatBuildLabel } from "../../shared/versionLabel";
 import { buildWorkspaceTabs, type WorkspaceTab } from "../../shared/workspaceTabs";
 import { getInitiallyExpandedCategories, toggleExpandedCategory } from "../../shared/catalogNavigation";
 import type { DiagnosticsStatus, LogEntry, LogLevel, LoggingSettings } from "../../shared/diagnosticsApi";
+import type { AvailabilityStatus, ServiceAvailabilityReport } from "../../shared/availabilityApi";
+import { ProviderBrandIcon } from "./components/ProviderBrandIcon";
 
 type MenuTarget =
   | { kind: "root" }
@@ -52,12 +54,24 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected application error";
 }
 
+function availabilityLabel(status: AvailabilityStatus): string {
+  switch (status) {
+    case "available": return "Доступен";
+    case "slow": return "Медленно";
+    case "protected": return "Защита / вход";
+    case "regional-restriction": return "Региональное ограничение";
+    case "unavailable": return "Недоступен";
+  }
+}
+
 function App() {
   const catalogApi = window.aihub?.catalog;
   const browserApi = window.aihub?.browser;
   const localAiApi = window.aihub?.localAi;
   const diagnosticsApi = window.aihub?.diagnostics;
+  const availabilityApi = window.aihub?.availability;
   const browserViewportRef = useRef<HTMLDivElement>(null);
+  const settingsReturnMode = useRef<"catalog" | "browser" | "local-chat">("catalog");
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
   const [catalogSelection, setCatalogSelection] = useState<string[]>([]);
   const [catalogSearch, setCatalogSearch] = useState("");
@@ -77,6 +91,9 @@ function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [browserState, setBrowserState] = useState<BrowserManagerState>({ tabs: [], activeTabId: null });
   const [workspaceMode, setWorkspaceMode] = useState<"catalog" | "browser" | "settings" | "local-chat">("catalog");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [availabilityBusy, setAvailabilityBusy] = useState(false);
+  const [availabilityReport, setAvailabilityReport] = useState<ServiceAvailabilityReport | null>(null);
   const [localChatProviderId, setLocalChatProviderId] = useState<string | null>(null);
   const [openLocalTabIds, setOpenLocalTabIds] = useState<string[]>([]);
   const [localChats, setLocalChats] = useState<Record<string, LocalChatMessage[]>>({});
@@ -225,11 +242,23 @@ function App() {
     () => buildWorkspaceTabs(browserState.tabs, catalog.providers, openLocalTabIds),
     [browserState.tabs, catalog.providers, openLocalTabIds]
   );
-  const activeWorkspaceTabKey = workspaceMode === "browser" && activeBrowserTab
-    ? "website:" + activeBrowserTab.id
-    : workspaceMode === "local-chat" && localChatProviderId
-      ? "local:" + localChatProviderId
-      : null;
+  const activeWorkspaceTabKey = workspaceMode === "settings" && settingsOpen
+    ? "settings"
+    : workspaceMode === "browser" && activeBrowserTab
+      ? "website:" + activeBrowserTab.id
+      : workspaceMode === "local-chat" && localChatProviderId
+        ? "local:" + localChatProviderId
+        : null;
+  const availabilityByProviderId = useMemo(
+    () => new Map((availabilityReport?.results ?? []).map((result) => [result.providerId, result])),
+    [availabilityReport]
+  );
+  const availabilitySummary = availabilityReport ? {
+    available: availabilityReport.results.filter((item) => item.status === "available" || item.status === "slow").length,
+    protected: availabilityReport.results.filter((item) => item.status === "protected").length,
+    restricted: availabilityReport.results.filter((item) => item.status === "regional-restriction").length,
+    unavailable: availabilityReport.results.filter((item) => item.status === "unavailable").length
+  } : null;
   const visibleProviders = useMemo(() => {
     const enabledProviders = catalog.providers.filter((provider) => provider.enabled);
     if (activeCategory === "favorites") return enabledProviders.filter((provider) => provider.favorite);
@@ -286,6 +315,36 @@ function App() {
       setError(errorMessage(reason));
     } finally {
       setBusy(false);
+    }
+  }
+
+  function openSettings(): void {
+    if (workspaceMode !== "settings") settingsReturnMode.current = workspaceMode;
+    setCatalogSelection(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
+    setCatalogSearch("");
+    setSettingsOpen(true);
+    setWorkspaceMode("settings");
+  }
+
+  function closeSettings(): void {
+    setSettingsOpen(false);
+    if (workspaceMode === "settings") setWorkspaceMode(settingsReturnMode.current);
+  }
+
+  async function checkCatalogAvailability(): Promise<void> {
+    if (!availabilityApi || availabilityBusy) return;
+    setAvailabilityBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const report = await availabilityApi.checkCatalog();
+      setAvailabilityReport(report);
+      const usable = report.results.filter((item) => item.status === "available" || item.status === "slow").length;
+      setNotice("Проверка завершена: " + usable + " из " + report.results.length + " сайтов отвечают.");
+    } catch (reason) {
+      setError("Не удалось проверить доступность AI-сервисов: " + errorMessage(reason));
+    } finally {
+      setAvailabilityBusy(false);
     }
   }
 
@@ -706,12 +765,8 @@ function App() {
           </div>
         </div>
 
-        <button className={workspaceMode === "settings" ? "nav-item nav-item-active sidebar-settings-button" : "nav-item sidebar-settings-button"} type="button" onClick={() => {
-          setCatalogSelection(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
-          setCatalogSearch("");
-          setWorkspaceMode("settings");
-        }}>
-          <span className="nav-icon">⚙</span><span>Settings</span>
+        <button className={workspaceMode === "settings" ? "nav-item nav-item-active sidebar-settings-button" : "nav-item sidebar-settings-button"} type="button" onClick={openSettings}>
+          <span className="nav-icon">⚙</span><span>Настройки</span>
         </button>
 
         <div className="sidebar-scroll" aria-label="Workspace navigation">
@@ -761,9 +816,9 @@ function App() {
                           else void openLocalChat(provider);
                         }}
                         onContextMenu={(event) => showContextMenu(event, { kind: "provider", id: provider.id })}>
-                        <span className={provider.type === "website" ? "category-provider-icon website-provider-icon" : "category-provider-icon local-provider-icon"}>
-                          {provider.type === "website" ? "◉" : "⌘"}
-                        </span>
+                        {provider.type === "website"
+                          ? <ProviderBrandIcon providerId={provider.id} name={provider.name} size="small" />
+                          : <span className="category-provider-icon local-provider-icon">⌘</span>}
                         <span className="category-provider-name">{provider.name}</span>
                         {provider.favorite && <span className="category-provider-star">★</span>}
                       </button>
@@ -792,9 +847,9 @@ function App() {
                 <div key={tab.key} className={active ? "workspace-tab workspace-tab-active" : "workspace-tab"}>
                   <button className="workspace-tab-select" type="button" role="tab" aria-selected={active}
                     title={tab.kind === "website" ? tab.url : tab.title} onClick={() => activateWorkspaceTab(tab)}>
-                    <span className={tab.kind === "local-ai" ? "workspace-tab-icon local-tab-icon" : "workspace-tab-icon website-tab-icon"}>
-                      {tab.kind === "local-ai" ? "⌘" : "◉"}
-                    </span>
+                    {tab.kind === "local-ai"
+                      ? <span className="workspace-tab-icon local-tab-icon">⌘</span>
+                      : <ProviderBrandIcon providerId={catalog.providers.find((provider) => provider.id === tab.providerId)?.id ?? "website"} name={tab.title} size="small" />}
                     <span className="workspace-tab-label">{tab.title}</span>
                     {tab.kind === "website" && tab.loading && <span className="workspace-tab-loading">◌</span>}
                   </button>
@@ -804,6 +859,20 @@ function App() {
                 </div>
               );
             })}
+            {settingsOpen && (
+              <div className={workspaceMode === "settings" ? "workspace-tab workspace-tab-active settings-workspace-tab" : "workspace-tab settings-workspace-tab"}>
+                <button className="workspace-tab-select" type="button" role="tab" aria-selected={workspaceMode === "settings"}
+                  onClick={() => {
+                    if (workspaceMode !== "settings") settingsReturnMode.current = workspaceMode;
+                    setWorkspaceMode("settings");
+                  }}>
+                  <span className="workspace-tab-icon settings-tab-icon">⚙</span>
+                  <span className="workspace-tab-label">Настройки</span>
+                </button>
+                <button className="workspace-tab-close" type="button" title="Закрыть настройки" aria-label="Закрыть настройки"
+                  onClick={closeSettings}>×</button>
+              </div>
+            )}
             <button className="workspace-new-tab" type="button" title="Add website or Local AI" aria-label="Add website or Local AI"
               onClick={(event) => { setWorkspaceMode("catalog"); setActiveCategory("all"); showContextMenu(event, { kind: "root" }); }}>＋</button>
           </div>
@@ -943,6 +1012,9 @@ function App() {
                             <label className="catalog-provider-option" key={provider.id}>
                               <input type="checkbox" checked={catalogSelection.includes(provider.id)}
                                 onChange={() => toggleCatalogProvider(provider.id)} />
+                              {provider.type === "website"
+                                ? <ProviderBrandIcon providerId={provider.id} name={provider.name} size="small" />
+                                : <span className="catalog-local-icon">⌘</span>}
                               <span>{provider.name}</span>
                               <small>{provider.type === "website" ? "Website" : "Local API"}</small>
                             </label>
@@ -1130,6 +1202,32 @@ function App() {
           {error && <div className="alert alert-error" role="alert">{error}</div>}
           {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
+          <section className="availability-toolbar" aria-label="AI service availability">
+            <div className="availability-toolbar-copy">
+              <strong><span className="availability-pulse" /> Проверка доступности AI</strong>
+              <span>
+                {availabilityReport
+                  ? "Регион: " + (availabilityReport.detectedCountryName
+                    ? availabilityReport.detectedCountryName + " (" + availabilityReport.detectedCountryCode + ")"
+                    : "не определён") + " · " + new Date(availabilityReport.checkedAt).toLocaleString()
+                  : "Проверь доступность сайтов и региональные ограничения для текущего подключения."}
+              </span>
+              {availabilityReport && availabilitySummary && (
+                <div className="availability-summary">
+                  <span className="availability-count-good">Доступно: {availabilitySummary.available}</span>
+                  <span className="availability-count-warn">Защита: {availabilitySummary.protected}</span>
+                  <span className="availability-count-region">Регион: {availabilitySummary.restricted}</span>
+                  <span className="availability-count-bad">Недоступно: {availabilitySummary.unavailable}</span>
+                </div>
+              )}
+              <small>Страна определяется по публичному IP через ipwho.is только после нажатия кнопки. HTTP 403/429 отмечается как защита, а не как подтверждённая поломка сайта.</small>
+            </div>
+            <button className="primary-button availability-check-button" type="button"
+              disabled={availabilityBusy || !availabilityApi} onClick={() => void checkCatalogAvailability()}>
+              {availabilityBusy ? "Проверяем…" : "Проверить сервисы"}
+            </button>
+          </section>
+
           <div className="connection-grid" aria-label="AI connections">
             {visibleProviders.length === 0 ? (
               <div className="empty-state">
@@ -1148,9 +1246,9 @@ function App() {
                 <button className="connection-open" type="button"
                   onClick={() => provider.type === "website" ? void openWebsite(provider) : void openLocalChat(provider)}
                   title={provider.type === "website" ? "Open website in a workspace tab" : "Open Local AI chat in a workspace tab"}>
-                  <span className={provider.type === "website" ? "provider-icon website-icon" : "provider-icon local-icon"}>
-                    {provider.type === "website" ? "◉" : "⌘"}
-                  </span>
+                  {provider.type === "website"
+                    ? <ProviderBrandIcon providerId={provider.id} name={provider.name} size="large" />
+                    : <span className="provider-icon local-icon">⌘</span>}
                   <span className="connection-copy">
                     <span className="provider-name">{provider.name}</span>
                     <span className="provider-subtitle">{provider.type === "website" ? provider.url : provider.apiType + " · " + provider.host + ":" + provider.port}</span>
@@ -1158,7 +1256,20 @@ function App() {
                   <span className={provider.type === "website" ? "type-pill cloud-pill" : "type-pill local-pill"}>{provider.type === "website" ? "CLOUD" : "LOCAL"}</span>
                 </button>
                 <div className="connection-card-footer">
-                  <span className="connection-hint">{provider.type === "website" ? "Open in Chromium" : provider.models.length ? provider.models.length + " model(s) discovered" : "Open local chat"}</span>
+                  <div className="connection-hint-stack">
+                    {provider.type === "website" ? (() => {
+                      const result = availabilityByProviderId.get(provider.id);
+                      return result ? (
+                        <>
+                          <span className={"availability-badge availability-" + result.status} title={result.message}>
+                            <span className="availability-dot" />{availabilityLabel(result.status)}
+                            {result.latencyMs !== null ? " · " + result.latencyMs + " мс" : ""}
+                          </span>
+                          {result.regionNote && <small title={result.regionNote}>{result.regionNote}</small>}
+                        </>
+                      ) : <span className="connection-hint">Доступность не проверена</span>;
+                    })() : <span className="connection-hint">{provider.models.length ? provider.models.length + " model(s) discovered" : "Open local chat"}</span>}
+                  </div>
                   <div className="connection-actions">
                     {provider.favorite && <span className="provider-star" title="Favorite">★</span>}
                     <button className="connection-menu" type="button" title={"Manage " + provider.name}
