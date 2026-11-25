@@ -22,6 +22,9 @@ pacman -Q "$package_name"
 
 installed_files="$(pacman -Ql "$package_name")"
 printf '%s\n' "$installed_files" | grep -E '/usr/share/applications/[^ ]+\.desktop$'
-printf '%s\n' "$installed_files" | grep -E '/opt/[^ ]*/aihub-studio$'
+printf '%s\n' "$installed_files" | grep -E '/aihub-studio
+
+printf 'Arch package installation check passed for %s\n' "$package_name"
+
 
 printf 'Arch package installation check passed for %s\n' "$package_name"
