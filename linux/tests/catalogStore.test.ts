@@ -113,7 +113,7 @@ describe("CatalogStore", () => {
       providers: [
         { id: "gemma-local", name: "Gemma4-26B", type: "local-api", apiType: "openai", host: "localhost", port: 11434, models: ["Gemma4-26B"], selectedModel: "Gemma4-26B", categoryIds: ["local-ai"], favorite: false, enabled: true },
         { id: "duckai", name: "DuckAI", type: "website", url: "https://duck.ai/", profileId: "duckai", categoryIds: ["ai"], favorite: false, enabled: true },
-        { id: "chatgpt", name: "ChatGPT", type: "website", url: "https://chatgpt.com/", profileId: "chatgpt", categoryIds: ["ai"], favorite: false, enabled: true }
+        { id: "legacy-chatgpt", name: "ChatGPT", type: "website", url: "https://chatgpt.com/", profileId: "legacy-chatgpt", categoryIds: ["ai"], favorite: true, enabled: true }
       ]
     }), "utf8");
 
@@ -123,6 +123,9 @@ describe("CatalogStore", () => {
     expect(migrated.providers.find((provider) => provider.id === "duckai")?.categoryIds).toContain("chatbot");
     expect(migrated.providers.find((provider) => provider.id === "gemma-local")?.categoryIds).toContain("local-ai");
     expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.enabled).toBe(true);
+    expect(migrated.providers.filter((provider) => provider.name.toLocaleLowerCase() === "chatgpt")).toHaveLength(1);
+    expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.favorite).toBe(true);
+    expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.profileId).toBe("legacy-chatgpt");
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     expect(migrated.providers.filter((provider) => provider.enabled).length).toBe(14);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
