@@ -61,6 +61,7 @@ export class DiagnosticsManager {
   private settings: LoggingSettings = { ...DEFAULT_SETTINGS };
   private queue: Promise<void> = Promise.resolve();
   private initialized = false;
+  private lastWriteError: string | null = null;
 
   constructor(
     private readonly directory: string,
@@ -117,7 +118,9 @@ export class DiagnosticsManager {
       await appendFile(join(this.directory, LOG_FILE), line + "\n", { encoding: "utf8", mode: 0o600 });
       await chmod(join(this.directory, LOG_FILE), 0o600);
       await this.pruneExpired();
-    }).catch(() => undefined);
+    }).then(() => { this.lastWriteError = null; }).catch((error: unknown) => {
+      this.lastWriteError = error instanceof Error ? error.message : String(error);
+    });
   }
 
   installConsoleCapture(): void {
@@ -135,6 +138,7 @@ export class DiagnosticsManager {
 
   async getStatus(): Promise<DiagnosticsStatus> {
     this.ensureInitialized();
+    await this.flush();
     let currentFileBytes = 0;
     try {
       currentFileBytes = (await stat(join(this.directory, LOG_FILE))).size;
@@ -147,12 +151,14 @@ export class DiagnosticsManager {
       currentFile: join(this.directory, LOG_FILE),
       settings: this.getSettings(),
       currentFileBytes,
-      rotatedFiles: files.filter((name) => name.startsWith(LOG_FILE + ".") && Number.isInteger(Number(name.slice(LOG_FILE.length + 1))) && name.slice(LOG_FILE.length + 1).length > 0).length
+      rotatedFiles: files.filter((name) => name.startsWith(LOG_FILE + ".") && Number.isInteger(Number(name.slice(LOG_FILE.length + 1))) && name.slice(LOG_FILE.length + 1).length > 0).length,
+      lastWriteError: this.lastWriteError
     };
   }
 
   async getRecentLogs(limit = 200, level: LogLevel | "all" = "all"): Promise<LogEntry[]> {
     this.ensureInitialized();
+    await this.flush();
     const safeLimit = Math.max(1, Math.min(2000, Math.trunc(limit)));
     const files = await this.listLogFiles();
     const entries: LogEntry[] = [];
