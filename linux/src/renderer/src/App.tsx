@@ -493,6 +493,94 @@ function App() {
       : current.filter((id) => !ids.includes(id)));
   }
 
+  async function refreshDiagnostics(): Promise<void> {
+    if (!diagnosticsApi) return;
+    setDiagnosticsBusy(true);
+    try {
+      const [status, entries] = await Promise.all([
+        diagnosticsApi.getStatus(),
+        diagnosticsApi.getRecentLogs(200, logFilter)
+      ]);
+      setDiagnosticsStatus(status);
+      setLoggingSettings(status.settings);
+      setLogEntries(entries);
+      setError(null);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setDiagnosticsBusy(false);
+    }
+  }
+
+  async function saveLoggingSettings(): Promise<void> {
+    if (!diagnosticsApi || diagnosticsBusy) return;
+    setDiagnosticsBusy(true);
+    try {
+      const saved = await diagnosticsApi.updateSettings(loggingSettings);
+      setLoggingSettings(saved);
+      setDiagnosticsStatus(await diagnosticsApi.getStatus());
+      setNotice("Logging settings saved");
+      setError(null);
+      setLogEntries(await diagnosticsApi.getRecentLogs(200, logFilter));
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setDiagnosticsBusy(false);
+    }
+  }
+
+  async function exportApplicationLogs(): Promise<void> {
+    if (!diagnosticsApi || diagnosticsBusy) return;
+    setDiagnosticsBusy(true);
+    try {
+      const destination = await diagnosticsApi.exportLogs();
+      if (destination) setNotice("Logs exported to " + destination);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setDiagnosticsBusy(false);
+    }
+  }
+
+  async function collectDiagnosticReport(): Promise<void> {
+    if (!diagnosticsApi || diagnosticsBusy) return;
+    setDiagnosticsBusy(true);
+    try {
+      const destination = await diagnosticsApi.collectReport();
+      if (destination) setNotice("Diagnostic report saved to " + destination);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setDiagnosticsBusy(false);
+    }
+  }
+
+  async function clearApplicationLogs(): Promise<void> {
+    if (!diagnosticsApi || diagnosticsBusy || !window.confirm("Delete all current and rotated AIHub Studio log files?")) return;
+    setDiagnosticsBusy(true);
+    try {
+      await diagnosticsApi.clearLogs();
+      setLogEntries(await diagnosticsApi.getRecentLogs(200, logFilter));
+      setDiagnosticsStatus(await diagnosticsApi.getStatus());
+      setNotice("Log files cleared");
+      setError(null);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setDiagnosticsBusy(false);
+    }
+  }
+
+  async function openLogDirectory(): Promise<void> {
+    if (!diagnosticsApi) return;
+    try {
+      const result = await diagnosticsApi.openLogDirectory();
+      if (result) setError(result);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  }
+
   async function saveProxySettings(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!browserApi || proxySaving) return;
