@@ -5,14 +5,15 @@ import { join } from "node:path";
 import { resolveAppPaths } from "../shared/appPaths";
 
 const paths = resolveAppPaths(process.env, homedir());
+const sessionDataPath = join(paths.data, "sessions");
 
-for (const directory of [paths.config, paths.data, paths.state]) {
+for (const directory of [paths.config, paths.data, paths.state, sessionDataPath]) {
   mkdirSync(directory, { recursive: true });
 }
 
 app.setName("AIHub Studio");
 app.setPath("userData", paths.config);
-app.setPath("sessionData", join(paths.data, "sessions"));
+app.setPath("sessionData", sessionDataPath);
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
