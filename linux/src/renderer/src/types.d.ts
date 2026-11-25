@@ -2,6 +2,7 @@ import type { BrowserApi } from "../../shared/browserApi";
 import type { CatalogApi } from "../../shared/catalogApi";
 import type { LocalAiApi } from "../../shared/localAiApi";
 import type { DiagnosticsApi } from "../../shared/diagnosticsApi";
+import type { ServiceAvailabilityApi } from "../../shared/availabilityApi";
 
 export {};
 
@@ -14,6 +15,7 @@ declare global {
       browser: BrowserApi;
       localAi: LocalAiApi;
       diagnostics: DiagnosticsApi;
+      availability: ServiceAvailabilityApi;
     };
   }
 }
