@@ -74,6 +74,7 @@ function App() {
   }, [catalogApi]);
 
   const selectedProvider = catalog.providers.find((provider) => provider.id === selectedProviderId) ?? null;
+  const modalProvider = modal?.kind === "provider-edit" ? catalog.providers.find((provider) => provider.id === modal.id) ?? null : null;
   const visibleProviders = useMemo(() => {
     if (activeCategory === "favorites") {
       return catalog.providers.filter((provider) => provider.favorite);
@@ -400,14 +401,14 @@ function App() {
               <input autoFocus required value={formName} onChange={(event) => setFormName(event.target.value)} placeholder={modal.kind === "category-add" ? "New category" : "Connection name"} />
             </label>
 
-            {(modal.kind === "website-add" || (modal.kind === "provider-edit" && selectedProvider?.type === "website")) && (
+            {(modal.kind === "website-add" || (modal.kind === "provider-edit" && modalProvider?.type === "website")) && (
               <label className="form-field">
                 <span>Website URL</span>
                 <input required type="text" value={formUrl} onChange={(event) => setFormUrl(event.target.value)} placeholder="https://example.com" />
               </label>
             )}
 
-            {(modal.kind === "local-add" || (modal.kind === "provider-edit" && selectedProvider?.type === "local-api")) && <>
+            {(modal.kind === "local-add" || (modal.kind === "provider-edit" && modalProvider?.type === "local-api")) && <>
               <label className="form-field">
                 <span>API type</span>
                 <input value="openai (OpenAI-compatible)" readOnly />
