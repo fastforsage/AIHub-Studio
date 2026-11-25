@@ -109,7 +109,7 @@ describe("CatalogStore", () => {
     }, () => "example"));
 
     const parsed = JSON.parse(await readFile(filePath, "utf8"));
-    expect(parsed.providers[0]).toMatchObject({
+    expect(parsed.providers.find((provider: { id: string }) => provider.id === "example")).toMatchObject({
       id: "example", name: "Example", url: "https://example.com/"
     });
   });
