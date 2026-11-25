@@ -10,6 +10,8 @@ import { registerBrowserIpc } from "./browserIpc";
 import { registerCatalogIpc } from "./catalogIpc";
 import { registerLocalAiIpc } from "./localAiIpc";
 import { removeNativeApplicationMenu } from "./nativeMenu";
+import { DiagnosticsManager } from "./diagnosticsManager";
+import { registerDiagnosticsIpc } from "./diagnosticsIpc";
 
 const paths = resolveAppPaths(process.env);
 const sessionDataPath = join(paths.data, "sessions");
@@ -24,6 +26,7 @@ app.setPath("sessionData", sessionDataPath);
 
 let mainWindow: BrowserWindow | null = null;
 let browserManager: BrowserManager | null = null;
+let diagnosticsManager: DiagnosticsManager | null = null;
 
 function isTrustedRenderer(event: IpcMainInvokeEvent): boolean {
   return mainWindow !== null &&
@@ -51,6 +54,21 @@ function createMainWindow(): BrowserWindow {
 
   removeNativeApplicationMenu(Menu, window);
   mainWindow = window;
+  window.webContents.on("render-process-gone", (_event, details) => {
+    diagnosticsManager?.log("error", "renderer", "Renderer process terminated", {
+      reason: details.reason,
+      exitCode: details.exitCode
+    });
+  });
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (isMainFrame) {
+      diagnosticsManager?.log("error", "renderer", "Main frame failed to load", {
+        errorCode,
+        errorDescription,
+        url: validatedURL
+      });
+    }
+  });
   window.once("ready-to-show", () => window.show());
   window.on("closed", () => {
     browserManager?.closeAll();
@@ -72,6 +90,18 @@ function createMainWindow(): BrowserWindow {
 async function bootstrap(): Promise<void> {
   await app.whenReady();
 
+  diagnosticsManager = new DiagnosticsManager(
+    join(paths.state, "logs"),
+    join(paths.config, "logging-settings.json")
+  );
+  await diagnosticsManager.initialize();
+  diagnosticsManager.installConsoleCapture();
+  diagnosticsManager.log("info", "app", "Application startup", {
+    version: app.getVersion(),
+    platform: process.platform,
+    architecture: process.arch
+  });
+
   const catalogStore = new CatalogStore(join(paths.config, "catalog.json"));
   const browserSettings = new BrowserSettingsStore(join(paths.config, "browser-settings.json"));
   await catalogStore.initialize();
@@ -90,10 +120,12 @@ async function bootstrap(): Promise<void> {
   registerCatalogIpc(catalogStore, isTrustedRenderer);
   registerBrowserIpc(browserManager, catalogStore, browserSettings, isTrustedRenderer);
   registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
+  registerDiagnosticsIpc(diagnosticsManager, isTrustedRenderer);
   createMainWindow();
 }
 
 void bootstrap().catch((error: unknown) => {
+  diagnosticsManager?.log("error", "app", "Application startup failed", error);
   console.error("AIHub Studio startup failed:", error);
   app.quit();
 });
