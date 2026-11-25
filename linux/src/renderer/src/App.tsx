@@ -7,6 +7,7 @@ import type {
   ProviderUpdate
 } from "../../catalog/catalogModel";
 import type { BrowserManagerState } from "../../browser/browserTypes";
+import type { LocalChatMessage } from "../../local-ai/localAiManager";
 
 type MenuTarget =
   | { kind: "root" }
@@ -44,6 +45,7 @@ function errorMessage(error: unknown): string {
 function App() {
   const catalogApi = window.aihub?.catalog;
   const browserApi = window.aihub?.browser;
+  const localAiApi = window.aihub?.localAi;
   const browserViewportRef = useRef<HTMLDivElement>(null);
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -59,7 +61,12 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [browserState, setBrowserState] = useState<BrowserManagerState>({ tabs: [], activeTabId: null });
-  const [workspaceMode, setWorkspaceMode] = useState<"catalog" | "browser" | "settings">("catalog");
+  const [workspaceMode, setWorkspaceMode] = useState<"catalog" | "browser" | "settings" | "local-chat">("catalog");
+  const [localChatProviderId, setLocalChatProviderId] = useState<string | null>(null);
+  const [localChats, setLocalChats] = useState<Record<string, LocalChatMessage[]>>({});
+  const [localChatDraft, setLocalChatDraft] = useState("");
+  const [localSending, setLocalSending] = useState(false);
+  const [discoveringProviderId, setDiscoveringProviderId] = useState<string | null>(null);
   const [proxyServer, setProxyServer] = useState("");
   const [proxySaving, setProxySaving] = useState(false);
   const [proxyNotice, setProxyNotice] = useState<string | null>(null);
@@ -137,6 +144,10 @@ function App() {
   const contextProviderId = menu && menu.target.kind === "provider" ? menu.target.id : null;
   const contextProvider = contextProviderId ? catalog.providers.find((provider) => provider.id === contextProviderId) ?? null : null;
   const activeBrowserTab = browserState.tabs.find((tab) => tab.id === browserState.activeTabId) ?? null;
+  const activeLocalProvider = localChatProviderId
+    ? catalog.providers.find((item) => item.id === localChatProviderId && item.type === "local-api") ?? null
+    : null;
+  const activeLocalMessages = localChatProviderId ? localChats[localChatProviderId] ?? [] : [];
   const visibleProviders = useMemo(() => {
     if (activeCategory === "favorites") {
       return catalog.providers.filter((provider) => provider.favorite);
@@ -292,6 +303,83 @@ function App() {
     );
   }
 
+  async function refreshLocalModels(providerId: string): Promise<void> {
+    if (!localAiApi || discoveringProviderId) return;
+    setDiscoveringProviderId(providerId);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await localAiApi.discoverModels(providerId);
+      setCatalog(next);
+      const provider = next.providers.find((item) => item.id === providerId);
+      setNotice(provider?.type === "local-api"
+        ? provider.models.length + " model(s) discovered"
+        : "Model discovery completed");
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setDiscoveringProviderId(null);
+    }
+  }
+
+  async function openLocalChat(provider: Provider): Promise<void> {
+    if (provider.type !== "local-api") return;
+    setSelectedProviderId(provider.id);
+    setLocalChatProviderId(provider.id);
+    setLocalChatDraft("");
+    setWorkspaceMode("local-chat");
+    setError(null);
+    if (provider.models.length === 0) {
+      await refreshLocalModels(provider.id);
+    }
+  }
+
+  async function chooseLocalModel(providerId: string, modelId: string): Promise<void> {
+    if (!localAiApi) return;
+    try {
+      const next = await localAiApi.selectModel(providerId, modelId);
+      setCatalog(next);
+      setError(null);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  }
+
+  async function sendLocalMessage(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!localAiApi || !activeLocalProvider || localSending || !activeLocalProvider.selectedModel) return;
+    const text = localChatDraft.trim();
+    if (!text) return;
+
+    const previous = localChats[activeLocalProvider.id] ?? [];
+    const history = [...previous, { role: "user" as const, content: text }].slice(-100);
+    setLocalChats((current) => ({ ...current, [activeLocalProvider.id]: history }));
+    setLocalChatDraft("");
+    setLocalSending(true);
+    setError(null);
+
+    try {
+      const result = await localAiApi.completeChat(activeLocalProvider.id, history);
+      setLocalChats((current) => ({
+        ...current,
+        [activeLocalProvider.id]: [...(current[activeLocalProvider.id] ?? history), {
+          role: "assistant",
+          content: result.content
+        }].slice(-100)
+      }));
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setLocalSending(false);
+    }
+  }
+
+  function clearLocalChat(): void {
+    if (!localChatProviderId) return;
+    setLocalChats((current) => ({ ...current, [localChatProviderId]: [] }));
+    setError(null);
+  }
+
   async function runBrowserAction(operation: () => Promise<BrowserManagerState>): Promise<void> {
     try {
       const next = await operation();
@@ -396,7 +484,7 @@ function App() {
 
       <main className="main-area">
         <header className="topbar">
-          <div className="breadcrumb"><span className="muted">Workspace</span><span className="breadcrumb-separator">/</span><strong>{workspaceMode === "settings" ? "Settings" : workspaceMode === "browser" ? "Browser" : activeCategoryName}</strong></div>
+          <div className="breadcrumb"><span className="muted">Workspace</span><span className="breadcrumb-separator">/</span><strong>{workspaceMode === "settings" ? "Settings" : workspaceMode === "browser" ? "Browser" : workspaceMode === "local-chat" ? activeLocalProvider?.name ?? "Local AI Chat" : activeCategoryName}</strong></div>
           {workspaceMode === "catalog" && <button className="primary-button top-add" type="button" onClick={(event) => showContextMenu(event, { kind: "root" })}>＋ Add</button>}
         </header>
 
@@ -434,6 +522,77 @@ function App() {
               <div className="browser-viewport" ref={browserViewportRef}>
                 {!activeBrowserTab && <div className="browser-empty">Open a cloud website from the AI catalog.</div>}
               </div>
+            </div>
+          ) : workspaceMode === "local-chat" ? (
+            <div className="local-chat-workspace">
+              <div className="local-chat-header">
+                <div>
+                  <div className="eyebrow">LOCAL AI · OPENAI-COMPATIBLE</div>
+                  <h1>{activeLocalProvider?.name ?? "Local AI"}</h1>
+                  <p>{activeLocalProvider ? "http://" + activeLocalProvider.host + ":" + activeLocalProvider.port : "Connection is no longer available"}</p>
+                </div>
+                <div className="local-chat-header-actions">
+                  <button className="secondary-button" type="button" onClick={() => setWorkspaceMode("catalog")}>Back to catalog</button>
+                  {activeLocalProvider && <button className="secondary-button" type="button" onClick={clearLocalChat}>Clear chat</button>}
+                </div>
+              </div>
+
+              {activeLocalProvider && (
+                <div className="local-model-bar">
+                  <label>
+                    <span>Model</span>
+                    <select
+                      value={activeLocalProvider.selectedModel ?? ""}
+                      disabled={activeLocalProvider.models.length === 0}
+                      onChange={(event) => void chooseLocalModel(activeLocalProvider.id, event.target.value)}
+                    >
+                      {activeLocalProvider.models.length === 0 && <option value="">No models discovered</option>}
+                      {activeLocalProvider.models.map((model) => <option key={model} value={model}>{model}</option>)}
+                    </select>
+                  </label>
+                  <button className="secondary-button" type="button" disabled={discoveringProviderId === activeLocalProvider.id} onClick={() => void refreshLocalModels(activeLocalProvider.id)}>
+                    {discoveringProviderId === activeLocalProvider.id ? "Checking…" : "Refresh models"}
+                  </button>
+                </div>
+              )}
+
+              {error && <div className="alert alert-error" role="alert">{error}</div>}
+              {notice && <div className="alert alert-success" role="status">{notice}</div>}
+
+              <div className="local-chat-messages" aria-live="polite">
+                {!activeLocalProvider && <div className="local-chat-empty">This Local AI connection was removed. Return to the catalog and select another connection.</div>}
+                {activeLocalProvider && activeLocalMessages.length === 0 && (
+                  <div className="local-chat-empty">
+                    <div className="local-chat-empty-icon">⌘</div>
+                    <h2>Start a local conversation</h2>
+                    <p>Messages stay in this window session and are not written to a chat archive.</p>
+                    {activeLocalProvider.models.length === 0 && <button className="primary-button" type="button" disabled={discoveringProviderId === activeLocalProvider.id} onClick={() => void refreshLocalModels(activeLocalProvider.id)}>Discover models</button>}
+                  </div>
+                )}
+                {activeLocalMessages.map((message, index) => (
+                  <article key={activeLocalProvider?.id + "-" + index} className={message.role === "user" ? "local-chat-message local-chat-user" : "local-chat-message local-chat-assistant"}>
+                    <div className="local-chat-role">{message.role === "user" ? "YOU" : "LOCAL AI"}</div>
+                    <div className="local-chat-content">{message.content}</div>
+                  </article>
+                ))}
+                {localSending && <article className="local-chat-message local-chat-assistant"><div className="local-chat-role">LOCAL AI</div><div className="local-chat-content">Generating response…</div></article>}
+              </div>
+
+              <form className="local-chat-composer" onSubmit={sendLocalMessage}>
+                <textarea
+                  value={localChatDraft}
+                  onChange={(event) => setLocalChatDraft(event.target.value)}
+                  placeholder={activeLocalProvider?.selectedModel ? "Message your local model…" : "Discover and select a model first…"}
+                  disabled={!activeLocalProvider?.selectedModel || localSending}
+                  rows={3}
+                />
+                <div className="local-chat-composer-footer">
+                  <span>Requests use the OpenAI-compatible /v1/chat/completions endpoint.</span>
+                  <button className="primary-button" type="submit" disabled={!activeLocalProvider?.selectedModel || !localChatDraft.trim() || localSending}>
+                    {localSending ? "Sending…" : "Send"}
+                  </button>
+                </div>
+              </form>
             </div>
           ) : workspaceMode === "settings" ? (
             <div className="settings-page">
@@ -536,16 +695,21 @@ function App() {
                   ) : (
                     <>
                       <div className="detail-line"><span>Endpoint</span><strong>http://{selectedProvider.host}:{selectedProvider.port}</strong></div>
-                      <div className="detail-line"><span>Models</span><strong>Auto-discovery planned</strong></div>
+                      <div className="detail-line"><span>Models</span><strong>{selectedProvider.models.length ? selectedProvider.models.length + " discovered" : "Not discovered"}</strong></div>
+                      {selectedProvider.selectedModel && <div className="detail-line"><span>Selected</span><strong>{selectedProvider.selectedModel}</strong></div>
                     </>
                   )}
                   <div className="detail-line"><span>Categories</span><strong>{selectedProvider.categoryIds.map((id) => catalog.categories.find((item) => item.id === id)?.name).filter(Boolean).join(", ") || "All AI"}</strong></div>
                   <div className="detail-actions">
                     <button className="secondary-button" type="button" onClick={() => openModal({ kind: "provider-edit", id: selectedProvider.id })}>Change</button>
                     {selectedProvider.type === "website" && <button className="primary-button" type="button" onClick={() => void openWebsite(selectedProvider)}>Open in Chromium</button>}
+                    {selectedProvider.type === "local-api" && <>
+                      <button className="secondary-button" type="button" disabled={discoveringProviderId === selectedProvider.id} onClick={() => void refreshLocalModels(selectedProvider.id)}>{discoveringProviderId === selectedProvider.id ? "Checking…" : "Refresh models"}</button>
+                      <button className="primary-button" type="button" onClick={() => void openLocalChat(selectedProvider)}>Open Chat</button>
+                    </>}
                     <button className="secondary-button" type="button" onClick={() => void commit(() => catalogApi!.setFavorite(selectedProvider.id, !selectedProvider.favorite))}>{selectedProvider.favorite ? "Unfavorite" : "Add to Favorites"}</button>
                   </div>
-                  <p className="detail-hint">{selectedProvider.type === "website" ? "Open the site in a persistent isolated Chromium profile." : "Local API message transport and model discovery are the next implementation stage."}</p>
+                  <p className="detail-hint">{selectedProvider.type === "website" ? "Open the site in a persistent isolated Chromium profile." : "Discover available models and open a local chat in the shared workspace."}</p>
                 </>
               ) : (
                 <div className="detail-placeholder">
@@ -628,7 +792,7 @@ function App() {
                   <input required inputMode="numeric" value={formPort} onChange={(event) => setFormPort(event.target.value)} placeholder="11434" />
                 </label>
               </div>
-              <div className="form-note">Models will be discovered automatically when Local AI API connectivity is implemented.</div>
+              <div className="form-note">Models are discovered from the OpenAI-compatible API when you open this connection or refresh its model list.</div>
             </>}
 
             {(modal.kind === "website-add" || modal.kind === "local-add" || modal.kind === "provider-edit") && (
