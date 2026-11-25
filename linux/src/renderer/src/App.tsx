@@ -95,6 +95,27 @@ function App() {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
 
   useEffect(() => {
+    if (!diagnosticsApi) return;
+    const onWindowError = (event: ErrorEvent) => {
+      const details = [event.message, event.filename, event.lineno ? "line " + event.lineno : ""].filter(Boolean).join(" · ");
+      void diagnosticsApi.writeLog("error", "renderer", details).catch(() => undefined);
+    };
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const details = reason instanceof Error
+        ? reason.name + ": " + reason.message + (reason.stack ? "\\n" + reason.stack : "")
+        : typeof reason === "string" ? reason : JSON.stringify(reason);
+      void diagnosticsApi.writeLog("error", "renderer", "Unhandled promise rejection: " + details).catch(() => undefined);
+    };
+    window.addEventListener("error", onWindowError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    return () => {
+      window.removeEventListener("error", onWindowError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    };
+  }, [diagnosticsApi]);
+
+  useEffect(() => {
     let cancelled = false;
     if (!catalogApi) {
       setError("The secure catalog bridge is unavailable. Restart the application.");
