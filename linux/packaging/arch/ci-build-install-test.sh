@@ -20,17 +20,17 @@ su -s /bin/bash builder -c "cd '$build_dir' && makepkg --noconfirm --nodeps"
 
 shopt -s nullglob
 packages=("$build_dir"/*.pkg.tar.zst)
-if (( \${#packages[@]} != 1 )); then
-  printf 'Expected exactly one package, found %s\n' "\${#packages[@]}" >&2
+if (( ${#packages[@]} != 1 )); then
+  printf 'Expected exactly one package, found %s\n' "${#packages[@]}" >&2
   ls -la "$build_dir" >&2
   exit 1
 fi
 
-package="\${packages[0]}"
+package="${packages[0]}"
 package_name="$(pacman -Qp "$package" | awk '{print $1}')"
 source "$build_dir/PKGBUILD"
-pacman -S --noconfirm --needed "\${depends[@]}"
-printf '%s\n' "Installing \${package_name} through pacman..."
+pacman -S --noconfirm --needed "${depends[@]}"
+printf '%s\n' "Installing ${package_name} through pacman..."
 pacman -U --noconfirm "$package"
 pacman -Q "$package_name"
 
