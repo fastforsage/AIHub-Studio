@@ -50,8 +50,8 @@ describe("TranslationManager", () => {
       const downloaded = await providerOptions.fetch("https://example.test/model.bin", { headers: { "X-Test": "present" } });
       expect(proxyFetch).toHaveBeenCalledWith("https://example.test/model.bin", expect.objectContaining({ headers: expect.any(Headers) }));
       const sentHeaders = new Headers(proxyFetch.mock.calls[0][1]?.headers);
-      expect(sentHeaders.get("Accept")).toBe("application/octet-stream");
-      expect(sentHeaders.get("User-Agent")).toContain("AIHubStudio");
+      expect(sentHeaders.get("Accept")).toBe("*/*");
+      expect(sentHeaders.has("User-Agent")).toBe(false);
       expect(sentHeaders.get("X-Test")).toBe("present");
       expect(downloaded.ok).toBe(true);
       expect(mocks.translate).toHaveBeenCalledWith(expect.objectContaining({ sourceLang: "zh", targetLang: "ru" }));
