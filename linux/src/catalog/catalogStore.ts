@@ -321,11 +321,18 @@ function restoreMissingBuiltinCategories(value: unknown, defaults: CatalogState)
   if (typeof value !== "object" || value === null || Array.isArray(value)) return { catalog: value, changed: false };
   const document = value as Record<string, unknown>;
   if (!Array.isArray(document.categories) ||
-      document.catalogSeedVersion === undefined ||
       (typeof document.catalogSeedVersion === "number" && document.catalogSeedVersion >= CURRENT_CATALOG_SEED_VERSION)) {
-    // Preserve the legacy-starter detection path for pre-seed-version catalogs.
     return { catalog: value, changed: false };
   }
+  const legacyIds = new Set(["ai", "local-ai", "dev", "community", "design", "email", "video"]);
+  const isLegacyStarterLayout = document.catalogSeedVersion === undefined &&
+    document.categories.length === legacyIds.size &&
+    document.categories.every((item) =>
+      typeof item === "object" && item !== null && !Array.isArray(item) &&
+      typeof (item as Record<string, unknown>).id === "string" &&
+      legacyIds.has((item as Record<string, unknown>).id as string)
+    );
+  if (isLegacyStarterLayout) return { catalog: value, changed: false };
 
   const categories = [...document.categories];
   const ids = new Set(categories.flatMap((item) =>
