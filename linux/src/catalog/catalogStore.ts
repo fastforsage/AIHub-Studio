@@ -8,7 +8,7 @@ import {
 } from "./catalogModel";
 import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
-const CURRENT_CATALOG_SEED_VERSION = 3;
+const CURRENT_CATALOG_SEED_VERSION = 4;
 const INCREMENTAL_PROVIDER_IDS = new Set([
   "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
   "cerebras-inference", "sambanova-cloud", "modelscope",
@@ -208,6 +208,17 @@ export class CatalogStore {
 
 function mergeIncrementalProviderDefaults(state: CatalogState, defaults: CatalogState): CatalogState {
   const next = structuredClone(state);
+
+  // Restore missing built-in categories from prior damaged/partial catalog states.
+  // Existing category names and IDs are preserved, including user-created categories.
+  const categoryIds = new Set(next.categories.map((category) => category.id));
+  const categoryNames = new Set(next.categories.map((category) => category.name.trim().toLocaleLowerCase()));
+  for (const category of defaults.categories) {
+    if (categoryIds.has(category.id) || categoryNames.has(category.name.trim().toLocaleLowerCase())) continue;
+    next.categories.push({ ...category });
+    categoryIds.add(category.id);
+    categoryNames.add(category.name.trim().toLocaleLowerCase());
+  }
   const defaultApiCategory = defaults.categories.find((category) => category.id === "api-providers");
   const defaultChatbotCategory = defaults.categories.find((category) => category.id === "chatbot");
   const ruCnCategory = defaults.categories.find((category) => category.id === "ru-cn-direct");
