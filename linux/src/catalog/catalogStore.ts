@@ -329,19 +329,43 @@ function restoreMissingBuiltinCategories(value: unknown, defaults: CatalogState)
     typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).id === "string"
       ? [(item as Record<string, unknown>).id as string] : []
   ));
-  const names = new Set(categories.flatMap((item) =>
-    typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).name === "string"
-      ? [((item as Record<string, unknown>).name as string).trim().toLocaleLowerCase()] : []
+  const byName = new Map(categories.flatMap((item) =>
+    typeof item === "object" && item !== null && !Array.isArray(item) &&
+    typeof (item as Record<string, unknown>).id === "string" &&
+    typeof (item as Record<string, unknown>).name === "string"
+      ? [ [((item as Record<string, unknown>).name as string).trim().toLocaleLowerCase(), (item as Record<string, unknown>).id as string] as const ]
+      : []
   ));
+  const aliases = new Map<string, string>();
   let changed = false;
   for (const category of defaults.categories) {
-    if (ids.has(category.id) || names.has(category.name.trim().toLocaleLowerCase())) continue;
+    if (ids.has(category.id)) continue;
+    const existingId = byName.get(category.name.trim().toLocaleLowerCase());
+    if (existingId) {
+      aliases.set(category.id, existingId);
+      changed = true;
+      continue;
+    }
     categories.push({ ...category });
     ids.add(category.id);
-    names.add(category.name.trim().toLocaleLowerCase());
+    byName.set(category.name.trim().toLocaleLowerCase(), category.id);
     changed = true;
   }
-  return { catalog: changed ? { ...document, categories } : value, changed };
+
+  let providers: unknown = document.providers;
+  if (aliases.size && Array.isArray(document.providers)) {
+    providers = document.providers.map((rawProvider) => {
+      if (typeof rawProvider !== "object" || rawProvider === null || Array.isArray(rawProvider)) return rawProvider;
+      const provider = rawProvider as Record<string, unknown>;
+      if (!Array.isArray(provider.categoryIds)) return rawProvider;
+      const categoryIds = [...new Set(provider.categoryIds.map((id) =>
+        typeof id === "string" ? aliases.get(id) ?? id : id
+      ))];
+      return { ...provider, categoryIds };
+    });
+  }
+
+  return { catalog: changed ? { ...document, categories, providers } : value, changed };
 }
 
 function repairDuplicateProviderEntries(value: unknown): { catalog: unknown; changed: boolean } {
