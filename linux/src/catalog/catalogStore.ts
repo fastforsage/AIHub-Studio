@@ -33,7 +33,8 @@ export class CatalogStore {
       const raw = await readFile(this.filePath, "utf8");
       const parsedRaw: unknown = JSON.parse(raw);
       const repaired = repairDuplicateProviderEntries(parsedRaw);
-      const parsed = repaired.catalog;
+      const restoredCategories = restoreMissingBuiltinCategories(repaired.catalog, createDefaultCatalog());
+      const parsed = restoredCategories.catalog;
       assertCatalogState(parsed);
       const legacyDefaultIds = new Set(["ai", "local-ai", "dev", "community", "design", "email", "video"]);
       const currentDefaults = createDefaultCatalog();
@@ -145,7 +146,7 @@ export class CatalogStore {
           this.state = mergeIncrementalProviderDefaults(this.state, currentDefaults);
           assertCatalogState(this.state);
           await this.write(this.state);
-        } else if (repaired.changed) {
+        } else if (repaired.changed || restoredCategories.changed) {
           await this.write(this.state);
         }
       }
@@ -314,6 +315,33 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
 
   next.catalogSeedVersion = CURRENT_CATALOG_SEED_VERSION;
   return next;
+}
+
+function restoreMissingBuiltinCategories(value: unknown, defaults: CatalogState): { catalog: unknown; changed: boolean } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return { catalog: value, changed: false };
+  const document = value as Record<string, unknown>;
+  if (!Array.isArray(document.categories) || (typeof document.catalogSeedVersion === "number" && document.catalogSeedVersion >= CURRENT_CATALOG_SEED_VERSION)) {
+    return { catalog: value, changed: false };
+  }
+
+  const categories = [...document.categories];
+  const ids = new Set(categories.flatMap((item) =>
+    typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).id === "string"
+      ? [(item as Record<string, unknown>).id as string] : []
+  ));
+  const names = new Set(categories.flatMap((item) =>
+    typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).name === "string"
+      ? [((item as Record<string, unknown>).name as string).trim().toLocaleLowerCase()] : []
+  ));
+  let changed = false;
+  for (const category of defaults.categories) {
+    if (ids.has(category.id) || names.has(category.name.trim().toLocaleLowerCase())) continue;
+    categories.push({ ...category });
+    ids.add(category.id);
+    names.add(category.name.trim().toLocaleLowerCase());
+    changed = true;
+  }
+  return { catalog: changed ? { ...document, categories } : value, changed };
 }
 
 function repairDuplicateProviderEntries(value: unknown): { catalog: unknown; changed: boolean } {
