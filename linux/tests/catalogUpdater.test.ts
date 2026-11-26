@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("electron", () => ({ session: { defaultSession: { fetch: vi.fn() } } }));
 import { parseFreeApiJson, parseNoCostAiMarkdown } from "../src/main/catalogUpdater";
 
 describe("GitHub catalog source parsers", () => {
