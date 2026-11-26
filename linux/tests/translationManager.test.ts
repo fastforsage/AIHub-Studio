@@ -17,7 +17,9 @@ import { TranslationManager } from "../src/main/translationManager";
 describe("TranslationManager", () => {
   let directory: string;
   let events: Array<{ level: string; message: string; metadata?: unknown }>;
-  const proxyFetch = vi.fn(async () => new Response("ok"));
+  const proxyFetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+    async () => new Response("ok")
+  );
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), "aihub-bergamot-"));
