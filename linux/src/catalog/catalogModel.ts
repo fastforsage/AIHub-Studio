@@ -484,7 +484,7 @@ export function assertCatalogState(value: unknown): asserts value is CatalogStat
       throw new CatalogError("INVALID_CATALOG", "Catalog provider source URL is invalid");
     }
     if (item.catalogSource !== undefined &&
-        !["builtin-ru-cn", "github-no-cost-ai", "github-free-llm-apis"].includes(String(item.catalogSource))) {
+        !["builtin-ru-cn", "github-no-cost-ai", "github-free-apis"].includes(String(item.catalogSource))) {
       throw new CatalogError("INVALID_CATALOG", "Catalog provider source identifier is invalid");
     }
     if (item.modelDetails !== undefined) {
