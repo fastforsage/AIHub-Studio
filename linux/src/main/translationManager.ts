@@ -7,7 +7,6 @@ export type TranslationLogLevel = "info" | "warn" | "error";
 export type TranslationLogger = (level: TranslationLogLevel, message: string, metadata?: unknown) => void;
 export type TranslationFetch = typeof fetch;
 
-const MODEL_ACCEPT = "application/octet-stream";
 const MAX_ERROR_BODY_CHARS = 2048;
 
 function safeUrl(input: RequestInfo | URL): string {
