@@ -99,9 +99,10 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [availabilityReport, setAvailabilityReport] = useState<ServiceAvailabilityReport | null>(null);
-  const [translationOpen, setTranslationOpen] = useState(false);
   const [translationBusy, setTranslationBusy] = useState(false);
-  const [translationAuto, setTranslationAuto] = useState(false);
+  const [translationAuto, setTranslationAuto] = useState(() => localStorage.getItem("aihub.translation.auto") !== "false");
+  const [translationSourceLanguage, setTranslationSourceLanguage] = useState(() => localStorage.getItem("aihub.translation.source") ?? "auto");
+  const [settingsTab, setSettingsTab] = useState<"general" | "catalog" | "translation" | "connections" | "appearance" | "diagnostics" | "about">("general");
   const [translationReport, setTranslationReport] = useState<TranslationReport | null>(null);
   const [translationNotice, setTranslationNotice] = useState("Перевод выполняется локально на этом устройстве.");
   const [localChatProviderId, setLocalChatProviderId] = useState<string | null>(null);
@@ -329,6 +330,7 @@ function App() {
   }
 
   function openSettings(): void {
+    setSettingsTab("general");
     if (workspaceMode !== "settings") settingsReturnMode.current = workspaceMode;
     setCatalogSelection(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
     setCatalogSearch("");
@@ -576,7 +578,7 @@ function App() {
     setTranslationBusy(true);
     setError(null);
     try {
-      const report = await translationApi.translatePage(activeBrowserTab.id);
+      const report = await translationApi.translatePage(activeBrowserTab.id, translationSourceLanguage === "auto" ? undefined : translationSourceLanguage);
       setTranslationReport(report);
       setTranslationNotice(report.translatedNodes > 0
         ? `Переведено текстовых блоков: ${report.translatedNodes}`
@@ -603,6 +605,14 @@ function App() {
     setTranslationReport(null);
     setTranslationNotice("Перевод выполняется локально на этом устройстве.");
   }, [activeBrowserTab?.id, activeBrowserTab?.url]);
+
+  useEffect(() => {
+    localStorage.setItem("aihub.translation.auto", String(translationAuto));
+  }, [translationAuto]);
+
+  useEffect(() => {
+    localStorage.setItem("aihub.translation.source", translationSourceLanguage);
+  }, [translationSourceLanguage]);
 
   useEffect(() => {
     if (!translationAuto || workspaceMode !== "browser" || !activeBrowserTab || activeBrowserTab.loading) return;
@@ -949,40 +959,6 @@ function App() {
         <section className={workspaceMode === "browser" || workspaceMode === "local-chat" ? "content-area content-area-full-workspace" : "content-area"}>
           {workspaceMode === "browser" ? (
             <div className="browser-workspace">
-              <div className="browser-translation-toolbar">
-                <button className={translationOpen ? "translation-toolbar-button translation-toolbar-button-active" : "translation-toolbar-button"}
-                  type="button" onClick={() => setTranslationOpen((value) => !value)} disabled={!activeBrowserTab}
-                  aria-expanded={translationOpen} aria-controls="translation-controls">
-                  <span className="translation-toolbar-icon">文</span>
-                  <span>Перевод страницы</span><span className="translation-toolbar-language">Русский</span>
-                  <span className="translation-toolbar-chevron" aria-hidden="true">{translationOpen ? "⌃" : "⌄"}</span>
-                </button>
-                {translationOpen && (
-                  <section className="translation-popover" id="translation-controls" aria-label="Настройки перевода">
-                    <div className="translation-popover-heading">
-                      <span className="translation-popover-icon">文</span><strong>Перевод страницы</strong>
-                      <span className="translation-local-badge">● Локально</span>
-                    </div>
-                    <div className="translation-language-row"><span>С оригинала</span><strong>{translationReport?.sourceLanguage ?? "Автоопределение по языку страницы"}</strong></div>
-                    <div className="translation-language-row"><span>На язык</span><strong>Русский</strong></div>
-                    <div className="translation-engine-row"><span>Движок</span><strong>Bergamot · WASM + SIMD</strong></div>
-                    <div className="translation-privacy-note">Текст страницы не отправляется в облако. Модели загружаются один раз и хранятся локально.</div>
-                    <label className="translation-auto-toggle">
-                      <input type="checkbox" checked={translationAuto} onChange={(event) => {
-                        setTranslationAuto(event.target.checked);
-                      }} />
-                      <span><strong>Автоматически переводить страницы</strong><small>Переводить после загрузки новых страниц</small></span>
-                    </label>
-                    <div className="translation-actions">
-                      <button className="primary-button" type="button" disabled={translationBusy || !activeBrowserTab}
-                        onClick={() => void translateActivePage()}>{translationBusy ? "Переводим…" : "Перевести страницу"}</button>
-                      <button className="secondary-button" type="button" disabled={!translationReport}
-                        onClick={() => void restoreOriginalPage()}>Показать оригинал</button>
-                    </div>
-                    <div className="translation-status" role="status" aria-live="polite">{translationBusy ? "Загрузка модели или перевод текста…" : translationNotice}</div>
-                  </section>
-                )}
-              </div>
               {activeBrowserTab?.error && <div className="browser-error" role="alert">{activeBrowserTab.error}</div>}
               <div className="browser-viewport" ref={browserViewportRef}>
                 {!activeBrowserTab && <div className="browser-empty">Open a cloud website from the AI catalog.</div>}
@@ -1062,16 +1038,28 @@ function App() {
             <div className="settings-page">
               <div className="page-heading">
                 <div>
-                  <div className="eyebrow">APPLICATION SETTINGS</div>
-                  <h1>Settings</h1>
-                  <p className="welcome-copy">Configure how Chromium connects to websites.</p>
+                  <div className="eyebrow">AIHUB STUDIO · SETTINGS</div>
+                  <h1>Настройки</h1>
+                  <p className="welcome-copy">Параметры приложения, каталога и браузера.</p>
                 </div>
               </div>
+              <nav className="settings-tabs" aria-label="Разделы настроек">
+                {([
+                  ["general", "⚙", "Основные"], ["catalog", "▤", "Каталог AI"],
+                  ["translation", "文", "Перевод"], ["connections", "↔", "Подключения"],
+                  ["appearance", "◐", "Внешний вид"], ["diagnostics", "▥", "Диагностика"],
+                  ["about", "ⓘ", "О программе"]
+                ] as const).map(([id, icon, label]) => (
+                  <button key={id} type="button" className={settingsTab === id ? "settings-tab settings-tab-active" : "settings-tab"}
+                    onClick={() => setSettingsTab(id)}><span>{icon}</span>{label}</button>
+                ))}
+              </nav>
 
               {error && <div className="alert alert-error" role="alert">{error}</div>}
               {notice && <div className="alert alert-success" role="status">{notice}</div>}
               {proxyNotice && <div className="alert alert-success" role="status">{proxyNotice}</div>}
 
+              {settingsTab === "general" && <>
               <section className="settings-card availability-settings-card" aria-label="AI service availability">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">◉</div>
@@ -1146,6 +1134,9 @@ function App() {
                 </div>
               </section>
 
+              </>}
+
+              {settingsTab === "catalog" && <>
               <section className="settings-card catalog-sync-settings-card" aria-label="Catalog updates">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">⟳</div>
@@ -1262,6 +1253,9 @@ function App() {
                 </div>
               </section>
 
+              </>}
+
+              {settingsTab === "connections" && <>
               <form className="settings-card" onSubmit={saveProxySettings}>
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">⇄</div>
@@ -1291,6 +1285,9 @@ function App() {
                 </div>
               </form>
 
+              </>}
+
+              {settingsTab === "diagnostics" && <>
               {diagnosticsStatus?.lastWriteError && (
                 <div className="alert alert-error" role="alert">
                   Failed to write log files: {diagnosticsStatus.lastWriteError}
@@ -1396,6 +1393,9 @@ function App() {
                 </div>
               </section>
 
+              </>}
+
+              {settingsTab === "about" && <>
               <section className="settings-card version-card" aria-label="Application version">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">ⓘ</div>
@@ -1419,6 +1419,21 @@ function App() {
                   </div>
                 </dl>
               </section>
+              </>}
+
+              {settingsTab === "translation" && <section className="settings-card translation-settings-card" aria-label="Настройки перевода">
+                <div className="settings-card-heading"><div className="settings-card-icon">文</div><div><h2>Перевод страниц</h2><p>Локальный перевод страниц через Bergamot · WASM + SIMD.</p></div></div>
+                <div className="translation-settings-intro"><span className="translation-local-badge">● Локально</span><strong>Контент не отправляется в облако</strong><small>Модели загружаются на устройство и хранятся локально.</small></div>
+                <label className="translation-auto-toggle translation-settings-auto"><input type="checkbox" checked={translationAuto} onChange={(event) => setTranslationAuto(event.target.checked)} /><span><strong>Автоматически переводить страницы</strong><small>Включено по умолчанию. Новые страницы будут переводиться после загрузки.</small></span></label>
+                <div className="translation-settings-grid">
+                  <label className="form-field"><span>Язык оригинала</span><select value={translationSourceLanguage} onChange={(event) => setTranslationSourceLanguage(event.target.value)}><option value="auto">Автоопределение</option><option value="en">Английский</option><option value="zh">Китайский</option><option value="ja">Японский</option><option value="ko">Корейский</option><option value="de">Немецкий</option><option value="fr">Французский</option><option value="es">Испанский</option><option value="ru">Русский</option></select></label>
+                  <label className="form-field"><span>Переводить на</span><select value="ru" disabled><option value="ru">Русский</option></select></label>
+                </div>
+                <div className="translation-engine-card"><div><strong>Движок перевода</strong><small>Bergamot · WASM + SIMD</small></div><span className="availability-badge availability-available"><span className="availability-dot" />Локальный движок</span></div>
+                <div className="translation-settings-actions"><button className="primary-button" type="button" disabled={translationBusy || !activeBrowserTab} onClick={() => void translateActivePage()}>{translationBusy ? "Переводим…" : "Перевести активную страницу"}</button><button className="secondary-button" type="button" disabled={!translationReport || !activeBrowserTab} onClick={() => void restoreOriginalPage()}>Показать оригинал</button></div>
+                <div className="translation-status" role="status" aria-live="polite">{translationBusy ? "Загрузка модели или перевод текста…" : translationNotice}</div>
+                <div className="settings-help">Текущая страница: {activeBrowserTab?.title ?? "Нет активной страницы"}. Обнаруженный язык: {translationReport?.sourceLanguage ?? "ещё не определён"}.</div>
+              </section>}
             </div>
           ) : (
             <>
