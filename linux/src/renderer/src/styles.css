@@ -904,3 +904,12 @@ h1 { margin: 12px 0 8px; color: #f4f5fa; font-size: 32px; font-weight: 650; lett
   .settings-tabs { position:static; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
   .settings-tab { justify-content:flex-start; }
 }
+
+.network-diagnostics-card { display:grid; gap:14px; }
+.network-option-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px; border:1px solid #303b52; border-radius:10px; background:#171f2d; }
+.network-option-row > div { display:grid; gap:5px; min-width:0; }
+.network-option-row strong { color:#e2e8f7; font-size:12px; }
+.network-option-row small { color:#94a2bc; font-size:10px; line-height:1.5; }
+.network-command { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:10px 12px; border:1px solid #35415a; border-radius:9px; background:#111722; }
+.network-command code { color:#b8c8ff; overflow-wrap:anywhere; font-size:11px; }
+@media(max-width:620px) { .network-option-row { align-items:flex-start; flex-direction:column; } }
