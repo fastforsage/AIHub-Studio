@@ -18,7 +18,7 @@ export interface CatalogSyncReport {
 }
 
 export interface CatalogApi {
-  sync(): Promise<CatalogState & { syncReport?: CatalogSyncReport }>;
+  sync(): Promise<{ catalog: CatalogState; report: CatalogSyncReport }>;
   get(): Promise<CatalogState>;
   addCategory(name: string): Promise<CatalogState>;
   renameCategory(id: string, name: string): Promise<CatalogState>;
