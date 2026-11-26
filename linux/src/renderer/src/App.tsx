@@ -1239,7 +1239,7 @@ function App() {
                                       <div className="catalog-model-detail" key={model.id}>
                                         <strong>{model.name}</strong>
                                         <small>{[model.context ? "Контекст " + model.context : "", model.maxOutput ? "Вывод " + model.maxOutput : "", model.modality ?? ""].filter(Boolean).join(" · ")}</small>
-                                        {model.description && <small>{model.description}</small>}
+                                        <small>{model.description ?? ("Модель " + model.name + " от провайдера " + provider.name + ".")}</small>
                                         {model.limits && <small>Лимиты: {model.limits}</small>}
                                       </div>
                                     ))}
