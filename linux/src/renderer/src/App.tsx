@@ -1047,7 +1047,7 @@ function App() {
               <nav className="settings-tabs" aria-label="Разделы настроек">
                 {([
                   ["general", "⚙", "Основные"], ["catalog", "▤", "Каталог AI"],
-                  ["translation", "文", "Перевод"], ["connections", "↔", "Подключения"],
+                  ["translation", "文", "Перевод"], ["connections", "↔", "Сеть и подключения"],
                   ["appearance", "◐", "Внешний вид"], ["diagnostics", "▥", "Диагностика"],
                   ["about", "ⓘ", "О программе"]
                 ] as const).map(([id, icon, label]) => (
@@ -1257,6 +1257,13 @@ function App() {
               </>}
 
               {settingsTab === "connections" && <>
+              <section className="settings-card network-diagnostics-card" aria-label="Сетевые параметры AIHub Studio">
+                <div className="settings-card-heading"><div className="settings-card-icon">⌁</div><div><h2>Сетевые параметры AIHub Studio</h2><p>Диагностика Chromium, TLS ECH и загрузки ресурсов через общую сессию приложения.</p></div></div>
+                <div className="network-option-row"><div><strong>TLS Encrypted ClientHello (ECH)</strong><small>Экспериментальный режим отключения ECH для проверки совместимости с DPI. По умолчанию выключен; применяется после полного перезапуска.</small></div><span className="availability-badge availability-protected">Опционально</span></div>
+                <div className="network-command"><code>AIHUB_DISABLE_TLS_ECH=1 aihub-studio</code><button className="secondary-button" type="button" onClick={() => void navigator.clipboard.writeText("AIHUB_DISABLE_TLS_ECH=1 aihub-studio")}>Копировать команду</button></div>
+                <div className="settings-help">Для возврата к стандартному TLS запустите приложение обычным способом. Отключение ECH меняет сетевое поведение всего Chromium и может снизить приватность соединений.</div>
+                <div className="network-option-row"><div><strong>Загрузчик моделей Bergamot</strong><small>Использует настроенную сессию/прокси, Accept: application/octet-stream, диагностику HTTP и проверку размера и SHA-256.</small></div><span className="availability-badge availability-available">Диагностика включена</span></div>
+              </section>
               <form className="settings-card" onSubmit={saveProxySettings}>
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">⇄</div>
