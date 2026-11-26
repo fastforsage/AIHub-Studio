@@ -1043,6 +1043,7 @@ function App() {
                   <p className="welcome-copy">Параметры приложения, каталога и браузера.</p>
                 </div>
               </div>
+              <div className="settings-layout">
               <nav className="settings-tabs" aria-label="Разделы настроек">
                 {([
                   ["general", "⚙", "Основные"], ["catalog", "▤", "Каталог AI"],
@@ -1054,7 +1055,7 @@ function App() {
                     onClick={() => setSettingsTab(id)}><span>{icon}</span>{label}</button>
                 ))}
               </nav>
-
+              <div className="settings-content">
               {error && <div className="alert alert-error" role="alert">{error}</div>}
               {notice && <div className="alert alert-success" role="status">{notice}</div>}
               {proxyNotice && <div className="alert alert-success" role="status">{proxyNotice}</div>}
@@ -1440,6 +1441,8 @@ function App() {
                 <div className="translation-status" role="status" aria-live="polite">{translationBusy ? "Загрузка модели или перевод текста…" : translationNotice}</div>
                 <div className="settings-help">Текущая страница: {activeBrowserTab?.title ?? "Нет активной страницы"}. Обнаруженный язык: {translationReport?.sourceLanguage ?? "ещё не определён"}.</div>
               </section>}
+              </div>
+            </div>
             </div>
           ) : (
             <>
