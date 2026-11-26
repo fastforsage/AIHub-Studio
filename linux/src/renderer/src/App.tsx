@@ -930,13 +930,14 @@ function App() {
             <div className="browser-workspace">
               <div className="browser-translation-toolbar">
                 <button className={translationOpen ? "translation-toolbar-button translation-toolbar-button-active" : "translation-toolbar-button"}
-                  type="button" onClick={() => setTranslationOpen((value) => !value)} disabled={!activeBrowserTab}>
+                  type="button" onClick={() => setTranslationOpen((value) => !value)} disabled={!activeBrowserTab}
+                  aria-expanded={translationOpen} aria-controls="translation-controls">
                   <span className="translation-toolbar-icon">文</span>
                   <span>Перевод страницы</span><span className="translation-toolbar-language">Русский</span>
-                  <span className="translation-toolbar-chevron">{translationOpen ? "⌃" : "⌄"}</span>
+                  <span className="translation-toolbar-chevron" aria-hidden="true">{translationOpen ? "⌃" : "⌄"}</span>
                 </button>
                 {translationOpen && (
-                  <div className="translation-popover">
+                  <section className="translation-popover" id="translation-controls" aria-label="Настройки перевода">
                     <div className="translation-popover-heading">
                       <span className="translation-popover-icon">文</span><strong>Перевод страницы</strong>
                       <span className="translation-local-badge">● Локально</span>
@@ -957,8 +958,8 @@ function App() {
                       <button className="secondary-button" type="button" disabled={!translationReport}
                         onClick={() => void restoreOriginalPage()}>Показать оригинал</button>
                     </div>
-                    <div className="translation-status" role="status">{translationBusy ? "Загрузка модели или перевод текста…" : translationNotice}</div>
-                  </div>
+                    <div className="translation-status" role="status" aria-live="polite">{translationBusy ? "Загрузка модели или перевод текста…" : translationNotice}</div>
+                  </section>
                 )}
               </div>
               {activeBrowserTab?.error && <div className="browser-error" role="alert">{activeBrowserTab.error}</div>}
