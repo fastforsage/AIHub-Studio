@@ -14,6 +14,7 @@ import { buildWorkspaceTabs, type WorkspaceTab } from "../../shared/workspaceTab
 import { getInitiallyExpandedCategories, toggleExpandedCategory } from "../../shared/catalogNavigation";
 import type { DiagnosticsStatus, LogEntry, LogLevel, LoggingSettings } from "../../shared/diagnosticsApi";
 import type { AvailabilityStatus, ServiceAvailabilityReport } from "../../shared/availabilityApi";
+import type { TranslationReport } from "../../shared/translationApi";
 import { ProviderBrandIcon } from "./components/ProviderBrandIcon";
 
 type MenuTarget =
@@ -70,6 +71,7 @@ function App() {
   const localAiApi = window.aihub?.localAi;
   const diagnosticsApi = window.aihub?.diagnostics;
   const availabilityApi = window.aihub?.availability;
+  const translationApi = window.aihub?.translation;
   const browserViewportRef = useRef<HTMLDivElement>(null);
   const settingsReturnMode = useRef<"catalog" | "browser" | "local-chat">("catalog");
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
@@ -94,6 +96,11 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [availabilityReport, setAvailabilityReport] = useState<ServiceAvailabilityReport | null>(null);
+  const [translationOpen, setTranslationOpen] = useState(false);
+  const [translationBusy, setTranslationBusy] = useState(false);
+  const [translationAuto, setTranslationAuto] = useState(false);
+  const [translationReport, setTranslationReport] = useState<TranslationReport | null>(null);
+  const [translationNotice, setTranslationNotice] = useState("Перевод выполняется локально на этом устройстве.");
   const [localChatProviderId, setLocalChatProviderId] = useState<string | null>(null);
   const [openLocalTabIds, setOpenLocalTabIds] = useState<string[]>([]);
   const [localChats, setLocalChats] = useState<Record<string, LocalChatMessage[]>>({});
@@ -542,6 +549,41 @@ function App() {
     setError(null);
   }
 
+
+  async function translateActivePage(): Promise<void> {
+    if (!translationApi || !activeBrowserTab || translationBusy) return;
+    setTranslationBusy(true);
+    setError(null);
+    try {
+      const report = await translationApi.translatePage(activeBrowserTab.id);
+      setTranslationReport(report);
+      setTranslationNotice(report.translatedNodes > 0
+        ? `Переведено текстовых блоков: ${report.translatedNodes}`
+        : "Подходящий для перевода текст не найден.");
+    } catch (reason) {
+      setError("Ошибка перевода Bergamot: " + errorMessage(reason));
+    } finally {
+      setTranslationBusy(false);
+    }
+  }
+
+  async function restoreOriginalPage(): Promise<void> {
+    if (!translationApi || !activeBrowserTab) return;
+    try {
+      await translationApi.restoreOriginalPage(activeBrowserTab.id);
+      setTranslationReport(null);
+      setTranslationNotice("Показан оригинал страницы.");
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  }
+
+  useEffect(() => {
+    if (!translationAuto || workspaceMode !== "browser" || !activeBrowserTab || activeBrowserTab.loading) return;
+    if (translationReport) return;
+    void translateActivePage();
+  }, [translationAuto, workspaceMode, activeBrowserTab?.id, activeBrowserTab?.loading, translationReport]);
+
   async function runBrowserAction(operation: () => Promise<BrowserManagerState>): Promise<void> {
     try {
       const next = await operation();
@@ -881,6 +923,40 @@ function App() {
         <section className={workspaceMode === "browser" || workspaceMode === "local-chat" ? "content-area content-area-full-workspace" : "content-area"}>
           {workspaceMode === "browser" ? (
             <div className="browser-workspace">
+              <div className="browser-translation-toolbar">
+                <button className={translationOpen ? "translation-toolbar-button translation-toolbar-button-active" : "translation-toolbar-button"}
+                  type="button" onClick={() => setTranslationOpen((value) => !value)} disabled={!activeBrowserTab}>
+                  <span className="translation-toolbar-icon">文</span>
+                  <span>Перевод страницы</span><span className="translation-toolbar-language">Русский</span>
+                  <span className="translation-toolbar-chevron">{translationOpen ? "⌃" : "⌄"}</span>
+                </button>
+                {translationOpen && (
+                  <div className="translation-popover">
+                    <div className="translation-popover-heading">
+                      <span className="translation-popover-icon">文</span><strong>Перевод страницы</strong>
+                      <span className="translation-local-badge">● Локально</span>
+                    </div>
+                    <div className="translation-language-row"><span>С оригинала</span><strong>{translationReport?.sourceLanguage ?? "Автоопределение по языку страницы"}</strong></div>
+                    <div className="translation-language-row"><span>На язык</span><strong>Русский</strong></div>
+                    <div className="translation-engine-row"><span>Движок</span><strong>Bergamot · WASM + SIMD</strong></div>
+                    <div className="translation-privacy-note">Текст страницы не отправляется в облако. Модели загружаются один раз и хранятся локально.</div>
+                    <label className="translation-auto-toggle">
+                      <input type="checkbox" checked={translationAuto} onChange={(event) => {
+                        setTranslationAuto(event.target.checked);
+                        if (event.target.checked && !translationReport) void translateActivePage();
+                      }} />
+                      <span><strong>Автоматически переводить страницы</strong><small>Переводить после загрузки новых страниц</small></span>
+                    </label>
+                    <div className="translation-actions">
+                      <button className="primary-button" type="button" disabled={translationBusy || !activeBrowserTab}
+                        onClick={() => void translateActivePage()}>{translationBusy ? "Переводим…" : "Перевести страницу"}</button>
+                      <button className="secondary-button" type="button" disabled={!translationReport}
+                        onClick={() => void restoreOriginalPage()}>Показать оригинал</button>
+                    </div>
+                    <div className="translation-status" role="status">{translationBusy ? "Загрузка модели или перевод текста…" : translationNotice}</div>
+                  </div>
+                )}
+              </div>
               {activeBrowserTab?.error && <div className="browser-error" role="alert">{activeBrowserTab.error}</div>}
               <div className="browser-viewport" ref={browserViewportRef}>
                 {!activeBrowserTab && <div className="browser-empty">Open a cloud website from the AI catalog.</div>}
