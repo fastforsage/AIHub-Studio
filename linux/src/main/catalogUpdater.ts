@@ -213,6 +213,7 @@ function mergeRemoteEntries(current: CatalogState, remote: RemoteProvider[]): { 
       if (changed) {
         state.providers = state.providers.map((provider) => provider.id === existing.id ? merged : provider);
         byId.set(existing.id, merged);
+        byHost.set(hostnameKey(existing.url), merged);
         updated++;
       } else unchanged++;
       continue;
