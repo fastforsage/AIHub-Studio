@@ -472,6 +472,33 @@ export function assertCatalogState(value: unknown): asserts value is CatalogStat
       }
     }
 
+    for (const field of ["description", "limits", "regionTag", "apiBaseUrl", "sourceUrl", "lastVerified"] as const) {
+      if (item[field] !== undefined && typeof item[field] !== "string") {
+        throw new CatalogError("INVALID_CATALOG", "Catalog provider metadata contains an invalid " + field);
+      }
+    }
+    if (item.apiBaseUrl !== undefined && !normalizeWebsiteUrl(item.apiBaseUrl)) {
+      throw new CatalogError("INVALID_CATALOG", "Catalog provider API base URL is invalid");
+    }
+    if (item.sourceUrl !== undefined && !normalizeWebsiteUrl(item.sourceUrl)) {
+      throw new CatalogError("INVALID_CATALOG", "Catalog provider source URL is invalid");
+    }
+    if (item.catalogSource !== undefined &&
+        !["builtin-ru-cn", "github-no-cost-ai", "github-free-llm-apis"].includes(String(item.catalogSource))) {
+      throw new CatalogError("INVALID_CATALOG", "Catalog provider source identifier is invalid");
+    }
+    if (item.modelDetails !== undefined) {
+      if (!Array.isArray(item.modelDetails) || item.modelDetails.some((model) =>
+        !isRecord(model) || typeof model.id !== "string" || !model.id.trim() ||
+        typeof model.name !== "string" || !model.name.trim() ||
+        ["description", "context", "maxOutput", "modality", "limits"].some((field) =>
+          model[field] !== undefined && typeof model[field] !== "string"
+        )
+      )) {
+        throw new CatalogError("INVALID_CATALOG", "Catalog provider contains invalid model details");
+      }
+    }
+
     if (item.type === "website") {
       if (typeof item.url !== "string" || !normalizeWebsiteUrl(item.url) ||
           typeof item.profileId !== "string" || !item.profileId) {
