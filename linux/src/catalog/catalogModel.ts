@@ -477,10 +477,10 @@ export function assertCatalogState(value: unknown): asserts value is CatalogStat
         throw new CatalogError("INVALID_CATALOG", "Catalog provider metadata contains an invalid " + field);
       }
     }
-    if (item.apiBaseUrl !== undefined && !normalizeWebsiteUrl(item.apiBaseUrl)) {
+    if (item.apiBaseUrl !== undefined && (typeof item.apiBaseUrl !== "string" || !normalizeWebsiteUrl(item.apiBaseUrl))) {
       throw new CatalogError("INVALID_CATALOG", "Catalog provider API base URL is invalid");
     }
-    if (item.sourceUrl !== undefined && !normalizeWebsiteUrl(item.sourceUrl)) {
+    if (item.sourceUrl !== undefined && (typeof item.sourceUrl !== "string" || !normalizeWebsiteUrl(item.sourceUrl))) {
       throw new CatalogError("INVALID_CATALOG", "Catalog provider source URL is invalid");
     }
     if (item.catalogSource !== undefined &&
