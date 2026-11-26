@@ -135,8 +135,13 @@ async function bootstrap(): Promise<void> {
 
   await browserManager.setProxyServer(initialBrowserSettings.proxyServer ?? "");
 
-  const catalogUpdater = new CatalogUpdater(catalogStore);
+  const catalogUpdater = new CatalogUpdater(catalogStore, join(paths.config, "catalog-sync-state.json"));
   registerCatalogIpc(catalogStore, catalogUpdater, isTrustedRenderer);
+  void catalogUpdater.syncIfDue().then((report) => {
+    if (report) diagnosticsManager?.log("info", "catalog", "Automatic catalog synchronization completed", report);
+  }).catch((error: unknown) => {
+    diagnosticsManager?.log("warn", "catalog", "Automatic catalog synchronization failed; existing catalog was preserved", error);
+  });
   registerBrowserIpc(browserManager, catalogStore, browserSettings, isTrustedRenderer);
   registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
   registerDiagnosticsIpc(diagnosticsManager, isTrustedRenderer);
