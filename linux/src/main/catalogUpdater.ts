@@ -1,7 +1,6 @@
-import { session } from "electron";
 import { dirname } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import type { CatalogModelInfo, CatalogState, Provider, WebsiteProvider } from "../catalog/catalogModel";
+import type { CatalogModelInfo, CatalogState, WebsiteProvider } from "../catalog/catalogModel";
 import { CatalogStore } from "../catalog/catalogStore";
 
 export const CATALOG_SOURCES = {
@@ -44,11 +43,17 @@ interface RemoteProvider {
   lastVerified: string;
 }
 
+type CatalogFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
+
 function safeHttpUrl(value: unknown): string | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string" || value.length > 2048) return null;
   try {
     const parsed = new URL(value.trim());
-    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    if (!parsed.hostname || parsed.username || parsed.password) return null;
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1" || host === "::1") return null;
+    return parsed.href;
   } catch {
     return null;
   }
@@ -60,8 +65,7 @@ function slug(value: string): string {
 
 function hostnameKey(value: string): string {
   try {
-    const host = new URL(value).hostname.toLocaleLowerCase().replace(/^www\./, "");
-    return host === "cloud.siliconflow.cn" ? "siliconflow.cn" : host;
+    return new URL(value).hostname.toLocaleLowerCase().replace(/^www\./, "");
   } catch {
     return value.toLocaleLowerCase();
   }
@@ -69,10 +73,10 @@ function hostnameKey(value: string): string {
 
 function categoryForHeading(heading: string): string[] {
   const value = heading.toLocaleLowerCase();
-  if (value.includes("media") || value.includes("image") || value.includes("video")) return ["image-generator", "video-generator"];
-  if (value.includes("voice") || value.includes("music")) return ["voice-generator", "music-generator"];
-  if (value.includes("api") || value.includes("developer") || value.includes("inference")) return ["api-providers"];
-  if (value.includes("ide")) return ["many-in-one"];
+  if (/media|image|video|multimodal/.test(value)) return ["image-generator", "video-generator"];
+  if (/voice|music|audio/.test(value)) return ["voice-generator", "music-generator"];
+  if (/api|developer|inference|platform/.test(value)) return ["api-providers"];
+  if (/\bide/.test(value)) return ["many-in-one"];
   return ["chatbot"];
 }
 
@@ -80,35 +84,80 @@ function markdownCell(value: string): string {
   return value.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function splitMarkdownRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  const cells: string[] = [];
+  let current = "";
+  let escaped = false;
+  for (const char of trimmed) {
+    if (char === "|" && !escaped) {
+      cells.push(markdownCell(current));
+      current = "";
+    } else {
+      current += char;
+    }
+    escaped = char === "\\" && !escaped;
+    if (char !== "\\") escaped = false;
+  }
+  cells.push(markdownCell(current));
+  return cells;
+}
+
+function extractWebsite(firstCell: string): { name: string; url: string } | null {
+  const markdownLink = firstCell.match(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/i);
+  if (markdownLink) {
+    const url = safeHttpUrl(markdownLink[2]);
+    if (url) return { name: markdownLink[1].trim(), url };
+  }
+
+  // The upstream README primarily uses plain domains (e.g. lmarena.ai), not Markdown links.
+  const plain = firstCell.replace(/\`/g, "").replace(/\[[^\]]*\]/g, " ");
+  const match = plain.match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:\/[a-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*)?/i);
+  if (!match) return null;
+  const candidate = match[0].startsWith("http") ? match[0] : "https://" + match[0];
+  const url = safeHttpUrl(candidate);
+  if (!url) return null;
+  const label = firstCell.replace(/\`/g, "").trim();
+  return { name: label || new URL(url).hostname, url };
+}
+
 export function parseNoCostAiMarkdown(markdown: string, verifiedAt = new Date().toISOString()): RemoteProvider[] {
-  const entries: RemoteProvider[] = [];
+  const entries = new Map<string, RemoteProvider>();
   let heading = "";
-  let inRelevantList = false;
+  let inRelevantTable = false;
 
   for (const rawLine of markdown.split(/\r?\n/)) {
     const title = rawLine.match(/^#{2,4}\s+(.+)$/);
     if (title) {
       heading = title[1].replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").trim();
-      inRelevantList = /chat interfaces|media generation|voice|music|developer apis|ai ides/i.test(heading);
+      inRelevantTable = /chat interfaces|media generation|voice(?:\s*&\s*music)?|music|developer apis|ai ides|ides/i.test(heading);
       continue;
     }
-    if (!inRelevantList || !rawLine.includes("|")) continue;
-    const cells = rawLine.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(markdownCell);
-    if (cells.length < 2 || /^[-: ]+$/.test(cells[0]) || /^link$/i.test(cells[0])) continue;
-    const link = cells[0].match(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/i);
-    if (!link || /removed:/i.test(rawLine)) continue;
-    const url = safeHttpUrl(link[2]);
-    if (!url) continue;
+    if (!inRelevantTable || !rawLine.includes("|")) continue;
+    const cells = splitMarkdownRow(rawLine);
+    if (cells.length < 2 || /^[-: ]+$/.test(cells[0]) || /^(link|website|service)$/i.test(cells[0])) continue;
+    if (/removed:\s*(?:unreachable|deleted|removed)/i.test(rawLine)) continue;
+    const website = extractWebsite(cells[0]);
+    if (!website) continue;
 
-    const name = link[1].replace(/\.(com|ai|dev|io|app|cn|ru)$/i, "").replace(/\s+/g, " ").trim() || new URL(url).hostname;
+    const categoryIds = categoryForHeading(heading);
     const models = cells[1] && !/^unknown$/i.test(cells[1]) ? cells[1] : "";
     const limits = cells[2] || "Не опубликованы в источнике";
     const description = [models ? "Модели/возможности: " + models : "", "Раздел: " + heading].filter(Boolean).join(". ");
-    entries.push({
-      id: "remote-" + slug(new URL(url).hostname + "-" + name),
-      name,
-      url,
-      categoryIds: categoryForHeading(heading),
+    const host = hostnameKey(website.url);
+    const existing = entries.get(host);
+    if (existing) {
+      existing.categoryIds = [...new Set([...existing.categoryIds, ...categoryIds])];
+      existing.description = [existing.description, description].filter(Boolean).join("; ");
+      existing.limits = [existing.limits, limits].filter((value, index, all) => Boolean(value) && all.indexOf(value) === index).join("; ");
+      continue;
+    }
+
+    entries.set(host, {
+      id: "remote-" + slug(host),
+      name: website.name.replace(/\.(com|ai|dev|io|app|cn|ru)$/i, "").trim() || new URL(website.url).hostname,
+      url: website.url,
+      categoryIds,
       description,
       limits,
       catalogSource: "github-no-cost-ai",
@@ -117,16 +166,15 @@ export function parseNoCostAiMarkdown(markdown: string, verifiedAt = new Date().
     });
   }
 
-  const unique = new Map<string, RemoteProvider>();
-  for (const entry of entries) {
-    const key = hostnameKey(entry.url);
-    if (!unique.has(key)) unique.set(key, entry);
-  }
-  return [...unique.values()];
+  return [...entries.values()];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function textField(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 export function parseFreeApiJson(raw: string, verifiedAt = new Date().toISOString()): RemoteProvider[] {
@@ -138,23 +186,24 @@ export function parseFreeApiJson(raw: string, verifiedAt = new Date().toISOStrin
   const entries: RemoteProvider[] = [];
   for (const candidate of parsed.providers) {
     if (!isRecord(candidate)) continue;
-    const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+    const name = textField(candidate.name);
     const url = safeHttpUrl(candidate.url);
     const apiBaseUrl = safeHttpUrl(candidate.baseUrl);
     if (!name || !url || !apiBaseUrl) continue;
 
     const modelDetails: CatalogModelInfo[] = Array.isArray(candidate.models)
       ? candidate.models.filter(isRecord).flatMap((model) => {
-          const id = typeof model.id === "string" ? model.id : "";
-          const modelName = typeof model.name === "string" ? model.name : id;
-          if (!id || !modelName) return [];
+          const id = textField(model.id);
+          const modelName = textField(model.name) ?? id;
+          if (!id || !modelName || modelName.startsWith("+ ")) return [];
           return [{
             id,
             name: modelName,
-            context: typeof model.context === "string" ? model.context : undefined,
-            maxOutput: typeof model.maxOutput === "string" ? model.maxOutput : undefined,
-            modality: typeof model.modality === "string" ? model.modality : undefined,
-            limits: typeof model.rateLimit === "string" ? model.rateLimit : undefined
+            description: textField(model.description),
+            context: textField(model.context),
+            maxOutput: textField(model.maxOutput),
+            modality: textField(model.modality),
+            limits: textField(model.rateLimit)
           }];
         })
       : [];
@@ -165,25 +214,28 @@ export function parseFreeApiJson(raw: string, verifiedAt = new Date().toISOStrin
       url,
       apiBaseUrl,
       categoryIds: ["api-providers"],
-      description: typeof candidate.description === "string" ? candidate.description : "Описание не опубликовано.",
-      limits: modelDetails.map((model) => model.limits).filter(Boolean).join("; ") || "Не опубликованы",
-      regionTag: typeof candidate.country === "string" ? candidate.country : undefined,
+      description: textField(candidate.description) ?? "Описание не опубликовано.",
+      limits: modelDetails.map((model) => model.limits).filter((value): value is string => Boolean(value)).join("; ") || "Не опубликованы",
+      regionTag: textField(candidate.country),
       modelDetails,
       catalogSource: "github-free-apis",
       sourceUrl: CATALOG_SOURCES.freeApis.url,
       lastVerified: verifiedAt
     });
   }
+  if (entries.length === 0) throw new Error("awesome-free-llm-apis data.json contains no usable API providers");
   return entries;
 }
 
-async function fetchText(url: string): Promise<string> {
-  const response = await session.defaultSession.fetch(url, {
-    headers: { "user-agent": "AIHub-Studio-Catalog-Updater/1.0", accept: "text/plain, application/json" }
+async function fetchText(fetcher: CatalogFetch, url: string): Promise<string> {
+  const response = await fetcher(url, {
+    headers: { "user-agent": "AIHub-Studio-Catalog-Updater/1.1", accept: "text/plain, application/json" },
+    signal: AbortSignal.timeout(20_000)
   });
   if (!response.ok) throw new Error("HTTP " + response.status + " while fetching " + url);
   const body = await response.text();
   if (!body.trim()) throw new Error("Empty catalog source: " + url);
+  if (body.length > 8 * 1024 * 1024) throw new Error("Catalog source exceeds the 8 MiB safety limit");
   return body;
 }
 
@@ -259,7 +311,11 @@ function mergeRemoteEntries(current: CatalogState, remote: RemoteProvider[]): { 
 }
 
 export class CatalogUpdater {
-  constructor(private readonly store: CatalogStore, private readonly statePath?: string) {}
+  constructor(
+    private readonly store: CatalogStore,
+    private readonly statePath?: string,
+    private readonly fetcher: CatalogFetch = globalThis.fetch.bind(globalThis)
+  ) {}
 
   async syncIfDue(intervalMs = 24 * 60 * 60 * 1000): Promise<CatalogSyncReport | null> {
     if (this.statePath) {
@@ -281,14 +337,14 @@ export class CatalogUpdater {
     const incoming: RemoteProvider[] = [];
 
     const tasks = [
-      { id: CATALOG_SOURCES.noCostAi.id, label: CATALOG_SOURCES.noCostAi.label, run: async () => parseNoCostAiMarkdown(await fetchText(CATALOG_SOURCES.noCostAi.url)) },
-      { id: CATALOG_SOURCES.freeApis.id, label: CATALOG_SOURCES.freeApis.label, run: async () => parseFreeApiJson(await fetchText(CATALOG_SOURCES.freeApis.url)) }
+      { id: CATALOG_SOURCES.noCostAi.id, label: CATALOG_SOURCES.noCostAi.label, run: async () => parseNoCostAiMarkdown(await fetchText(this.fetcher, CATALOG_SOURCES.noCostAi.url)) },
+      { id: CATALOG_SOURCES.freeApis.id, label: CATALOG_SOURCES.freeApis.label, run: async () => parseFreeApiJson(await fetchText(this.fetcher, CATALOG_SOURCES.freeApis.url)) }
     ];
 
     for (const task of tasks) {
       try {
         const entries = await task.run();
-        if (entries.length === 0) throw new Error("Source parsed successfully but contained no usable providers");
+        if (entries.length === 0) throw new Error("Source parse returned no usable providers");
         incoming.push(...entries);
         sources.push({ id: task.id, label: task.label, entries: entries.length, ok: true });
       } catch (error) {
