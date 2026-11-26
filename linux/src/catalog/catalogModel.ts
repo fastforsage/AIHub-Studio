@@ -178,7 +178,13 @@ export function createDefaultCatalog(): CatalogState {
       favorite: false,
       enabled: POPULAR_PROVIDER_IDS.includes(item.id),
       profileId: item.id,
-      ...(item.categoryIds.includes("ru-cn-direct") ? { catalogSource: "builtin-ru-cn" as const, regionTag: item.regionTag ?? (["zai-chat", "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut", "rudalle"].includes(item.id) ? "CN" : "RU"), apiBaseUrl: item.apiBaseUrl, description: item.description ?? ("Веб-интерфейс сервиса " + item.name + "."), limits: item.limits ?? "Точные лимиты зависят от тарифа, региона и аккаунта; проверьте условия на сайте." } : {})
+      ...(item.categoryIds.includes("ru-cn-direct") ? {
+        catalogSource: "builtin-ru-cn" as const,
+        regionTag: item.regionTag ?? (["zai-chat", "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut", "rudalle"].includes(item.id) ? "CN" : "RU")
+      } : {}),
+      apiBaseUrl: item.apiBaseUrl,
+      description: item.description ?? DEFAULT_PROVIDER_INFO[item.id]?.description ?? ("Веб-интерфейс сервиса " + item.name + "."),
+      limits: item.limits ?? DEFAULT_PROVIDER_INFO[item.id]?.limits ?? "Точные лимиты не опубликованы; проверьте актуальные условия на сайте."
     }))
   };
 }
