@@ -59,8 +59,12 @@ function slug(value: string): string {
 }
 
 function hostnameKey(value: string): string {
-  try { return new URL(value).hostname.toLocaleLowerCase().replace(/^www\./, ""); }
-  catch { return value.toLocaleLowerCase(); }
+  try {
+    const host = new URL(value).hostname.toLocaleLowerCase().replace(/^www\./, "");
+    return host === "cloud.siliconflow.cn" ? "siliconflow.cn" : host;
+  } catch {
+    return value.toLocaleLowerCase();
+  }
 }
 
 function categoryForHeading(heading: string): string[] {
