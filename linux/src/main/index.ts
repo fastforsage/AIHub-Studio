@@ -136,7 +136,7 @@ async function bootstrap(): Promise<void> {
 
   await browserManager.setProxyServer(initialBrowserSettings.proxyServer ?? "");
 
-  const applicationFetch = (input: string | URL, init?: RequestInit) => browserManager!.fetchForAvailability(input, init);
+  const applicationFetch: typeof fetch = (input, init) => browserManager!.fetchForAvailability(input, init);
   const catalogUpdater = new CatalogUpdater(catalogStore, join(paths.config, "catalog-sync-state.json"), applicationFetch);
   registerCatalogIpc(catalogStore, catalogUpdater, isTrustedRenderer);
   void catalogUpdater.syncIfDue().then((report) => {
