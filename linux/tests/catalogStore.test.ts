@@ -103,7 +103,7 @@ describe("CatalogStore", () => {
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
-    expect(persisted.providers).toHaveLength(32);
+    expect(persisted.providers).toHaveLength(47);
   });
 
   it("merges the installed legacy catalog with the full catalog and preserves existing connections", async () => {
