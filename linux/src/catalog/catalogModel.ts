@@ -88,20 +88,20 @@ export const DEFAULT_CATEGORIES: ReadonlyArray<Category> = [
 
 import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
-const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; categoryIds: string[] }> = [
+const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; categoryIds: string[]; apiBaseUrl?: string; description?: string; limits?: string; regionTag?: string }> = [
   { id: "chatgpt", name: "ChatGPT", url: "https://chatgpt.com/", categoryIds: ["chatbot"] },
-  { id: "alice-ai", name: "Алиса AI — Яндекс", url: "https://alice.yandex.ru/", categoryIds: ["chatbot"] },
-  { id: "gigachat", name: "GigaChat — Сбер", url: "https://giga.chat/", categoryIds: ["chatbot"] },
+  { id: "alice-ai", name: "Алиса AI — Яндекс", url: "https://alice.yandex.ru/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Русскоязычный чат-ассистент Яндекса.", limits: "Условия бесплатного доступа могут меняться; см. актуальные условия сервиса.", regionTag: "RU" },
+  { id: "gigachat", name: "GigaChat — Сбер", url: "https://giga.chat/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Русскоязычный AI-ассистент Сбера.", limits: "Лимиты зависят от тарифа и аккаунта; см. актуальные условия сервиса.", regionTag: "RU" },
   { id: "claude", name: "Claude", url: "https://claude.ai/", categoryIds: ["chatbot"] },
   { id: "gemini", name: "Gemini", url: "https://gemini.google.com/", categoryIds: ["chatbot"] },
   { id: "grok", name: "Grok", url: "https://grok.com/", categoryIds: ["chatbot"] },
-  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/", categoryIds: ["chatbot"] },
+  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Китайский AI-чат для диалогов, поиска и рассуждений.", limits: "Лимиты веб-чата динамические и зависят от нагрузки/аккаунта.", regionTag: "CN" },
   { id: "perplexity", name: "Perplexity", url: "https://www.perplexity.ai/", categoryIds: ["chatbot"] },
   { id: "copilot", name: "Copilot", url: "https://copilot.microsoft.com/", categoryIds: ["chatbot"] },
   { id: "mistral", name: "Mistral", url: "https://chat.mistral.ai/", categoryIds: ["chatbot", "api-providers"] },
   { id: "openrouter", name: "OpenRouter Chat", url: "https://openrouter.ai/chat", categoryIds: ["chatbot"] },
-  { id: "kimi", name: "Kimi", url: "https://www.kimi.com/", categoryIds: ["chatbot"] },
-  { id: "qwen", name: "Qwen", url: "https://chat.qwen.ai/", categoryIds: ["chatbot"] },
+  { id: "kimi", name: "Kimi", url: "https://www.kimi.com/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Китайский AI-ассистент Moonshot AI.", limits: "Лимиты веб-чата могут меняться; см. условия аккаунта.", regionTag: "CN" },
+  { id: "qwen", name: "Qwen", url: "https://chat.qwen.ai/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Веб-чат семейства моделей Qwen от Alibaba.", limits: "Лимиты зависят от выбранной модели и текущих условий сервиса.", regionTag: "CN" },
   { id: "google-ai-studio", name: "Google AI Studio", url: "https://aistudio.google.com/", categoryIds: ["chatbot", "api-providers"] },
   { id: "poe", name: "Poe", url: "https://poe.com/", categoryIds: ["chatbot"] },
   { id: "suno", name: "Suno", url: "https://suno.com/", categoryIds: ["music-generator"] },
@@ -121,8 +121,8 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
   { id: "huggingface-inference", name: "Hugging Face Inference Providers", url: "https://huggingface.co/docs/inference-providers", categoryIds: ["api-providers"] },
   { id: "opencode-zen", name: "OpenCode Zen", url: "https://opencode.ai/en/zen", categoryIds: ["api-providers"] },
   { id: "kilo-ai-gateway", name: "Kilo AI Gateway", url: "https://kilo.ai/gateway", categoryIds: ["api-providers"] }
-  ,{ id: "bothub", name: "BotHub", url: "https://bothub.chat/", categoryIds: ["chatbot", "ru-cn-direct"] }
-  ,{ id: "gptunnel", name: "GPTunnel", url: "https://gptunnel.ru/", categoryIds: ["chatbot", "ru-cn-direct"] }
+  ,{ id: "bothub", name: "BotHub", url: "https://bothub.chat/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Агрегатор AI-чатов и моделей.", limits: "Лимиты зависят от модели и тарифа.", regionTag: "RU" }
+  ,{ id: "gptunnel", name: "GPTunnel", url: "https://gptunnel.ru/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Российская площадка доступа к AI-моделям.", limits: "Условия и доступность зависят от выбранной модели.", regionTag: "RU" }
   ,{ id: "shedevrum", name: "Шедеврум", url: "https://shedevrum.ai/", categoryIds: ["image-generator", "ru-cn-direct"] }
   ,{ id: "rudalle", name: "Kandinsky / ruDALL-E", url: "https://rudalle.ru/", categoryIds: ["image-generator", "ru-cn-direct"] }
   ,{ id: "sourcecraft", name: "SourceCraft", url: "https://sourcecraft.dev/", categoryIds: ["many-in-one", "ru-cn-direct"] }
@@ -134,9 +134,9 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
   ,{ id: "pixverse", name: "PixVerse", url: "https://pixverse.ai/", categoryIds: ["video-generator", "ru-cn-direct"] }
   ,{ id: "vidu", name: "Vidu", url: "https://www.vidu.com/", categoryIds: ["video-generator", "ru-cn-direct"] }
   ,{ id: "capcut", name: "CapCut", url: "https://www.capcut.com/", categoryIds: ["video-generator", "ru-cn-direct"] }
-  ,{ id: "zhipu-api", name: "Zhipu GLM API", url: "https://open.bigmodel.cn/", categoryIds: ["api-providers", "ru-cn-direct"] }
-  ,{ id: "siliconflow-api", name: "SiliconFlow API", url: "https://siliconflow.cn/", categoryIds: ["api-providers", "ru-cn-direct"] }
-  ,{ id: "modelscope-api", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers", "ru-cn-direct"] }
+  ,{ id: "zhipu-api", name: "Zhipu GLM API", url: "https://open.bigmodel.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://open.bigmodel.cn/api/paas/v4", description: "OpenAI-совместимый API платформы Zhipu AI.", limits: "Бесплатные Flash-модели; квоты и доступность проверяйте в консоли.", regionTag: "CN" }
+  ,{ id: "siliconflow-api", name: "SiliconFlow API", url: "https://siliconflow.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://api.siliconflow.cn/v1", description: "API-платформа с каталогом моделей разных разработчиков.", limits: "Бесплатный пул доступен не для всех моделей; квоты динамические.", regionTag: "CN" }
+  ,{ id: "modelscope-api", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://api-inference.modelscope.cn/v1", description: "API-Inference для моделей из каталога ModelScope.", limits: "Требуется регистрация и подтверждение аккаунта; квоты динамические.", regionTag: "CN" }
 ];
 
 export function createDefaultCatalog(): CatalogState {
@@ -151,7 +151,7 @@ export function createDefaultCatalog(): CatalogState {
       favorite: false,
       enabled: POPULAR_PROVIDER_IDS.includes(item.id),
       profileId: item.id,
-      ...(item.categoryIds.includes("ru-cn-direct") ? { catalogSource: "builtin-ru-cn" as const } : {})
+      ...(item.categoryIds.includes("ru-cn-direct") ? { catalogSource: "builtin-ru-cn" as const, regionTag: item.regionTag ?? (["zai-chat", "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut", "rudalle"].includes(item.id) ? "CN" : "RU"), apiBaseUrl: item.apiBaseUrl, description: item.description, limits: item.limits } : {})
     }))
   };
 }
