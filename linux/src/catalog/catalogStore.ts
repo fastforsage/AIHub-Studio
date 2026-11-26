@@ -8,12 +8,15 @@ import {
 } from "./catalogModel";
 import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
-const CURRENT_CATALOG_SEED_VERSION = 2;
+const CURRENT_CATALOG_SEED_VERSION = 3;
 const INCREMENTAL_PROVIDER_IDS = new Set([
   "alice-ai", "gigachat",
   "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
   "cerebras-inference", "sambanova-cloud", "modelscope",
-  "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+  "huggingface-inference", "opencode-zen", "kilo-ai-gateway",
+  "bothub", "gptunnel", "shedevrum", "rudalle", "sourcecraft", "zai-chat",
+  "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut",
+  "zhipu-api", "siliconflow-api", "modelscope-api"
 ]);
 
 
@@ -208,7 +211,8 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
   const next = structuredClone(state);
   const defaultApiCategory = defaults.categories.find((category) => category.id === "api-providers");
   const defaultChatbotCategory = defaults.categories.find((category) => category.id === "chatbot");
-  if (!defaultApiCategory || !defaultChatbotCategory) {
+  const ruCnCategory = defaults.categories.find((category) => category.id === "ru-cn-direct");
+  if (!defaultApiCategory || !defaultChatbotCategory || !ruCnCategory) {
     throw new Error("Incremental catalog seed is missing required categories");
   }
 
@@ -232,6 +236,12 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
     apiCategory = next.categories[next.categories.length - 1];
   }
 
+  let directCategory = findCategory("ru-cn-direct", ruCnCategory.name);
+  if (!directCategory) {
+    next.categories.push({ ...ruCnCategory });
+    directCategory = next.categories[next.categories.length - 1];
+  }
+
   const providerIds = new Set(next.providers.map((provider) => provider.id));
   const normalizeUrl = (value: string): string => {
     try { return new URL(value).href; } catch { return value.trim(); }
@@ -240,9 +250,12 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
 
   for (const seeded of defaults.providers) {
     if (!INCREMENTAL_PROVIDER_IDS.has(seeded.id) || providerIds.has(seeded.id)) continue;
-    const targetCategoryId = seeded.id === "alice-ai" || seeded.id === "gigachat"
-      ? chatbotCategory.id
-      : apiCategory.id;
+    const targetCategoryIds = seeded.categoryIds
+      .map((id) => id === "ru-cn-direct" ? directCategory!.id : id)
+      .map((id) => id === "chatbot" ? chatbotCategory!.id : id === "api-providers" ? apiCategory!.id : id)
+      .filter((id) => next.categories.some((category) => category.id === id));
+    const fallbackCategoryId = seeded.id.endsWith("-api") ? apiCategory.id : chatbotCategory.id;
+    const categoryIds = targetCategoryIds.length ? targetCategoryIds : [fallbackCategoryId];
 
     const sameWebsite = seeded.type === "website"
       ? next.providers.find((provider) =>
@@ -250,7 +263,7 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
         )
       : undefined;
     if (sameWebsite) {
-      sameWebsite.categoryIds = [...new Set([...sameWebsite.categoryIds, targetCategoryId])];
+      sameWebsite.categoryIds = [...new Set([...sameWebsite.categoryIds, ...categoryIds])];
       providerIds.add(seeded.id);
       continue;
     }
@@ -268,7 +281,7 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
     next.providers.push({
       ...seeded,
       name,
-      categoryIds: [targetCategoryId],
+      categoryIds,
       favorite: false,
       enabled: POPULAR_PROVIDER_IDS.includes(seeded.id)
     });
