@@ -3,6 +3,7 @@ import type { CatalogApi } from "../../shared/catalogApi";
 import type { LocalAiApi } from "../../shared/localAiApi";
 import type { DiagnosticsApi } from "../../shared/diagnosticsApi";
 import type { ServiceAvailabilityApi } from "../../shared/availabilityApi";
+import type { TranslationApi } from "../../shared/translationApi";
 
 export {};
 
@@ -16,6 +17,7 @@ declare global {
       localAi: LocalAiApi;
       diagnostics: DiagnosticsApi;
       availability: ServiceAvailabilityApi;
+      translation: TranslationApi;
     };
   }
 }
