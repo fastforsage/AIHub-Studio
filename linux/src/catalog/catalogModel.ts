@@ -117,7 +117,7 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
   { id: "cohere", name: "Cohere", url: "https://dashboard.cohere.com/", categoryIds: ["api-providers"] },
   { id: "cerebras-inference", name: "Cerebras Inference", url: "https://www.cerebras.ai/inference", categoryIds: ["api-providers"] },
   { id: "sambanova-cloud", name: "SambaNova Cloud", url: "https://cloud.sambanova.ai/", categoryIds: ["api-providers"] },
-  { id: "modelscope", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers"] },
+  { id: "modelscope", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://api-inference.modelscope.cn/v1", description: "API-Inference для моделей из каталога ModelScope.", limits: "Требуется регистрация и подтверждение аккаунта; квоты динамические.", regionTag: "CN" },
   { id: "huggingface-inference", name: "Hugging Face Inference Providers", url: "https://huggingface.co/docs/inference-providers", categoryIds: ["api-providers"] },
   { id: "opencode-zen", name: "OpenCode Zen", url: "https://opencode.ai/en/zen", categoryIds: ["api-providers"] },
   { id: "kilo-ai-gateway", name: "Kilo AI Gateway", url: "https://kilo.ai/gateway", categoryIds: ["api-providers"] }
@@ -136,7 +136,6 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
   ,{ id: "capcut", name: "CapCut", url: "https://www.capcut.com/", categoryIds: ["video-generator", "ru-cn-direct"] }
   ,{ id: "zhipu-api", name: "Zhipu GLM API", url: "https://open.bigmodel.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://open.bigmodel.cn/api/paas/v4", description: "OpenAI-совместимый API платформы Zhipu AI.", limits: "Бесплатные Flash-модели; квоты и доступность проверяйте в консоли.", regionTag: "CN" }
   ,{ id: "siliconflow-api", name: "SiliconFlow API", url: "https://siliconflow.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://api.siliconflow.cn/v1", description: "API-платформа с каталогом моделей разных разработчиков.", limits: "Бесплатный пул доступен не для всех моделей; квоты динамические.", regionTag: "CN" }
-  ,{ id: "modelscope-api", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://api-inference.modelscope.cn/v1", description: "API-Inference для моделей из каталога ModelScope.", limits: "Требуется регистрация и подтверждение аккаунта; квоты динамические.", regionTag: "CN" }
 ];
 
 export function createDefaultCatalog(): CatalogState {
