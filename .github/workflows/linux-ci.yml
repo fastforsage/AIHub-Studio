@@ -43,6 +43,14 @@ jobs:
           version="$(node -p 'require("./package.json").version')"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Verify package versions
+        run: |
+          pkg_version="$(sed -n 's/^pkgver=//p' packaging/arch/PKGBUILD)"
+          if [[ "$pkg_version" != "${{ steps.app_version.outputs.version }}" ]]; then
+            echo "Arch PKGBUILD version $pkg_version does not match app version ${{ steps.app_version.outputs.version }}" >&2
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
