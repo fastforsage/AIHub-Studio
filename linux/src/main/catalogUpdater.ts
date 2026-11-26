@@ -81,7 +81,7 @@ function categoryForHeading(heading: string): string[] {
 }
 
 function markdownCell(value: string): string {
-  return value.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return value.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\x60/g, "").replace(/\s+/g, " ").trim();
 }
 
 function splitMarkdownRow(line: string): string[] {
