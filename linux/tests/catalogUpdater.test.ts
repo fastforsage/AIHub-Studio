@@ -39,6 +39,7 @@ Link | Free Models | Limits
 lmarena.ai | 40+ | \`Unlimited\`
 g4f.dev | 200+ local models | \`Unlimited\`
 ### Media Generation
+#### (Image-/Video-/Multimodal)
 Link | Free Models | Limits
 --- | --- | ---
 runwayml.com | Gen-4 | Free tier; usage varies
