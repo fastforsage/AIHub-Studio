@@ -212,14 +212,12 @@ export class BrowserManager {
     return this.getState();
   }
 
-  async fetchForAvailability(input: string | URL, init?: RequestInit): Promise<Response> {
+  async fetchForAvailability(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const partition = profilePartition("shared-workspace");
     const browserSession = session.fromPartition(partition);
     await this.configureSession(partition, browserSession);
-    const response = await browserSession.fetch(
-      input.toString(),
-      init
-    );
+    const url = input instanceof Request ? input.url : input.toString();
+    const response = await browserSession.fetch(url, init);
     return response as unknown as Response;
   }
 
