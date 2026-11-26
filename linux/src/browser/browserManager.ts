@@ -31,7 +31,8 @@ export class BrowserManager {
 
   constructor(
     private readonly getWindow: WindowAccessor,
-    private readonly onChange: StateListener
+    private readonly onChange: StateListener,
+    private readonly log: (level: "info" | "warn" | "error", message: string, metadata?: unknown) => void = () => undefined
   ) {}
 
   getState(): BrowserManagerState {
@@ -227,60 +228,130 @@ export class BrowserManager {
     tabId: string,
     translate: (texts: string[], sourceLanguage: string) => Promise<string[]>
   ): Promise<{ translatedNodes: number; sourceLanguage: string; targetLanguage: "ru" }> {
+    const startedAt = Date.now();
     const tab = this.requireTab(tabId);
     if (!tab) throw new Error("The browser tab is no longer available");
     const contents = this.getLiveContents(tab);
     if (!contents) throw new Error("The browser tab is no longer available");
 
-    const snapshot = await contents.executeJavaScriptInIsolatedWorld(999, [{
-      code: `(() => {
-        const key = "__aihubBergamotTranslationState__";
-        const previous = window[key];
-        if (previous?.entries) for (const entry of previous.entries) {
-          if (entry.node?.isConnected && entry.node.nodeValue === entry.translated) entry.node.nodeValue = entry.original;
-        }
-        const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
-        const entries = [];
-        let node;
-        while ((node = walker.nextNode()) && entries.length < 300) {
-          const parent = node.parentElement;
-          if (!parent) continue;
-          if (parent.closest("script,style,noscript,textarea,input,select,option,code,pre,kbd,samp,svg,math,canvas,button,[role=button],nav,header,footer,[contenteditable=true],[contenteditable=plaintext-only],[aria-hidden=true],[translate=no]")) continue;
-          const style = getComputedStyle(parent);
-          if (style.display === "none" || style.visibility === "hidden") continue;
-          const original = node.nodeValue || "";
-          const trimmed = original.trim();
-          if (trimmed.length < 3 || trimmed.length > 1200 || !/[\\p{L}]{2}/u.test(trimmed)) continue;
-          entries.push({ node, original, translated: null });
-        }
-        window[key] = { entries };
-        const language = (document.documentElement.lang || document.body?.getAttribute("lang") || "en").trim().toLowerCase().split("-")[0];
-        return { sourceLanguage: language || "en", texts: entries.map(entry => entry.original) };
-      })()`
-    }]) as { sourceLanguage: string; texts: string[] };
+    this.log("info", "Page translation DOM scan started", {
+      tabId,
+      pageHost: (() => { try { return new URL(tab.url).host; } catch { return "unknown"; } })()
+    });
 
-    if (!snapshot.texts.length) return { translatedNodes: 0, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
-    const translated = await translate(snapshot.texts, snapshot.sourceLanguage);
-    if (translated.length !== snapshot.texts.length) throw new Error("Bergamot returned an unexpected translation count");
-    const encoded = JSON.stringify(translated);
-    const applied = await contents.executeJavaScriptInIsolatedWorld(999, [{
-      code: `(() => {
-        const state = window["__aihubBergamotTranslationState__"];
-        if (!state?.entries) return 0;
-        const values = \${encoded};
-        let count = 0;
-        state.entries.forEach((entry, index) => {
-          const value = values[index];
-          if (entry.node?.isConnected && entry.node.nodeValue === entry.original && typeof value === "string" && value.trim()) {
-            entry.node.nodeValue = value;
-            entry.translated = value;
-            count++;
+    try {
+      const snapshot = await contents.executeJavaScriptInIsolatedWorld(999, [{
+        code: `(() => {
+          const key = "__aihubBergamotTranslationState__";
+          const previous = window[key];
+          if (previous?.entries) for (const entry of previous.entries) {
+            if (entry.node?.isConnected && entry.node.nodeValue === entry.translated) entry.node.nodeValue = entry.original;
           }
-        });
-        return count;
-      })()`
-    }]) as number;
-    return { translatedNodes: applied, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
+
+          const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
+          const entries = [];
+          let node;
+          while ((node = walker.nextNode()) && entries.length < 500) {
+            const parent = node.parentElement;
+            if (!parent) continue;
+            if (parent.closest("script,style,noscript,textarea,input,select,option,code,pre,kbd,samp,svg,math,canvas,button,[role=button],nav,header,footer,[contenteditable=true],[contenteditable=plaintext-only],[aria-hidden=true],[translate=no]")) continue;
+            const style = getComputedStyle(parent);
+            if (style.display === "none" || style.visibility === "hidden") continue;
+            const original = node.nodeValue || "";
+            const trimmed = original.trim();
+            if (trimmed.length < 3 || trimmed.length > 1200 || !/[\\p{L}]{2}/u.test(trimmed)) continue;
+            entries.push({ node, original, translated: null });
+          }
+
+          window[key] = { entries };
+          const declared = (document.documentElement.lang || document.body?.getAttribute("lang") || "").trim().toLowerCase();
+          const sample = entries.slice(0, 100).map(entry => entry.original).join(" ").slice(0, 12000);
+          const count = (pattern) => (sample.match(pattern) || []).length;
+          const han = count(/[\\u3400-\\u9fff]/g);
+          const kana = count(/[\\u3040-\\u30ff]/g);
+          const hangul = count(/[\\uac00-\\ud7af]/g);
+          const cyrillic = count(/[\\u0400-\\u052f]/g);
+          let detected = "";
+          if (kana > 2) detected = "ja";
+          else if (hangul > 2) detected = "ko";
+          else if (han > 3) detected = "zh";
+          else if (cyrillic > 3) detected = "ru";
+          const declaredCode = declared.split("-")[0];
+          const supportedDeclared = /^[a-z]{2,3}$/.test(declaredCode) ? declaredCode : "";
+          const sourceLanguage = detected || supportedDeclared || "en";
+          return {
+            sourceLanguage,
+            languageDetection: detected ? "text-script" : supportedDeclared ? "html-lang-fallback" : "default-en",
+            declaredLanguage: declared || null,
+            textScriptCounts: { han, kana, hangul, cyrillic },
+            texts: entries.map(entry => entry.original)
+          };
+        })()`
+      }]) as {
+        sourceLanguage: string;
+        languageDetection: string;
+        declaredLanguage: string | null;
+        textScriptCounts: { han: number; kana: number; hangul: number; cyrillic: number };
+        texts: string[];
+      };
+
+      this.log("info", "Page translation DOM scan completed", {
+        tabId,
+        sourceLanguage: snapshot.sourceLanguage,
+        languageDetection: snapshot.languageDetection,
+        declaredLanguage: snapshot.declaredLanguage,
+        textScriptCounts: snapshot.textScriptCounts,
+        candidateTextNodes: snapshot.texts.length,
+        durationMs: Date.now() - startedAt
+      });
+
+      if (!snapshot.texts.length) {
+        this.log("warn", "Page translation found no eligible text nodes", { tabId, sourceLanguage: snapshot.sourceLanguage });
+        return { translatedNodes: 0, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
+      }
+
+      const translateStartedAt = Date.now();
+      const translated = await translate(snapshot.texts, snapshot.sourceLanguage);
+      if (translated.length !== snapshot.texts.length) throw new Error("Bergamot returned an unexpected translation count");
+
+      const encoded = JSON.stringify(translated);
+      const applied = await contents.executeJavaScriptInIsolatedWorld(999, [{
+        code: `(() => {
+          const state = window["__aihubBergamotTranslationState__"];
+          if (!state?.entries) return 0;
+          const values = ${encoded};
+          let count = 0;
+          state.entries.forEach((entry, index) => {
+            const value = values[index];
+            if (entry.node?.isConnected && entry.node.nodeValue === entry.original && typeof value === "string" && value.trim()) {
+              entry.node.nodeValue = value;
+              entry.translated = value;
+              count++;
+            }
+          });
+          return count;
+        })()`
+      }]) as number;
+
+      this.log("info", "Page translation applied", {
+        tabId,
+        sourceLanguage: snapshot.sourceLanguage,
+        languageDetection: snapshot.languageDetection,
+        candidateTextNodes: snapshot.texts.length,
+        translatedNodes: applied,
+        translateDurationMs: Date.now() - translateStartedAt,
+        durationMs: Date.now() - startedAt
+      });
+      if (applied === 0) this.log("warn", "Translation completed but no DOM nodes were updated; page may have re-rendered", { tabId });
+      return { translatedNodes: applied, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
+    } catch (error) {
+      this.log("error", "Page translation failed", {
+        tabId,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : String(error)
+      });
+      throw error;
+    }
   }
 
   async restoreOriginalPage(tabId: string): Promise<void> {
