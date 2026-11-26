@@ -10,13 +10,12 @@ import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
 const CURRENT_CATALOG_SEED_VERSION = 3;
 const INCREMENTAL_PROVIDER_IDS = new Set([
-  "alice-ai", "gigachat",
   "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
   "cerebras-inference", "sambanova-cloud", "modelscope",
   "huggingface-inference", "opencode-zen", "kilo-ai-gateway",
   "alice-ai", "gigachat", "deepseek", "kimi", "qwen", "bothub", "gptunnel", "shedevrum", "rudalle", "sourcecraft", "zai-chat",
   "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut",
-  "zhipu-api", "siliconflow-api", "modelscope-api"
+  "zhipu-api", "siliconflow-api"
 ]);
 
 
