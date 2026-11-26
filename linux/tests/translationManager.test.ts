@@ -23,6 +23,7 @@ describe("TranslationManager", () => {
     events = [];
     mocks.createProvider.mockClear();
     mocks.translate.mockReset();
+    mocks.createProvider.mockImplementation(() => ({ translate: mocks.translate }));
   });
 
   async function cleanup(): Promise<void> {
