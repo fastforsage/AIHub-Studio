@@ -72,12 +72,33 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const upgraded = await store.initialize();
-    expect(upgraded.catalogSeedVersion).toBe(3);
+    expect(upgraded.catalogSeedVersion).toBe(4);
     expect(upgraded.providers).toHaveLength(47);
     expect(upgraded.providers.filter((provider) => provider.enabled)).toHaveLength(14);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
     expect(upgraded.categories.some((category) => category.id === "ru-cn-direct")).toBe(true);
     expect(upgraded.providers.find((provider) => provider.id === "mistral")?.categoryIds).toContain("api-providers");
+  });
+
+  it("restores every missing built-in category from a partial saved catalog", async () => {
+    const filePath = await createTemporaryCatalogPath();
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    const { createDefaultCatalog } = await import("../src/catalog/catalogModel");
+    const defaults = createDefaultCatalog();
+    const partial = {
+      ...defaults,
+      catalogSeedVersion: 3,
+      categories: defaults.categories.filter((category) => ["local-ai", "ru-cn-direct"].includes(category.id))
+    };
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify(partial), "utf8");
+
+    const store = new CatalogStore(filePath);
+    const migrated = await store.initialize();
+    expect(migrated.catalogSeedVersion).toBe(4);
+    expect(migrated.categories.map((category) => category.id)).toEqual(defaults.categories.map((category) => category.id));
+    expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.enabled).toBe(true);
   });
 
   it("migrates an untouched legacy starter catalog to the curated catalog", async () => {
@@ -98,7 +119,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.catalogSeedVersion).toBe(3);
+    expect(migrated.catalogSeedVersion).toBe(4);
     expect(migrated.providers).toHaveLength(47);
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
@@ -222,7 +243,7 @@ describe("CatalogStore", () => {
     }));
     const reloaded = new CatalogStore(filePath);
     const afterUserDeletion = await reloaded.initialize();
-    expect(afterUserDeletion.catalogSeedVersion).toBe(3);
+    expect(afterUserDeletion.catalogSeedVersion).toBe(4);
     expect(afterUserDeletion.providers.some((provider) => provider.id === "alice-ai")).toBe(false);
     expect(afterUserDeletion.providers).toHaveLength(56);
   });
