@@ -320,7 +320,10 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
 function restoreMissingBuiltinCategories(value: unknown, defaults: CatalogState): { catalog: unknown; changed: boolean } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return { catalog: value, changed: false };
   const document = value as Record<string, unknown>;
-  if (!Array.isArray(document.categories) || (typeof document.catalogSeedVersion === "number" && document.catalogSeedVersion >= CURRENT_CATALOG_SEED_VERSION)) {
+  if (!Array.isArray(document.categories) ||
+      document.catalogSeedVersion === undefined ||
+      (typeof document.catalogSeedVersion === "number" && document.catalogSeedVersion >= CURRENT_CATALOG_SEED_VERSION)) {
+    // Preserve the legacy-starter detection path for pre-seed-version catalogs.
     return { catalog: value, changed: false };
   }
 
@@ -333,13 +336,17 @@ function restoreMissingBuiltinCategories(value: unknown, defaults: CatalogState)
     typeof item === "object" && item !== null && !Array.isArray(item) &&
     typeof (item as Record<string, unknown>).id === "string" &&
     typeof (item as Record<string, unknown>).name === "string"
-      ? [ [((item as Record<string, unknown>).name as string).trim().toLocaleLowerCase(), (item as Record<string, unknown>).id as string] as const ]
+      ? [[((item as Record<string, unknown>).name as string).trim().toLocaleLowerCase(), (item as Record<string, unknown>).id as string] as const]
       : []
   ));
   const aliases = new Map<string, string>();
   let changed = false;
+
   for (const category of defaults.categories) {
-    if (ids.has(category.id)) continue;
+    if (ids.has(category.id)) {
+      aliases.set(category.id, category.id);
+      continue;
+    }
     const existingId = byName.get(category.name.trim().toLocaleLowerCase());
     if (existingId) {
       aliases.set(category.id, existingId);
@@ -349,11 +356,12 @@ function restoreMissingBuiltinCategories(value: unknown, defaults: CatalogState)
     categories.push({ ...category });
     ids.add(category.id);
     byName.set(category.name.trim().toLocaleLowerCase(), category.id);
+    aliases.set(category.id, category.id);
     changed = true;
   }
 
   let providers: unknown = document.providers;
-  if (aliases.size && Array.isArray(document.providers)) {
+  if (Array.isArray(document.providers)) {
     providers = document.providers.map((rawProvider) => {
       if (typeof rawProvider !== "object" || rawProvider === null || Array.isArray(rawProvider)) return rawProvider;
       const provider = rawProvider as Record<string, unknown>;
@@ -361,11 +369,31 @@ function restoreMissingBuiltinCategories(value: unknown, defaults: CatalogState)
       const categoryIds = [...new Set(provider.categoryIds.map((id) =>
         typeof id === "string" ? aliases.get(id) ?? id : id
       ))];
+      if (categoryIds.some((id, index) => id !== provider.categoryIds?.[index])) changed = true;
       return { ...provider, categoryIds };
     });
   }
 
-  return { catalog: changed ? { ...document, categories, providers } : value, changed };
+  const orderedBuiltins = defaults.categories.flatMap((category) => {
+    const actualId = aliases.get(category.id) ?? category.id;
+    const match = categories.find((item) =>
+      typeof item === "object" && item !== null && !Array.isArray(item) &&
+      (item as Record<string, unknown>).id === actualId
+    );
+    return match ? [match] : [];
+  });
+  const builtinIds = new Set(orderedBuiltins.flatMap((item) =>
+    typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).id === "string"
+      ? [(item as Record<string, unknown>).id as string] : []
+  ));
+  const customCategories = categories.filter((item) =>
+    typeof item !== "object" || item === null || Array.isArray(item) ||
+    !builtinIds.has(String((item as Record<string, unknown>).id ?? ""))
+  );
+  const orderedCategories = [...orderedBuiltins, ...customCategories];
+  if (JSON.stringify(orderedCategories) !== JSON.stringify(categories)) changed = true;
+
+  return { catalog: changed ? { ...document, categories: orderedCategories, providers } : value, changed };
 }
 
 function repairDuplicateProviderEntries(value: unknown): { catalog: unknown; changed: boolean } {
