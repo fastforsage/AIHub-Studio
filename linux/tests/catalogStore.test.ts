@@ -27,11 +27,11 @@ describe("CatalogStore", () => {
     expect(initial.categories.map((category) => category.name)).toEqual([
       "chatbot", "music generator", "voice generator", "video generator",
       "writing helper", "research assistant", "translator", "presentation maker",
-      "image generator", "many in one", "API providers and aggregators", "Local AI"
+      "image generator", "many in one", "API providers and aggregators", "RU & CN Direct (Без VPN)", "Local AI"
     ]);
     expect(initial.providers.map((provider) => provider.name)).toContain("ChatGPT");
     expect(initial.providers.map((provider) => provider.name)).toContain("Claude");
-    expect(initial.providers).toHaveLength(32);
+    expect(initial.providers).toHaveLength(47);
     expect(initial.providers.filter((provider) => provider.enabled)).toHaveLength(14);
 
     await store.transact((current) => addCategory(current, "Research", () => "research"));
@@ -48,16 +48,23 @@ describe("CatalogStore", () => {
     const { dirname } = await import("node:path");
     const { createDefaultCatalog } = await import("../src/catalog/catalogModel");
     const current = createDefaultCatalog();
+    const newDirectIds = [
+      "bothub", "gptunnel", "shedevrum", "rudalle", "sourcecraft", "zai-chat",
+      "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut",
+      "zhipu-api", "siliconflow-api"
+    ];
     const previous = {
       ...current,
-      categories: current.categories.filter((category) => category.id !== "api-providers"),
+      catalogSeedVersion: 2,
+      categories: current.categories.filter((category) => category.id !== "api-providers" && category.id !== "ru-cn-direct"),
       providers: current.providers.filter((provider) => ![
         "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
         "cerebras-inference", "sambanova-cloud", "modelscope",
-        "huggingface-inference", "opencode-zen", "kilo-ai-gateway", "alice-ai", "gigachat"
+        "huggingface-inference", "opencode-zen", "kilo-ai-gateway", "alice-ai", "gigachat",
+        ...newDirectIds
       ].includes(provider.id)).map((provider) => ({
         ...provider,
-        categoryIds: provider.categoryIds.filter((id) => id !== "api-providers"),
+        categoryIds: provider.categoryIds.filter((id) => id !== "api-providers" && id !== "ru-cn-direct"),
       }))
     };
     await mkdir(dirname(filePath), { recursive: true });
@@ -65,10 +72,11 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const upgraded = await store.initialize();
-    expect(upgraded.catalogSeedVersion).toBe(2);
-    expect(upgraded.providers).toHaveLength(32);
+    expect(upgraded.catalogSeedVersion).toBe(3);
+    expect(upgraded.providers).toHaveLength(47);
     expect(upgraded.providers.filter((provider) => provider.enabled)).toHaveLength(14);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
+    expect(upgraded.categories.some((category) => category.id === "ru-cn-direct")).toBe(true);
     expect(upgraded.providers.find((provider) => provider.id === "mistral")?.categoryIds).toContain("api-providers");
   });
 
@@ -90,8 +98,8 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.catalogSeedVersion).toBe(2);
-    expect(migrated.providers).toHaveLength(32);
+    expect(migrated.catalogSeedVersion).toBe(3);
+    expect(migrated.providers).toHaveLength(47);
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
@@ -193,11 +201,13 @@ describe("CatalogStore", () => {
     expect(upgraded.providers).toHaveLength(56);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
     expect(upgraded.providers.find((provider) => provider.id === "alice-ai")).toMatchObject({
-      enabled: true, categoryIds: ["chatbot"]
+      enabled: true
     });
+    expect(upgraded.providers.find((provider) => provider.id === "alice-ai")?.categoryIds).toContain("ru-cn-direct");
     expect(upgraded.providers.find((provider) => provider.id === "gigachat")).toMatchObject({
-      enabled: true, categoryIds: ["chatbot"]
+      enabled: true
     });
+    expect(upgraded.providers.find((provider) => provider.id === "gigachat")?.categoryIds).toContain("ru-cn-direct");
     expect(upgraded.providers.find((provider) => provider.id === "nvidia-nim")?.enabled).toBe(false);
     expect(upgraded.providers.find((provider) => provider.id === "chatgpt")).toMatchObject({
       favorite: true, enabled: false, profileId: "existing-chatgpt-profile"
@@ -212,7 +222,7 @@ describe("CatalogStore", () => {
     }));
     const reloaded = new CatalogStore(filePath);
     const afterUserDeletion = await reloaded.initialize();
-    expect(afterUserDeletion.catalogSeedVersion).toBe(2);
+    expect(afterUserDeletion.catalogSeedVersion).toBe(3);
     expect(afterUserDeletion.providers.some((provider) => provider.id === "alice-ai")).toBe(false);
     expect(afterUserDeletion.providers).toHaveLength(55);
   });
