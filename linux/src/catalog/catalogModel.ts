@@ -95,7 +95,7 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
   { id: "claude", name: "Claude", url: "https://claude.ai/", categoryIds: ["chatbot"] },
   { id: "gemini", name: "Gemini", url: "https://gemini.google.com/", categoryIds: ["chatbot"] },
   { id: "grok", name: "Grok", url: "https://grok.com/", categoryIds: ["chatbot"] },
-  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Китайский AI-чат для диалогов, поиска и рассуждений.", limits: "Лимиты веб-чата динамические и зависят от нагрузки/аккаунта.", regionTag: "CN" },
+  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Китайский AI-чат для диалогов, поиска и рассуждений. Также доступен API для разработчиков.", limits: "Лимиты веб-чата динамические; API trial и квоты зависят от условий аккаунта.", apiBaseUrl: "https://api.deepseek.com", regionTag: "CN" },
   { id: "perplexity", name: "Perplexity", url: "https://www.perplexity.ai/", categoryIds: ["chatbot"] },
   { id: "copilot", name: "Copilot", url: "https://copilot.microsoft.com/", categoryIds: ["chatbot"] },
   { id: "mistral", name: "Mistral", url: "https://chat.mistral.ai/", categoryIds: ["chatbot", "api-providers"] },
