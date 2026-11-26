@@ -222,6 +222,83 @@ export class BrowserManager {
     return response as unknown as Response;
   }
 
+
+  async translatePage(
+    tabId: string,
+    translate: (texts: string[], sourceLanguage: string) => Promise<string[]>
+  ): Promise<{ translatedNodes: number; sourceLanguage: string; targetLanguage: "ru" }> {
+    const tab = this.requireTab(tabId);
+    if (!tab) throw new Error("The browser tab is no longer available");
+    const contents = this.getLiveContents(tab);
+    if (!contents) throw new Error("The browser tab is no longer available");
+
+    const snapshot = await contents.executeJavaScriptInIsolatedWorld(999, [{
+      code: \`(() => {
+        const key = "__aihubBergamotTranslationState__";
+        const previous = window[key];
+        if (previous?.entries) for (const entry of previous.entries) {
+          if (entry.node?.isConnected && entry.node.nodeValue === entry.translated) entry.node.nodeValue = entry.original;
+        }
+        const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
+        const entries = [];
+        let node;
+        while ((node = walker.nextNode()) && entries.length < 300) {
+          const parent = node.parentElement;
+          if (!parent) continue;
+          if (parent.closest("script,style,noscript,textarea,input,select,option,code,pre,kbd,samp,svg,math,canvas,button,[role=button],nav,header,footer,[contenteditable=true],[contenteditable=plaintext-only],[aria-hidden=true],[translate=no]")) continue;
+          const style = getComputedStyle(parent);
+          if (style.display === "none" || style.visibility === "hidden") continue;
+          const original = node.nodeValue || "";
+          const trimmed = original.trim();
+          if (trimmed.length < 3 || trimmed.length > 1200 || !/[\\\\p{L}]{2}/u.test(trimmed)) continue;
+          entries.push({ node, original, translated: null });
+        }
+        window[key] = { entries };
+        const language = (document.documentElement.lang || document.body?.getAttribute("lang") || "en").trim().toLowerCase().split("-")[0];
+        return { sourceLanguage: language || "en", texts: entries.map(entry => entry.original) };
+      })()\`
+    }]) as { sourceLanguage: string; texts: string[] };
+
+    if (!snapshot.texts.length) return { translatedNodes: 0, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
+    const translated = await translate(snapshot.texts, snapshot.sourceLanguage);
+    if (translated.length !== snapshot.texts.length) throw new Error("Bergamot returned an unexpected translation count");
+    const encoded = JSON.stringify(translated);
+    const applied = await contents.executeJavaScriptInIsolatedWorld(999, [{
+      code: \`(() => {
+        const state = window["__aihubBergamotTranslationState__"];
+        if (!state?.entries) return 0;
+        const values = \${encoded};
+        let count = 0;
+        state.entries.forEach((entry, index) => {
+          const value = values[index];
+          if (entry.node?.isConnected && entry.node.nodeValue === entry.original && typeof value === "string" && value.trim()) {
+            entry.node.nodeValue = value;
+            entry.translated = value;
+            count++;
+          }
+        });
+        return count;
+      })()\`
+    }]) as number;
+    return { translatedNodes: applied, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
+  }
+
+  async restoreOriginalPage(tabId: string): Promise<void> {
+    const tab = this.requireTab(tabId);
+    const contents = tab ? this.getLiveContents(tab) : null;
+    if (!contents) throw new Error("The browser tab is no longer available");
+    await contents.executeJavaScriptInIsolatedWorld(999, [{
+      code: \`(() => {
+        const state = window["__aihubBergamotTranslationState__"];
+        if (!state?.entries) return;
+        for (const entry of state.entries) {
+          if (entry.node?.isConnected && entry.node.nodeValue === entry.translated) entry.node.nodeValue = entry.original;
+        }
+        delete window["__aihubBergamotTranslationState__"];
+      })()\`
+    }]);
+  }
+
   getProxyServer(): string | null {
     return this.proxyServer;
   }
