@@ -1,4 +1,6 @@
-import { net, session } from "electron";
+import { session } from "electron";
+import { dirname } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { CatalogModelInfo, CatalogState, Provider, WebsiteProvider } from "../catalog/catalogModel";
 import { CatalogStore } from "../catalog/catalogStore";
 
@@ -172,8 +174,7 @@ export function parseFreeApiJson(raw: string, verifiedAt = new Date().toISOStrin
 }
 
 async function fetchText(url: string): Promise<string> {
-  const response = await net.fetch(url, {
-    session: session.defaultSession,
+  const response = await session.defaultSession.fetch(url, {
     headers: { "user-agent": "AIHub-Studio-Catalog-Updater/1.0", accept: "text/plain, application/json" }
   });
   if (!response.ok) throw new Error("HTTP " + response.status + " while fetching " + url);
@@ -246,7 +247,20 @@ function mergeRemoteEntries(current: CatalogState, remote: RemoteProvider[]): { 
 }
 
 export class CatalogUpdater {
-  constructor(private readonly store: CatalogStore) {}
+  constructor(private readonly store: CatalogStore, private readonly statePath?: string) {}
+
+  async syncIfDue(intervalMs = 24 * 60 * 60 * 1000): Promise<CatalogSyncReport | null> {
+    if (this.statePath) {
+      try {
+        const state = JSON.parse(await readFile(this.statePath, "utf8")) as { lastSuccessfulSync?: string };
+        const last = Date.parse(state.lastSuccessfulSync ?? "");
+        if (Number.isFinite(last) && Date.now() - last < intervalMs) return null;
+      } catch {
+        // Missing or malformed sync metadata only causes a fresh sync; catalog data is untouched.
+      }
+    }
+    return this.sync();
+  }
 
   async sync(): Promise<CatalogSyncReport> {
     const startedAt = new Date().toISOString();
@@ -283,9 +297,15 @@ export class CatalogUpdater {
       return merged.state;
     });
 
+    const completedAt = new Date().toISOString();
+    if (this.statePath) {
+      await mkdir(dirname(this.statePath), { recursive: true, mode: 0o700 });
+      await writeFile(this.statePath, JSON.stringify({ lastSuccessfulSync: completedAt }, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
+    }
+
     return {
       startedAt,
-      completedAt: new Date().toISOString(),
+      completedAt,
       ...result,
       sourceErrors,
       sources,
