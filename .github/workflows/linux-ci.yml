@@ -61,6 +61,29 @@ jobs:
       - name: Chromium WebContentsView smoke test
         run: xvfb-run -a npm run smoke
 
+      - name: Verify packaged main-process dependency loading
+        run: |
+          set -euo pipefail
+          if grep -Eq "require\\(['\\\"]@molecule/api-ai-translation(-bergamot)?['\\\"]\\)" out/main/index.js; then
+            echo "Bergamot was left as a runtime require in the Electron main bundle" >&2
+            exit 1
+          fi
+          set +e
+          xvfb-run -a timeout 15s ./node_modules/.bin/electron out/main/index.js > /tmp/aihub-main-smoke.log 2>&1
+          status=$?
+          set -e
+          if [[ "$status" -ne 124 ]]; then
+            cat /tmp/aihub-main-smoke.log
+            echo "Electron main process exited before the startup smoke timeout (status $status)" >&2
+            exit 1
+          fi
+          if ! grep -q "Application startup" /tmp/aihub-main-smoke.log; then
+            cat /tmp/aihub-main-smoke.log
+            echo "Electron main process did not report successful startup" >&2
+            exit 1
+          fi
+
+
       - name: Build unpacked Electron application
         run: npm run package:dir
 
