@@ -5,6 +5,6 @@ export interface TranslationReport {
 }
 
 export interface TranslationApi {
-  translatePage(tabId: string): Promise<TranslationReport>;
+  translatePage(tabId: string, sourceLanguage?: string): Promise<TranslationReport>;
   restoreOriginalPage(tabId: string): Promise<void>;
 }
