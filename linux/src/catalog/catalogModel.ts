@@ -169,7 +169,7 @@ const DEFAULT_PROVIDER_INFO: Record<string, { description: string; limits: strin
 export function createDefaultCatalog(): CatalogState {
   return {
     version: 1,
-    catalogSeedVersion: 3,
+    catalogSeedVersion: 4,
     categories: DEFAULT_CATEGORIES.map((item) => ({ ...item })),
     providers: DEFAULT_WEBSITES.map((item) => ({
       ...item,
