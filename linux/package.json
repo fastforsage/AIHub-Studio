@@ -1,6 +1,6 @@
 {
   "name": "aihub-studio-linux",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "description": "AIHub Studio Linux desktop application",
   "main": "out/main/index.js",
