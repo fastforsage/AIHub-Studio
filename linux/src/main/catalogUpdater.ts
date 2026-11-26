@@ -221,9 +221,15 @@ function mergeRemoteEntries(current: CatalogState, remote: RemoteProvider[]): { 
     const uniqueId = state.providers.some((provider) => provider.id === entry.id)
       ? entry.id + "-" + slug(hostnameKey(entry.url))
       : entry.id;
+    const duplicateName = state.providers.some((provider) => provider.name.trim().toLocaleLowerCase() === entry.name.trim().toLocaleLowerCase());
+    let uniqueName = duplicateName ? entry.name + " (" + new URL(entry.url).hostname + ")" : entry.name;
+    let nameSuffix = 2;
+    while (state.providers.some((provider) => provider.name.trim().toLocaleLowerCase() === uniqueName.trim().toLocaleLowerCase())) {
+      uniqueName = entry.name + " (" + new URL(entry.url).hostname + " " + nameSuffix++ + ")";
+    }
     const provider: WebsiteProvider = {
       id: uniqueId,
-      name: entry.name,
+      name: uniqueName,
       type: "website",
       url: entry.url,
       profileId: uniqueId,
