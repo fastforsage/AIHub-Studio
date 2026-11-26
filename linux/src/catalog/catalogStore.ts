@@ -372,11 +372,13 @@ function restoreMissingBuiltinCategories(value: unknown, defaults: CatalogState)
     providers = document.providers.map((rawProvider) => {
       if (typeof rawProvider !== "object" || rawProvider === null || Array.isArray(rawProvider)) return rawProvider;
       const provider = rawProvider as Record<string, unknown>;
-      if (!Array.isArray(provider.categoryIds)) return rawProvider;
-      const categoryIds = [...new Set(provider.categoryIds.map((id) =>
+      const originalCategoryIds = provider.categoryIds;
+      if (!Array.isArray(originalCategoryIds)) return rawProvider;
+      const categoryIds = [...new Set(originalCategoryIds.map((id) =>
         typeof id === "string" ? aliases.get(id) ?? id : id
       ))];
-      if (categoryIds.some((id, index) => id !== provider.categoryIds?.[index])) changed = true;
+      if (categoryIds.length !== originalCategoryIds.length ||
+          categoryIds.some((id, index) => id !== originalCategoryIds[index])) changed = true;
       return { ...provider, categoryIds };
     });
   }
