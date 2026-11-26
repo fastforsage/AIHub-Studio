@@ -58,7 +58,7 @@ const diagnostics: DiagnosticsApi = {
 };
 
 const translation: TranslationApi = {
-  translatePage: (tabId) => ipcRenderer.invoke("translation:translate-page", { tabId }),
+  translatePage: (tabId, sourceLanguage) => ipcRenderer.invoke("translation:translate-page", { tabId, sourceLanguage }),
   restoreOriginalPage: (tabId) => ipcRenderer.invoke("translation:restore-page", { tabId })
 };
 
@@ -68,7 +68,7 @@ const availability: ServiceAvailabilityApi = {
 
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
-  version: "0.1.9",
+  version: "0.1.11",
   catalog: Object.freeze(catalog),
   browser: Object.freeze(browser),
   localAi: Object.freeze(localAi),
