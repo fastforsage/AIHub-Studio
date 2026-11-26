@@ -948,7 +948,6 @@ function App() {
                     <label className="translation-auto-toggle">
                       <input type="checkbox" checked={translationAuto} onChange={(event) => {
                         setTranslationAuto(event.target.checked);
-                        if (event.target.checked && !translationReport) void translateActivePage();
                       }} />
                       <span><strong>Автоматически переводить страницы</strong><small>Переводить после загрузки новых страниц</small></span>
                     </label>
