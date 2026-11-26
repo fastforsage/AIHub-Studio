@@ -579,6 +579,11 @@ function App() {
   }
 
   useEffect(() => {
+    setTranslationReport(null);
+    setTranslationNotice("Перевод выполняется локально на этом устройстве.");
+  }, [activeBrowserTab?.id, activeBrowserTab?.url]);
+
+  useEffect(() => {
     if (!translationAuto || workspaceMode !== "browser" || !activeBrowserTab || activeBrowserTab.loading) return;
     if (translationReport) return;
     void translateActivePage();
