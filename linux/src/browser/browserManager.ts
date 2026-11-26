@@ -233,7 +233,7 @@ export class BrowserManager {
     if (!contents) throw new Error("The browser tab is no longer available");
 
     const snapshot = await contents.executeJavaScriptInIsolatedWorld(999, [{
-      code: \`(() => {
+      code: `(() => {
         const key = "__aihubBergamotTranslationState__";
         const previous = window[key];
         if (previous?.entries) for (const entry of previous.entries) {
@@ -250,13 +250,13 @@ export class BrowserManager {
           if (style.display === "none" || style.visibility === "hidden") continue;
           const original = node.nodeValue || "";
           const trimmed = original.trim();
-          if (trimmed.length < 3 || trimmed.length > 1200 || !/[\\\\p{L}]{2}/u.test(trimmed)) continue;
+          if (trimmed.length < 3 || trimmed.length > 1200 || !/[\\p{L}]{2}/u.test(trimmed)) continue;
           entries.push({ node, original, translated: null });
         }
         window[key] = { entries };
         const language = (document.documentElement.lang || document.body?.getAttribute("lang") || "en").trim().toLowerCase().split("-")[0];
         return { sourceLanguage: language || "en", texts: entries.map(entry => entry.original) };
-      })()\`
+      })()`
     }]) as { sourceLanguage: string; texts: string[] };
 
     if (!snapshot.texts.length) return { translatedNodes: 0, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
@@ -264,7 +264,7 @@ export class BrowserManager {
     if (translated.length !== snapshot.texts.length) throw new Error("Bergamot returned an unexpected translation count");
     const encoded = JSON.stringify(translated);
     const applied = await contents.executeJavaScriptInIsolatedWorld(999, [{
-      code: \`(() => {
+      code: `(() => {
         const state = window["__aihubBergamotTranslationState__"];
         if (!state?.entries) return 0;
         const values = \${encoded};
@@ -278,7 +278,7 @@ export class BrowserManager {
           }
         });
         return count;
-      })()\`
+      })()`
     }]) as number;
     return { translatedNodes: applied, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
   }
@@ -288,14 +288,14 @@ export class BrowserManager {
     const contents = tab ? this.getLiveContents(tab) : null;
     if (!contents) throw new Error("The browser tab is no longer available");
     await contents.executeJavaScriptInIsolatedWorld(999, [{
-      code: \`(() => {
+      code: `(() => {
         const state = window["__aihubBergamotTranslationState__"];
         if (!state?.entries) return;
         for (const entry of state.entries) {
           if (entry.node?.isConnected && entry.node.nodeValue === entry.translated) entry.node.nodeValue = entry.original;
         }
         delete window["__aihubBergamotTranslationState__"];
-      })()\`
+      })()`
     }]);
   }
 
