@@ -13,7 +13,7 @@ const INCREMENTAL_PROVIDER_IDS = new Set([
   "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
   "cerebras-inference", "sambanova-cloud", "modelscope",
   "huggingface-inference", "opencode-zen", "kilo-ai-gateway",
-  "alice-ai", "gigachat", "deepseek", "kimi", "qwen", "bothub", "gptunnel", "shedevrum", "rudalle", "sourcecraft", "zai-chat",
+  "alice-ai", "gigachat", "deepseek", "kimi", "qwen", "mistral", "bothub", "gptunnel", "shedevrum", "rudalle", "sourcecraft", "zai-chat",
   "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut",
   "zhipu-api", "siliconflow-api"
 ]);
