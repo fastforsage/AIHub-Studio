@@ -198,7 +198,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const upgraded = await store.initialize();
-    expect(upgraded.providers).toHaveLength(56);
+    expect(upgraded.providers).toHaveLength(57);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
     expect(upgraded.providers.find((provider) => provider.id === "alice-ai")).toMatchObject({
       enabled: true
@@ -224,7 +224,7 @@ describe("CatalogStore", () => {
     const afterUserDeletion = await reloaded.initialize();
     expect(afterUserDeletion.catalogSeedVersion).toBe(3);
     expect(afterUserDeletion.providers.some((provider) => provider.id === "alice-ai")).toBe(false);
-    expect(afterUserDeletion.providers).toHaveLength(55);
+    expect(afterUserDeletion.providers).toHaveLength(56);
   });
 
   it("writes config with owner-only permissions", async () => {
