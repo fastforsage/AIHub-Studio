@@ -89,7 +89,7 @@ export function parseNoCostAiMarkdown(markdown: string, verifiedAt = new Date().
       continue;
     }
     if (!inRelevantList || !rawLine.includes("|")) continue;
-    const cells = rawLine.trim().replace(/^\\|/, "").replace(/\\|$/, "").split("|").map(markdownCell);
+    const cells = rawLine.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(markdownCell);
     if (cells.length < 2 || /^[-: ]+$/.test(cells[0]) || /^link$/i.test(cells[0])) continue;
     const link = cells[0].match(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/i);
     if (!link || /removed:/i.test(rawLine)) continue;
