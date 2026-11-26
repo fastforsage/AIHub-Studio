@@ -30,6 +30,53 @@ describe("GitHub catalog source parsers", () => {
     expect(entries[1].categoryIds).toContain("image-generator");
   });
 
+
+  it("parses plain domains from the current upstream README tables", () => {
+    const markdown = `## No Signup Required
+### Chat Interfaces
+Link | Free Models | Limits
+--- | --- | ---
+lmarena.ai | 40+ | \`Unlimited\`
+g4f.dev | 200+ local models | \`Unlimited\`
+### Media Generation
+Link | Free Models | Limits
+--- | --- | ---
+runwayml.com | Gen-4 | Free tier; usage varies
+### Voice & Music
+Link | Free Models | Limits
+--- | --- | ---
+ttsmp3.com | Google/Microsoft TTS | Short clips, daily cap
+## Signup Required
+### Chat Interfaces
+Link | Free Models | Limits
+--- | --- | ---
+meta.ai | Llama 4 | Unlimited/Unknown
+`;
+    const entries = parseNoCostAiMarkdown(markdown, "2026-11-26T00:00:00.000Z");
+    expect(entries.map((entry) => new URL(entry.url).hostname)).toEqual([
+      "lmarena.ai", "g4f.dev", "runwayml.com", "ttsmp3.com", "meta.ai"
+    ]);
+    expect(entries[0].limits).toBe("Unlimited");
+    expect(entries[2].categoryIds).toContain("video-generator");
+    expect(entries[3].categoryIds).toContain("voice-generator");
+  });
+
+  it("merges duplicate domains across upstream sections instead of duplicating services", () => {
+    const markdown = `### Chat Interfaces
+Link | Free Models | Limits
+--- | --- | ---
+pollinations.ai | Chat | Unlimited
+### Media Generation
+Link | Free Models | Limits
+--- | --- | ---
+pollinations.ai | Image generation | Unlimited
+`;
+    const entries = parseNoCostAiMarkdown(markdown);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].categoryIds).toContain("chatbot");
+    expect(entries[0].categoryIds).toContain("image-generator");
+  });
+
   it("parses API providers and per-model limits from mnfst data.json", () => {
     const raw = JSON.stringify({
       lastUpdated: "2026-11-15",
