@@ -13,12 +13,18 @@ export class TranslationManager {
   async translate(texts: string[], sourceLanguage: string): Promise<string[]> {
     if (texts.length === 0) return [];
     const provider = await this.getProvider();
-    const result = await provider.translate({
-      text: texts,
-      sourceLang: sourceLanguage || "en",
-      targetLang: "ru"
-    });
-    return result.translations;
+    const translated: string[] = [];
+    // The provider contract caps each batch at 50 strings.
+    for (let offset = 0; offset < texts.length; offset += 50) {
+      const batch = texts.slice(offset, offset + 50);
+      const result = await provider.translate({
+        text: batch,
+        sourceLang: sourceLanguage || "en",
+        targetLang: "ru"
+      });
+      translated.push(...result.translations.map((item) => item.text));
+    }
+    return translated;
   }
 
   private async getProvider(): Promise<ReturnType<typeof createProvider>> {
