@@ -3,6 +3,16 @@ import { normalizeWebsiteUrl } from "../shared/webUrl";
 
 export type ProviderKind = "website" | "local-api";
 
+export interface CatalogModelInfo {
+  id: string;
+  name: string;
+  description?: string;
+  context?: string;
+  maxOutput?: string;
+  modality?: string;
+  limits?: string;
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -14,6 +24,14 @@ interface ProviderBase {
   categoryIds: string[];
   favorite: boolean;
   enabled: boolean;
+  description?: string;
+  limits?: string;
+  regionTag?: string;
+  apiBaseUrl?: string;
+  modelDetails?: CatalogModelInfo[];
+  catalogSource?: "builtin-ru-cn" | "github-no-cost-ai" | "github-free-apis";
+  sourceUrl?: string;
+  lastVerified?: string;
 }
 
 export interface WebsiteProvider extends ProviderBase {
@@ -64,6 +82,7 @@ export const DEFAULT_CATEGORIES: ReadonlyArray<Category> = [
   { id: "image-generator", name: "image generator" },
   { id: "many-in-one", name: "many in one" },
   { id: "api-providers", name: "API providers and aggregators" },
+  { id: "ru-cn-direct", name: "RU & CN Direct (Без VPN)" },
   { id: "local-ai", name: "Local AI" }
 ];
 
@@ -102,12 +121,28 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
   { id: "huggingface-inference", name: "Hugging Face Inference Providers", url: "https://huggingface.co/docs/inference-providers", categoryIds: ["api-providers"] },
   { id: "opencode-zen", name: "OpenCode Zen", url: "https://opencode.ai/en/zen", categoryIds: ["api-providers"] },
   { id: "kilo-ai-gateway", name: "Kilo AI Gateway", url: "https://kilo.ai/gateway", categoryIds: ["api-providers"] }
+  ,{ id: "bothub", name: "BotHub", url: "https://bothub.chat/", categoryIds: ["chatbot", "ru-cn-direct"] }
+  ,{ id: "gptunnel", name: "GPTunnel", url: "https://gptunnel.ru/", categoryIds: ["chatbot", "ru-cn-direct"] }
+  ,{ id: "shedevrum", name: "Шедеврум", url: "https://shedevrum.ai/", categoryIds: ["image-generator", "ru-cn-direct"] }
+  ,{ id: "rudalle", name: "Kandinsky / ruDALL-E", url: "https://rudalle.ru/", categoryIds: ["image-generator", "ru-cn-direct"] }
+  ,{ id: "sourcecraft", name: "SourceCraft", url: "https://sourcecraft.dev/", categoryIds: ["many-in-one", "ru-cn-direct"] }
+  ,{ id: "zai-chat", name: "Z.ai / GLM", url: "https://chat.z.ai/", categoryIds: ["chatbot", "ru-cn-direct"] }
+  ,{ id: "doubao", name: "Doubao", url: "https://www.doubao.com/", categoryIds: ["chatbot", "ru-cn-direct"] }
+  ,{ id: "tencent-yuanbao", name: "Tencent Yuanbao", url: "https://yuanbao.tencent.com/", categoryIds: ["chatbot", "ru-cn-direct"] }
+  ,{ id: "kling", name: "Kling AI", url: "https://klingai.com/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "hailuo", name: "Hailuo AI", url: "https://hailuoai.video/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "pixverse", name: "PixVerse", url: "https://pixverse.ai/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "vidu", name: "Vidu", url: "https://www.vidu.com/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "capcut", name: "CapCut", url: "https://www.capcut.com/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "zhipu-api", name: "Zhipu GLM API", url: "https://open.bigmodel.cn/", categoryIds: ["api-providers", "ru-cn-direct"] }
+  ,{ id: "siliconflow-api", name: "SiliconFlow API", url: "https://siliconflow.cn/", categoryIds: ["api-providers", "ru-cn-direct"] }
+  ,{ id: "modelscope-api", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers", "ru-cn-direct"] }
 ];
 
 export function createDefaultCatalog(): CatalogState {
   return {
     version: 1,
-    catalogSeedVersion: 2,
+    catalogSeedVersion: 3,
     categories: DEFAULT_CATEGORIES.map((item) => ({ ...item })),
     providers: DEFAULT_WEBSITES.map((item) => ({
       ...item,
@@ -115,7 +150,8 @@ export function createDefaultCatalog(): CatalogState {
       categoryIds: [...item.categoryIds],
       favorite: false,
       enabled: POPULAR_PROVIDER_IDS.includes(item.id),
-      profileId: item.id
+      profileId: item.id,
+      ...(item.categoryIds.includes("ru-cn-direct") ? { catalogSource: "builtin-ru-cn" as const } : {})
     }))
   };
 }
