@@ -130,12 +130,14 @@ async function bootstrap(): Promise<void> {
     (state) => {
       const target = mainWindow;
       if (target && !target.isDestroyed()) target.webContents.send("browser:changed", state);
-    }
+    },
+    (level, message, metadata) => diagnosticsManager?.log(level, "translation", message, metadata)
   );
 
   await browserManager.setProxyServer(initialBrowserSettings.proxyServer ?? "");
 
-  const catalogUpdater = new CatalogUpdater(catalogStore, join(paths.config, "catalog-sync-state.json"));
+  const applicationFetch = (input: string | URL, init?: RequestInit) => browserManager!.fetchForAvailability(input, init);
+  const catalogUpdater = new CatalogUpdater(catalogStore, join(paths.config, "catalog-sync-state.json"), applicationFetch);
   registerCatalogIpc(catalogStore, catalogUpdater, isTrustedRenderer);
   void catalogUpdater.syncIfDue().then((report) => {
     if (report) diagnosticsManager?.log("info", "catalog", "Automatic catalog synchronization completed", report);
@@ -146,7 +148,11 @@ async function bootstrap(): Promise<void> {
   registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
   registerDiagnosticsIpc(diagnosticsManager, isTrustedRenderer);
   registerServiceAvailabilityIpc(new ServiceAvailabilityManager(() => catalogStore.get().providers, (input, init) => browserManager!.fetchForAvailability(input, init)), isTrustedRenderer);
-  const translationManager = new TranslationManager(join(paths.data, "translation", "bergamot"));
+  const translationManager = new TranslationManager(
+    join(paths.data, "translation", "bergamot"),
+    applicationFetch,
+    (level, message, metadata) => diagnosticsManager?.log(level, "translation", message, metadata)
+  );
   registerTranslationIpc(browserManager, translationManager, isTrustedRenderer);
   createMainWindow();
 }
