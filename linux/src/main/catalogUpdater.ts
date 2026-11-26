@@ -199,6 +199,7 @@ function mergeRemoteEntries(current: CatalogState, remote: RemoteProvider[]): { 
       if (existing.type !== "website") { skipped++; continue; }
       const merged: WebsiteProvider = {
         ...existing,
+        categoryIds: [...new Set([...existing.categoryIds, ...categoryIds])],
         description: entry.description ?? existing.description,
         limits: entry.limits ?? existing.limits,
         apiBaseUrl: entry.apiBaseUrl ?? existing.apiBaseUrl,
@@ -299,8 +300,12 @@ export class CatalogUpdater {
 
     const completedAt = new Date().toISOString();
     if (this.statePath) {
-      await mkdir(dirname(this.statePath), { recursive: true, mode: 0o700 });
-      await writeFile(this.statePath, JSON.stringify({ lastSuccessfulSync: completedAt }, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
+      try {
+        await mkdir(dirname(this.statePath), { recursive: true, mode: 0o700 });
+        await writeFile(this.statePath, JSON.stringify({ lastSuccessfulSync: completedAt }, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
+      } catch {
+        // Catalog persistence succeeded; a sync timestamp failure must not report the update as failed.
+      }
     }
 
     return {
