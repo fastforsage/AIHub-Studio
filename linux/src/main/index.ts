@@ -129,7 +129,8 @@ async function bootstrap(): Promise<void> {
     (state) => {
       const target = mainWindow;
       if (target && !target.isDestroyed()) target.webContents.send("browser:changed", state);
-    }
+    },
+    (level, message, metadata) => diagnosticsManager?.log(level, "translation", message, metadata)
   );
 
   await browserManager.setProxyServer(initialBrowserSettings.proxyServer ?? "");
@@ -139,7 +140,10 @@ async function bootstrap(): Promise<void> {
   registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
   registerDiagnosticsIpc(diagnosticsManager, isTrustedRenderer);
   registerServiceAvailabilityIpc(new ServiceAvailabilityManager(() => catalogStore.get().providers, (input, init) => browserManager!.fetchForAvailability(input, init)), isTrustedRenderer);
-  const translationManager = new TranslationManager(join(paths.data, "translation", "bergamot"));
+  const translationManager = new TranslationManager(
+    join(paths.data, "translation", "bergamot"),
+    (level, message, metadata) => diagnosticsManager?.log(level, "translation", message, metadata)
+  );
   registerTranslationIpc(browserManager, translationManager, isTrustedRenderer);
   createMainWindow();
 }
