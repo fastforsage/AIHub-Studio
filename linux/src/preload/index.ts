@@ -4,6 +4,7 @@ import type { CatalogApi } from "../shared/catalogApi";
 import type { LocalAiApi } from "../shared/localAiApi";
 import type { DiagnosticsApi } from "../shared/diagnosticsApi";
 import type { ServiceAvailabilityApi } from "../shared/availabilityApi";
+import type { TranslationApi } from "../shared/translationApi";
 
 const catalog: CatalogApi = {
   get: () => ipcRenderer.invoke("catalog:get"),
@@ -55,6 +56,11 @@ const diagnostics: DiagnosticsApi = {
   openLogDirectory: () => ipcRenderer.invoke("diagnostics:folder:open")
 };
 
+const translation: TranslationApi = {
+  translatePage: (tabId) => ipcRenderer.invoke("translation:translate-page", { tabId }),
+  restoreOriginalPage: (tabId) => ipcRenderer.invoke("translation:restore-page", { tabId })
+};
+
 const availability: ServiceAvailabilityApi = {
   checkCatalog: () => ipcRenderer.invoke("availability:check-catalog")
 };
@@ -66,5 +72,6 @@ contextBridge.exposeInMainWorld("aihub", Object.freeze({
   browser: Object.freeze(browser),
   localAi: Object.freeze(localAi),
   diagnostics: Object.freeze(diagnostics),
-  availability: Object.freeze(availability)
+  availability: Object.freeze(availability),
+  translation: Object.freeze(translation)
 }));
