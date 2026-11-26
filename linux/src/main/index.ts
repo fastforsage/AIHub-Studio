@@ -8,6 +8,7 @@ import { CatalogStore } from "../catalog/catalogStore";
 import { resolveAppPaths } from "../shared/appPaths";
 import { registerBrowserIpc } from "./browserIpc";
 import { registerCatalogIpc } from "./catalogIpc";
+import { CatalogUpdater } from "./catalogUpdater";
 import { registerLocalAiIpc } from "./localAiIpc";
 import { removeNativeApplicationMenu } from "./nativeMenu";
 import { DiagnosticsManager } from "./diagnosticsManager";
@@ -134,7 +135,8 @@ async function bootstrap(): Promise<void> {
 
   await browserManager.setProxyServer(initialBrowserSettings.proxyServer ?? "");
 
-  registerCatalogIpc(catalogStore, isTrustedRenderer);
+  const catalogUpdater = new CatalogUpdater(catalogStore);
+  registerCatalogIpc(catalogStore, catalogUpdater, isTrustedRenderer);
   registerBrowserIpc(browserManager, catalogStore, browserSettings, isTrustedRenderer);
   registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
   registerDiagnosticsIpc(diagnosticsManager, isTrustedRenderer);
