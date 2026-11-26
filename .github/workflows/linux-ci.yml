@@ -72,7 +72,7 @@ jobs:
             exit 1
           fi
           set +e
-          xvfb-run -a timeout 15s ./node_modules/.bin/electron out/main/index.js > /tmp/aihub-main-smoke.log 2>&1
+          xvfb-run -a timeout 15s ./node_modules/.bin/electron --no-sandbox out/main/index.js > /tmp/aihub-main-smoke.log 2>&1
           status=$?
           set -e
           if [[ "$status" -ne 124 ]]; then
