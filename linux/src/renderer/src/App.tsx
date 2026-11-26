@@ -15,6 +15,7 @@ import { getInitiallyExpandedCategories, toggleExpandedCategory } from "../../sh
 import type { DiagnosticsStatus, LogEntry, LogLevel, LoggingSettings } from "../../shared/diagnosticsApi";
 import type { AvailabilityStatus, ServiceAvailabilityReport } from "../../shared/availabilityApi";
 import type { TranslationReport } from "../../shared/translationApi";
+import type { CatalogSyncReport } from "../../shared/catalogApi";
 import { ProviderBrandIcon } from "./components/ProviderBrandIcon";
 
 type MenuTarget =
@@ -78,6 +79,8 @@ function App() {
   const [catalogSelection, setCatalogSelection] = useState<string[]>([]);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogSaving, setCatalogSaving] = useState(false);
+  const [catalogSyncBusy, setCatalogSyncBusy] = useState(false);
+  const [catalogSyncReport, setCatalogSyncReport] = useState<CatalogSyncReport | null>(null);
   const [activeCategory, setActiveCategory] = useState("all");
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<string[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
@@ -336,6 +339,24 @@ function App() {
   function closeSettings(): void {
     setSettingsOpen(false);
     if (workspaceMode === "settings") setWorkspaceMode(settingsReturnMode.current);
+  }
+
+  async function syncCatalogNow(): Promise<void> {
+    if (!catalogApi || catalogSyncBusy) return;
+    setCatalogSyncBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await catalogApi.sync();
+      setCatalog(result.catalog);
+      setCatalogSelection(result.catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
+      setCatalogSyncReport(result.report);
+      setNotice("Каталог обновлён: добавлено " + result.report.added + ", обновлено " + result.report.updated + ".");
+    } catch (reason) {
+      setError("Не удалось обновить каталог: " + errorMessage(reason));
+    } finally {
+      setCatalogSyncBusy(false);
+    }
   }
 
   async function checkCatalogAvailability(): Promise<void> {
@@ -1124,6 +1145,39 @@ function App() {
                 </div>
               </section>
 
+              <section className="settings-card catalog-sync-settings-card" aria-label="Catalog updates">
+                <div className="settings-card-heading">
+                  <div className="settings-card-icon">⟳</div>
+                  <div>
+                    <h2>Обновление каталога AI</h2>
+                    <p>Получать актуальные веб-сервисы и OpenAI-совместимые API из двух публичных GitHub-списков. Встроенный пакет RU & CN Direct не удаляется.</p>
+                  </div>
+                </div>
+                <div className="catalog-sync-toolbar">
+                  <div>
+                    <strong>{catalogSyncReport ? "Последняя синхронизация: " + new Date(catalogSyncReport.completedAt).toLocaleString() : "Источники GitHub подключены"}</strong>
+                    <small>Обновление выполняется через Chromium session и настроенный прокси.</small>
+                  </div>
+                  <button className="primary-button" type="button" disabled={catalogSyncBusy || !catalogApi}
+                    onClick={() => void syncCatalogNow()}>{catalogSyncBusy ? "Обновляем…" : "Обновить каталог"}</button>
+                </div>
+                <div className="catalog-sync-sources">
+                  <div><strong>zebbern/no-cost-ai</strong><small>Веб-чаты, генераторы, голосовые сервисы и инструменты</small></div>
+                  <div><strong>mnfst/awesome-free-llm-apis</strong><small>API-провайдеры, модели, контекст и опубликованные лимиты</small></div>
+                  <div><strong>RU & CN Direct</strong><small>{catalog.providers.filter((provider) => provider.catalogSource === "builtin-ru-cn").length} встроенных сервисов · сохраняются при синхронизации</small></div>
+                </div>
+                {catalogSyncReport && (
+                  <div className="catalog-sync-result" role="status">
+                    <span>Добавлено: {catalogSyncReport.added}</span>
+                    <span>Обновлено: {catalogSyncReport.updated}</span>
+                    <span>Без изменений: {catalogSyncReport.unchanged}</span>
+                    <span>Пропущено: {catalogSyncReport.skipped}</span>
+                    {catalogSyncReport.sourceErrors.map((message) => <small className="catalog-sync-warning" key={message}>{message}</small>)}
+                  </div>
+                )}
+                <div className="settings-help">Автосинхронизация выполняется при запуске приложения не чаще одного раза в сутки. Существующие избранные, включённые и пользовательские записи не заменяются.</div>
+              </section>
+
               <section className="settings-card catalog-settings-card">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">▦</div>
@@ -1163,7 +1217,8 @@ function App() {
                         </div>
                         <div className="catalog-provider-options">
                           {categoryProviders.map((provider) => (
-                            <label className="catalog-provider-option" key={provider.id}>
+                            <div className="catalog-provider-entry" key={provider.id}>
+                            <label className="catalog-provider-option">
                               <input type="checkbox" checked={catalogSelection.includes(provider.id)}
                                 onChange={() => toggleCatalogProvider(provider.id)} />
                               {provider.type === "website"
@@ -1172,6 +1227,28 @@ function App() {
                               <span>{provider.name}</span>
                               <small>{provider.type === "website" ? "Website" : "Local API"}</small>
                             </label>
+                            {(provider.description || provider.limits || provider.apiBaseUrl || (provider.type === "website" && provider.modelDetails?.length)) && (
+                              <details className="catalog-provider-info">
+                                <summary>Описание и лимиты</summary>
+                                {provider.description && <p>{provider.description}</p>}
+                                {provider.limits && <p><strong>Лимиты:</strong> {provider.limits}</p>}
+                                {provider.apiBaseUrl && <p><strong>API endpoint:</strong> <code>{provider.apiBaseUrl}</code></p>}
+                                {provider.type === "website" && provider.modelDetails && provider.modelDetails.length > 0 && (
+                                  <div className="catalog-model-details">
+                                    {provider.modelDetails.map((model) => (
+                                      <div className="catalog-model-detail" key={model.id}>
+                                        <strong>{model.name}</strong>
+                                        <small>{[model.context ? "Контекст " + model.context : "", model.maxOutput ? "Вывод " + model.maxOutput : "", model.modality ?? ""].filter(Boolean).join(" · ")}</small>
+                                        {model.description && <small>{model.description}</small>}
+                                        {model.limits && <small>Лимиты: {model.limits}</small>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {provider.lastVerified && <small>Источник обновлён: {new Date(provider.lastVerified).toLocaleDateString()}</small>}
+                              </details>
+                            )}
+                          </div>
                           ))}
                         </div>
                       </details>
