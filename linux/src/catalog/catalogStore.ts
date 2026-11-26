@@ -248,19 +248,21 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
   const normalizeName = (value: string): string => value.trim().toLocaleLowerCase();
 
   for (const seeded of defaults.providers) {
-    if (!INCREMENTAL_PROVIDER_IDS.has(seeded.id)) continue;
     const existingById = next.providers.find((provider) => provider.id === seeded.id);
     if (existingById) {
       if (existingById.type === "website" && seeded.type === "website") {
-        existingById.categoryIds = [...new Set([...existingById.categoryIds, ...seeded.categoryIds])];
-        existingById.catalogSource = seeded.catalogSource ?? existingById.catalogSource;
         existingById.description = seeded.description ?? existingById.description;
         existingById.limits = seeded.limits ?? existingById.limits;
         existingById.apiBaseUrl = seeded.apiBaseUrl ?? existingById.apiBaseUrl;
         existingById.regionTag = seeded.regionTag ?? existingById.regionTag;
+        if (INCREMENTAL_PROVIDER_IDS.has(seeded.id)) {
+          existingById.categoryIds = [...new Set([...existingById.categoryIds, ...seeded.categoryIds])];
+          existingById.catalogSource = seeded.catalogSource ?? existingById.catalogSource;
+        }
       }
       continue;
     }
+    if (!INCREMENTAL_PROVIDER_IDS.has(seeded.id)) continue;
     const targetCategoryIds = seeded.categoryIds
       .map((id) => id === "ru-cn-direct" ? directCategory!.id : id)
       .map((id) => id === "chatbot" ? chatbotCategory!.id : id === "api-providers" ? apiCategory!.id : id)
