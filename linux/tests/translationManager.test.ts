@@ -67,6 +67,10 @@ describe("TranslationManager", () => {
     const manager = new TranslationManager(directory, proxyFetch as typeof fetch, (level, message, metadata) => {
       events.push({ level, message, metadata });
     });
+    mocks.createProvider.mockImplementation(async (options: { fetch: typeof fetch }) => {
+      await options.fetch("https://cdn.example.test/model.bin");
+      return { translate: mocks.translate };
+    });
     mocks.translate.mockImplementation(async () => ({ translations: [] }));
     try {
       await expect(manager.translate(["hello"], "en")).rejects.toThrow("Bergamot download failed (406)");
