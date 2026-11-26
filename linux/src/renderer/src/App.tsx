@@ -1421,6 +1421,12 @@ function App() {
               </section>
               </>}
 
+              {settingsTab === "appearance" && <section className="settings-card appearance-settings-card" aria-label="Внешний вид">
+                <div className="settings-card-heading"><div className="settings-card-icon">◐</div><div><h2>Внешний вид</h2><p>Настройки оформления рабочего пространства.</p></div></div>
+                <div className="appearance-theme-option"><span className="appearance-theme-preview" aria-hidden="true">Aa</span><span><strong>Тёмная тема</strong><small>Текущая тема интерфейса AIHub Studio.</small></span><span className="availability-badge availability-available"><span className="availability-dot" />Активна</span></div>
+                <div className="settings-help">Дополнительные темы и настройка акцентного цвета появятся в следующих обновлениях.</div>
+              </section>}
+
               {settingsTab === "translation" && <section className="settings-card translation-settings-card" aria-label="Настройки перевода">
                 <div className="settings-card-heading"><div className="settings-card-icon">文</div><div><h2>Перевод страниц</h2><p>Локальный перевод страниц через Bergamot · WASM + SIMD.</p></div></div>
                 <div className="translation-settings-intro"><span className="translation-local-badge">● Локально</span><strong>Контент не отправляется в облако</strong><small>Модели загружаются на устройство и хранятся локально.</small></div>
