@@ -224,7 +224,8 @@ export class BrowserManager {
 
   async translatePage(
     tabId: string,
-    translate: (texts: string[], sourceLanguage: string) => Promise<string[]>
+    translate: (texts: string[], sourceLanguage: string) => Promise<string[]>,
+    sourceLanguageOverride?: string
   ): Promise<{ translatedNodes: number; sourceLanguage: string; targetLanguage: "ru" }> {
     const startedAt = Date.now();
     const tab = this.requireTab(tabId);
@@ -308,8 +309,10 @@ export class BrowserManager {
         return { translatedNodes: 0, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
       }
 
+      const effectiveSourceLanguage = sourceLanguageOverride ?? snapshot.sourceLanguage;
+      if (sourceLanguageOverride) this.log("info", "Manual source language selected", { tabId, sourceLanguage: sourceLanguageOverride });
       const translateStartedAt = Date.now();
-      const translated = await translate(snapshot.texts, snapshot.sourceLanguage);
+      const translated = await translate(snapshot.texts, effectiveSourceLanguage);
       if (translated.length !== snapshot.texts.length) throw new Error("Bergamot returned an unexpected translation count");
 
       const encoded = JSON.stringify(translated);
@@ -341,7 +344,7 @@ export class BrowserManager {
         durationMs: Date.now() - startedAt
       });
       if (applied === 0) this.log("warn", "Translation completed but no DOM nodes were updated; page may have re-rendered", { tabId });
-      return { translatedNodes: applied, sourceLanguage: snapshot.sourceLanguage, targetLanguage: "ru" };
+      return { translatedNodes: applied, sourceLanguage: effectiveSourceLanguage, targetLanguage: "ru" };
     } catch (error) {
       this.log("error", "Page translation failed", {
         tabId,
