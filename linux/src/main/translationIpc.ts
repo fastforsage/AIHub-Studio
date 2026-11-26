@@ -8,6 +8,16 @@ function assertTrusted(event: IpcMainInvokeEvent, isTrusted: TrustedSender): voi
   if (!isTrusted(event)) throw new Error("Untrusted renderer attempted to access translation IPC");
 }
 
+function getSourceLanguage(payload: unknown): string | undefined {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return undefined;
+  const value = (payload as Record<string, unknown>).sourceLanguage;
+  if (value === undefined || value === null || value === "" || value === "auto") return undefined;
+  if (typeof value !== "string" || !/^(en|zh|ja|ko|de|fr|es|ru)$/.test(value)) {
+    throw new Error("Unsupported source language");
+  }
+  return value;
+}
+
 function getTabId(payload: unknown): string {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
     throw new Error("Invalid translation request");
@@ -24,7 +34,7 @@ export function registerTranslationIpc(
 ): void {
   ipcMain.handle("translation:translate-page", async (event, payload: unknown) => {
     assertTrusted(event, isTrusted);
-    return browser.translatePage(getTabId(payload), (texts, language) => translation.translate(texts, language));
+    return browser.translatePage(getTabId(payload), (texts, language) => translation.translate(texts, language), getSourceLanguage(payload));
   });
 
   ipcMain.handle("translation:restore-page", async (event, payload: unknown) => {
