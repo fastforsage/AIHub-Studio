@@ -7,6 +7,7 @@ import type { ServiceAvailabilityApi } from "../shared/availabilityApi";
 import type { TranslationApi } from "../shared/translationApi";
 
 const catalog: CatalogApi = {
+  sync: async () => ipcRenderer.invoke("catalog:sync"),
   get: () => ipcRenderer.invoke("catalog:get"),
   addCategory: (name) => ipcRenderer.invoke("catalog:category:add", { name }),
   renameCategory: (id, name) => ipcRenderer.invoke("catalog:category:rename", { id, name }),
