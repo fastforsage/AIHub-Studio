@@ -138,6 +138,34 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
   ,{ id: "siliconflow-api", name: "SiliconFlow API", url: "https://siliconflow.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://api.siliconflow.cn/v1", description: "API-платформа с каталогом моделей разных разработчиков.", limits: "Бесплатный пул доступен не для всех моделей; квоты динамические.", regionTag: "CN" }
 ];
 
+const DEFAULT_PROVIDER_INFO: Record<string, { description: string; limits: string }> = {
+  "chatgpt": { description: "Универсальный AI-ассистент OpenAI: диалоги, анализ, работа с файлами и мультимодальные задачи.", limits: "Бесплатный тариф ограничен квотами и динамическими лимитами." },
+  "claude": { description: "AI-ассистент Anthropic для анализа, письма, программирования и длинных документов.", limits: "Бесплатное использование ограничено сообщениями и текущей нагрузкой." },
+  "gemini": { description: "Мультимодальный AI-ассистент Google с интеграцией сервисов и моделей Gemini.", limits: "Квоты зависят от тарифа, модели и региона." },
+  "grok": { description: "AI-ассистент xAI для диалогов, анализа и поиска актуальной информации.", limits: "Бесплатные запросы ограничены и могут меняться." },
+  "perplexity": { description: "AI-поиск с ответами на основе веб-источников и ссылками на материалы.", limits: "Бесплатный тариф ограничивает Pro-поиски и отдельные функции." },
+  "copilot": { description: "AI-помощник Microsoft для поиска, ответов и повседневных задач.", limits: "Доступность функций и квоты зависят от аккаунта и региона." },
+  "mistral": { description: "Веб-ассистент Le Chat и доступ к семейству моделей Mistral.", limits: "Бесплатные запросы и расширенные функции имеют динамические квоты." },
+  "openrouter": { description: "Единый интерфейс для общения с моделями разных поставщиков через OpenRouter.", limits: "Бесплатные модели имеют отдельные дневные и скоростные ограничения." },
+  "suno": { description: "Генерация музыки и песен по текстовому описанию.", limits: "Бесплатный тариф использует ограниченное количество кредитов." },
+  "elevenlabs": { description: "Синтез речи, клонирование голоса и инструменты аудио.", limits: "Бесплатный тариф ограничен месячной квотой символов и функций." },
+  "notebooklm": { description: "Исследовательский блокнот Google для анализа загруженных источников и документов.", limits: "Количество блокнотов, источников и запросов ограничено тарифом." },
+  "deepwiki": { description: "AI-объяснение структуры репозиториев и технической документации.", limits: "Публичная доступность и лимиты зависят от сервиса и источника." },
+  "deepl": { description: "Машинный перевод текстов и документов с поддержкой множества языков.", limits: "Бесплатный перевод ограничен объёмом текста и функциями." },
+  "gamma": { description: "Создание презентаций, документов и визуальных страниц с помощью AI.", limits: "Бесплатный тариф ограничен стартовыми AI-кредитами." },
+  "google-labs": { description: "Экспериментальные AI-инструменты и прототипы Google.", limits: "Лимиты и доступность отличаются для каждого эксперимента." },
+  "nvidia-nim": { description: "Каталог и API-инференс моделей NVIDIA NIM.", limits: "Квоты разработчика и бесплатные кредиты зависят от аккаунта." },
+  "groqcloud": { description: "Высокоскоростной inference API для языковых моделей Groq.", limits: "Бесплатный developer tier ограничен запросами в минуту и в день." },
+  "cloudflare-workers-ai": { description: "Запуск моделей через Cloudflare Workers AI API.", limits: "Доступность и бесплатная квота зависят от плана Cloudflare." },
+  "cohere": { description: "API языковых моделей Cohere, включая генерацию, embeddings и reranking.", limits: "Trial API имеет квоты и ограничения на коммерческое использование." },
+  "cerebras-inference": { description: "Inference API Cerebras для быстрых ответов языковых моделей.", limits: "Developer quota и rate limits могут изменяться." },
+  "sambanova-cloud": { description: "Облачный inference API SambaNova для открытых языковых моделей.", limits: "Бесплатный доступ и ограничения зависят от текущей программы." },
+  "modelscope": { description: "Каталог моделей ModelScope и API-Inference для выбранных моделей.", limits: "Нужна регистрация; доступные кредиты и квоты задаются платформой." },
+  "huggingface-inference": { description: "Единый каталог моделей и Inference Providers Hugging Face.", limits: "Использование ограничено доступными кредитами и тарифом провайдера." },
+  "opencode-zen": { description: "Подборка моделей и API-доступ для инструментов разработки OpenCode.", limits: "Доступность моделей и кредиты зависят от аккаунта." },
+  "kilo-ai-gateway": { description: "AI Gateway для доступа к моделям через инструменты Kilo.", limits: "Квоты и бесплатные кредиты зависят от текущих условий Kilo." }
+};
+
 export function createDefaultCatalog(): CatalogState {
   return {
     version: 1,
