@@ -11,6 +11,7 @@ import {
   updateProvider
 } from "../catalog/catalogModel";
 import { CatalogStore } from "../catalog/catalogStore";
+import { CatalogUpdater } from "./catalogUpdater";
 import type { AddLocalApiInput, AddWebsiteInput, ProviderUpdate } from "../catalog/catalogModel";
 
 type TrustedSender = (event: IpcMainInvokeEvent) => boolean;
@@ -43,8 +44,14 @@ function stringArrayField(value: Record<string, unknown>, key: string): string[]
   return result as string[];
 }
 
-export function registerCatalogIpc(store: CatalogStore, isTrusted: TrustedSender): void {
+export function registerCatalogIpc(store: CatalogStore, updater: CatalogUpdater, isTrusted: TrustedSender): void {
   const guard = (event: IpcMainInvokeEvent) => assertTrusted(event, isTrusted);
+
+  ipcMain.handle("catalog:sync", async (event) => {
+    guard(event);
+    const report = await updater.sync();
+    return { catalog: store.get(), report };
+  });
 
   ipcMain.handle("catalog:get", (event) => {
     guard(event);
