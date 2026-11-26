@@ -103,8 +103,12 @@ export class TranslationManager {
     const url = safeUrl(input);
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
-    headers.set("Accept", MODEL_ACCEPT);
-    if (!headers.has("User-Agent")) headers.set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 AIHubStudio");
+    // Mozilla's attachment CDN negotiates the binary representation itself.
+    // Requesting a narrowly constrained media type (or spoofing a partial UA)
+    // can trigger HTTP 406 on some proxy/CDN paths. Accept any representation
+    // and let Electron's session supply its normal User-Agent.
+    headers.set("Accept", "*/*");
+    headers.delete("User-Agent");
 
     const requestHeaders = Object.fromEntries(headers.entries());
     const startedAt = Date.now();
