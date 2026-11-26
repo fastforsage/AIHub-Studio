@@ -42,13 +42,38 @@ describe("TranslationManager", () => {
 
     try {
       await expect(manager.translate(["你好"], "zh")).resolves.toEqual(["ru:你好"]);
-      expect(mocks.createProvider).toHaveBeenCalledWith(expect.objectContaining({
-        fetch: proxyFetch,
-        workers: 1,
-        maxLoadedPairs: 2
-      }));
+      const providerOptions = mocks.createProvider.mock.calls[0][0];
+      expect(providerOptions).toEqual(expect.objectContaining({ workers: 1, maxLoadedPairs: 2 }));
+      expect(providerOptions.fetch).not.toBe(proxyFetch);
+      const downloaded = await providerOptions.fetch("https://example.test/model.bin", { headers: { "X-Test": "present" } });
+      expect(proxyFetch).toHaveBeenCalledWith("https://example.test/model.bin", expect.objectContaining({ headers: expect.any(Headers) }));
+      const sentHeaders = new Headers(proxyFetch.mock.calls[0][1]?.headers);
+      expect(sentHeaders.get("Accept")).toBe("application/octet-stream");
+      expect(sentHeaders.get("User-Agent")).toContain("AIHubStudio");
+      expect(sentHeaders.get("X-Test")).toBe("present");
+      expect(downloaded.ok).toBe(true);
       expect(mocks.translate).toHaveBeenCalledWith(expect.objectContaining({ sourceLang: "zh", targetLang: "ru" }));
       expect(events.some((event) => event.message === "Bergamot provider initialized")).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("logs HTTP error response details and rejects failed model downloads", async () => {
+    proxyFetch.mockImplementationOnce(async () => new Response("not acceptable from CDN", {
+      status: 406,
+      headers: { "content-type": "text/plain" }
+    }));
+    const manager = new TranslationManager(directory, proxyFetch as typeof fetch, (level, message, metadata) => {
+      events.push({ level, message, metadata });
+    });
+    mocks.translate.mockImplementation(async () => ({ translations: [] }));
+    try {
+      await expect(manager.translate(["hello"], "en")).rejects.toThrow("Bergamot download failed (406)");
+      const rejected = events.find((event) => event.message === "Bergamot resource download rejected");
+      expect(rejected).toBeDefined();
+      expect(JSON.stringify(rejected?.metadata)).toContain("not acceptable from CDN");
+      expect(JSON.stringify(rejected?.metadata)).toContain("406");
     } finally {
       await cleanup();
     }
