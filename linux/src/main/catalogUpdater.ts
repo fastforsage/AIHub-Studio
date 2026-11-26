@@ -130,7 +130,7 @@ export function parseNoCostAiMarkdown(markdown: string, verifiedAt = new Date().
     const title = rawLine.match(/^#{2,4}\s+(.+)$/);
     if (title) {
       heading = title[1].replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").trim();
-      inRelevantTable = /chat interfaces|media generation|voice(?:\s*&\s*music)?|music|developer apis|ai ides|ides/i.test(heading);
+      inRelevantTable = /chat interfaces|media generation|image|video|multimodal|voice(?:\s*&\s*music)?|music|developer apis|ai ides|ides/i.test(heading);
       continue;
     }
     if (!inRelevantTable || !rawLine.includes("|")) continue;
