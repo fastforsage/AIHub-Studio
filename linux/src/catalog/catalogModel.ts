@@ -3,6 +3,16 @@ import { normalizeWebsiteUrl } from "../shared/webUrl";
 
 export type ProviderKind = "website" | "local-api";
 
+export interface CatalogModelInfo {
+  id: string;
+  name: string;
+  description?: string;
+  context?: string;
+  maxOutput?: string;
+  modality?: string;
+  limits?: string;
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -14,6 +24,14 @@ interface ProviderBase {
   categoryIds: string[];
   favorite: boolean;
   enabled: boolean;
+  description?: string;
+  limits?: string;
+  regionTag?: string;
+  apiBaseUrl?: string;
+  modelDetails?: CatalogModelInfo[];
+  catalogSource?: "builtin-ru-cn" | "github-no-cost-ai" | "github-free-apis";
+  sourceUrl?: string;
+  lastVerified?: string;
 }
 
 export interface WebsiteProvider extends ProviderBase {
@@ -59,37 +77,36 @@ export const DEFAULT_CATEGORIES: ReadonlyArray<Category> = [
   { id: "video-generator", name: "video generator" },
   { id: "writing-helper", name: "writing helper" },
   { id: "research-assistant", name: "research assistant" },
-  { id: "translator", name: "translator" },
   { id: "presentation-maker", name: "presentation maker" },
   { id: "image-generator", name: "image generator" },
   { id: "many-in-one", name: "many in one" },
   { id: "api-providers", name: "API providers and aggregators" },
+  { id: "ru-cn-direct", name: "RU & CN Direct (Без VPN)" },
   { id: "local-ai", name: "Local AI" }
 ];
 
 import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
-const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; categoryIds: string[] }> = [
+const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; categoryIds: string[]; apiBaseUrl?: string; description?: string; limits?: string; regionTag?: string }> = [
   { id: "chatgpt", name: "ChatGPT", url: "https://chatgpt.com/", categoryIds: ["chatbot"] },
-  { id: "alice-ai", name: "Алиса AI — Яндекс", url: "https://alice.yandex.ru/", categoryIds: ["chatbot"] },
-  { id: "gigachat", name: "GigaChat — Сбер", url: "https://giga.chat/", categoryIds: ["chatbot"] },
+  { id: "alice-ai", name: "Алиса AI — Яндекс", url: "https://alice.yandex.ru/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Русскоязычный чат-ассистент Яндекса.", limits: "Условия бесплатного доступа могут меняться; см. актуальные условия сервиса.", regionTag: "RU" },
+  { id: "gigachat", name: "GigaChat — Сбер", url: "https://giga.chat/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Русскоязычный AI-ассистент Сбера.", limits: "Лимиты зависят от тарифа и аккаунта; см. актуальные условия сервиса.", regionTag: "RU" },
   { id: "claude", name: "Claude", url: "https://claude.ai/", categoryIds: ["chatbot"] },
   { id: "gemini", name: "Gemini", url: "https://gemini.google.com/", categoryIds: ["chatbot"] },
   { id: "grok", name: "Grok", url: "https://grok.com/", categoryIds: ["chatbot"] },
-  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/", categoryIds: ["chatbot"] },
+  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Китайский AI-чат для диалогов, поиска и рассуждений. Также доступен API для разработчиков.", limits: "Лимиты веб-чата динамические; API trial и квоты зависят от условий аккаунта.", apiBaseUrl: "https://api.deepseek.com", regionTag: "CN" },
   { id: "perplexity", name: "Perplexity", url: "https://www.perplexity.ai/", categoryIds: ["chatbot"] },
   { id: "copilot", name: "Copilot", url: "https://copilot.microsoft.com/", categoryIds: ["chatbot"] },
   { id: "mistral", name: "Mistral", url: "https://chat.mistral.ai/", categoryIds: ["chatbot", "api-providers"] },
   { id: "openrouter", name: "OpenRouter Chat", url: "https://openrouter.ai/chat", categoryIds: ["chatbot"] },
-  { id: "kimi", name: "Kimi", url: "https://www.kimi.com/", categoryIds: ["chatbot"] },
-  { id: "qwen", name: "Qwen", url: "https://chat.qwen.ai/", categoryIds: ["chatbot"] },
+  { id: "kimi", name: "Kimi", url: "https://www.kimi.com/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Китайский AI-ассистент Moonshot AI.", limits: "Лимиты веб-чата могут меняться; см. условия аккаунта.", regionTag: "CN" },
+  { id: "qwen", name: "Qwen", url: "https://chat.qwen.ai/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Веб-чат семейства моделей Qwen от Alibaba.", limits: "Лимиты зависят от выбранной модели и текущих условий сервиса.", regionTag: "CN" },
   { id: "google-ai-studio", name: "Google AI Studio", url: "https://aistudio.google.com/", categoryIds: ["chatbot", "api-providers"] },
   { id: "poe", name: "Poe", url: "https://poe.com/", categoryIds: ["chatbot"] },
   { id: "suno", name: "Suno", url: "https://suno.com/", categoryIds: ["music-generator"] },
   { id: "elevenlabs", name: "ElevenLabs", url: "https://elevenlabs.io/", categoryIds: ["voice-generator"] },
   { id: "notebooklm", name: "NotebookLM", url: "https://notebooklm.google.com/", categoryIds: ["research-assistant"] },
   { id: "deepwiki", name: "DeepWiki", url: "https://deepwiki.com/", categoryIds: ["research-assistant"] },
-  { id: "deepl", name: "DeepL", url: "https://www.deepl.com/translator", categoryIds: ["translator"] },
   { id: "gamma", name: "Gamma", url: "https://gamma.app/", categoryIds: ["presentation-maker"] },
   { id: "google-labs", name: "Google Labs", url: "https://labs.google/", categoryIds: ["many-in-one"] },
   { id: "nvidia-nim", name: "NVIDIA NIM", url: "https://build.nvidia.com/", categoryIds: ["api-providers"] },
@@ -98,16 +115,58 @@ const DEFAULT_WEBSITES: ReadonlyArray<{ id: string; name: string; url: string; c
   { id: "cohere", name: "Cohere", url: "https://dashboard.cohere.com/", categoryIds: ["api-providers"] },
   { id: "cerebras-inference", name: "Cerebras Inference", url: "https://www.cerebras.ai/inference", categoryIds: ["api-providers"] },
   { id: "sambanova-cloud", name: "SambaNova Cloud", url: "https://cloud.sambanova.ai/", categoryIds: ["api-providers"] },
-  { id: "modelscope", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers"] },
+  { id: "modelscope", name: "ModelScope API-Inference", url: "https://modelscope.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://api-inference.modelscope.cn/v1", description: "API-Inference для моделей из каталога ModelScope.", limits: "Требуется регистрация и подтверждение аккаунта; квоты динамические.", regionTag: "CN" },
   { id: "huggingface-inference", name: "Hugging Face Inference Providers", url: "https://huggingface.co/docs/inference-providers", categoryIds: ["api-providers"] },
   { id: "opencode-zen", name: "OpenCode Zen", url: "https://opencode.ai/en/zen", categoryIds: ["api-providers"] },
   { id: "kilo-ai-gateway", name: "Kilo AI Gateway", url: "https://kilo.ai/gateway", categoryIds: ["api-providers"] }
+  ,{ id: "bothub", name: "BotHub", url: "https://bothub.chat/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Агрегатор AI-чатов и моделей.", limits: "Лимиты зависят от модели и тарифа.", regionTag: "RU" }
+  ,{ id: "gptunnel", name: "GPTunnel", url: "https://gptunnel.ru/", categoryIds: ["chatbot", "ru-cn-direct"], description: "Российская площадка доступа к AI-моделям.", limits: "Условия и доступность зависят от выбранной модели.", regionTag: "RU" }
+  ,{ id: "shedevrum", name: "Шедеврум", url: "https://shedevrum.ai/", categoryIds: ["image-generator", "ru-cn-direct"] }
+  ,{ id: "rudalle", name: "Kandinsky / ruDALL-E", url: "https://rudalle.ru/", categoryIds: ["image-generator", "ru-cn-direct"] }
+  ,{ id: "sourcecraft", name: "SourceCraft", url: "https://sourcecraft.dev/", categoryIds: ["many-in-one", "ru-cn-direct"] }
+  ,{ id: "zai-chat", name: "Z.ai / GLM", url: "https://chat.z.ai/", categoryIds: ["chatbot", "ru-cn-direct"] }
+  ,{ id: "doubao", name: "Doubao", url: "https://www.doubao.com/", categoryIds: ["chatbot", "ru-cn-direct"] }
+  ,{ id: "tencent-yuanbao", name: "Tencent Yuanbao", url: "https://yuanbao.tencent.com/", categoryIds: ["chatbot", "ru-cn-direct"] }
+  ,{ id: "kling", name: "Kling AI", url: "https://klingai.com/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "hailuo", name: "Hailuo AI", url: "https://hailuoai.video/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "pixverse", name: "PixVerse", url: "https://pixverse.ai/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "vidu", name: "Vidu", url: "https://www.vidu.com/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "capcut", name: "CapCut", url: "https://www.capcut.com/", categoryIds: ["video-generator", "ru-cn-direct"] }
+  ,{ id: "zhipu-api", name: "Zhipu GLM API", url: "https://open.bigmodel.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://open.bigmodel.cn/api/paas/v4", description: "OpenAI-совместимый API платформы Zhipu AI.", limits: "Бесплатные Flash-модели; квоты и доступность проверяйте в консоли.", regionTag: "CN" }
+  ,{ id: "siliconflow-api", name: "SiliconFlow API", url: "https://siliconflow.cn/", categoryIds: ["api-providers", "ru-cn-direct"], apiBaseUrl: "https://api.siliconflow.cn/v1", description: "API-платформа с каталогом моделей разных разработчиков.", limits: "Бесплатный пул доступен не для всех моделей; квоты динамические.", regionTag: "CN" }
 ];
+
+const DEFAULT_PROVIDER_INFO: Record<string, { description: string; limits: string }> = {
+  "chatgpt": { description: "Универсальный AI-ассистент OpenAI: диалоги, анализ, работа с файлами и мультимодальные задачи.", limits: "Бесплатный тариф ограничен квотами и динамическими лимитами." },
+  "claude": { description: "AI-ассистент Anthropic для анализа, письма, программирования и длинных документов.", limits: "Бесплатное использование ограничено сообщениями и текущей нагрузкой." },
+  "gemini": { description: "Мультимодальный AI-ассистент Google с интеграцией сервисов и моделей Gemini.", limits: "Квоты зависят от тарифа, модели и региона." },
+  "grok": { description: "AI-ассистент xAI для диалогов, анализа и поиска актуальной информации.", limits: "Бесплатные запросы ограничены и могут меняться." },
+  "perplexity": { description: "AI-поиск с ответами на основе веб-источников и ссылками на материалы.", limits: "Бесплатный тариф ограничивает Pro-поиски и отдельные функции." },
+  "copilot": { description: "AI-помощник Microsoft для поиска, ответов и повседневных задач.", limits: "Доступность функций и квоты зависят от аккаунта и региона." },
+  "mistral": { description: "Веб-ассистент Le Chat и доступ к семейству моделей Mistral.", limits: "Бесплатные запросы и расширенные функции имеют динамические квоты." },
+  "openrouter": { description: "Единый интерфейс для общения с моделями разных поставщиков через OpenRouter.", limits: "Бесплатные модели имеют отдельные дневные и скоростные ограничения." },
+  "suno": { description: "Генерация музыки и песен по текстовому описанию.", limits: "Бесплатный тариф использует ограниченное количество кредитов." },
+  "elevenlabs": { description: "Синтез речи, клонирование голоса и инструменты аудио.", limits: "Бесплатный тариф ограничен месячной квотой символов и функций." },
+  "notebooklm": { description: "Исследовательский блокнот Google для анализа загруженных источников и документов.", limits: "Количество блокнотов, источников и запросов ограничено тарифом." },
+  "deepwiki": { description: "AI-объяснение структуры репозиториев и технической документации.", limits: "Публичная доступность и лимиты зависят от сервиса и источника." },
+  "gamma": { description: "Создание презентаций, документов и визуальных страниц с помощью AI.", limits: "Бесплатный тариф ограничен стартовыми AI-кредитами." },
+  "google-labs": { description: "Экспериментальные AI-инструменты и прототипы Google.", limits: "Лимиты и доступность отличаются для каждого эксперимента." },
+  "nvidia-nim": { description: "Каталог и API-инференс моделей NVIDIA NIM.", limits: "Квоты разработчика и бесплатные кредиты зависят от аккаунта." },
+  "groqcloud": { description: "Высокоскоростной inference API для языковых моделей Groq.", limits: "Бесплатный developer tier ограничен запросами в минуту и в день." },
+  "cloudflare-workers-ai": { description: "Запуск моделей через Cloudflare Workers AI API.", limits: "Доступность и бесплатная квота зависят от плана Cloudflare." },
+  "cohere": { description: "API языковых моделей Cohere, включая генерацию, embeddings и reranking.", limits: "Trial API имеет квоты и ограничения на коммерческое использование." },
+  "cerebras-inference": { description: "Inference API Cerebras для быстрых ответов языковых моделей.", limits: "Developer quota и rate limits могут изменяться." },
+  "sambanova-cloud": { description: "Облачный inference API SambaNova для открытых языковых моделей.", limits: "Бесплатный доступ и ограничения зависят от текущей программы." },
+  "modelscope": { description: "Каталог моделей ModelScope и API-Inference для выбранных моделей.", limits: "Нужна регистрация; доступные кредиты и квоты задаются платформой." },
+  "huggingface-inference": { description: "Единый каталог моделей и Inference Providers Hugging Face.", limits: "Использование ограничено доступными кредитами и тарифом провайдера." },
+  "opencode-zen": { description: "Подборка моделей и API-доступ для инструментов разработки OpenCode.", limits: "Доступность моделей и кредиты зависят от аккаунта." },
+  "kilo-ai-gateway": { description: "AI Gateway для доступа к моделям через инструменты Kilo.", limits: "Квоты и бесплатные кредиты зависят от текущих условий Kilo." }
+};
 
 export function createDefaultCatalog(): CatalogState {
   return {
     version: 1,
-    catalogSeedVersion: 2,
+    catalogSeedVersion: 4,
     categories: DEFAULT_CATEGORIES.map((item) => ({ ...item })),
     providers: DEFAULT_WEBSITES.map((item) => ({
       ...item,
@@ -115,7 +174,14 @@ export function createDefaultCatalog(): CatalogState {
       categoryIds: [...item.categoryIds],
       favorite: false,
       enabled: POPULAR_PROVIDER_IDS.includes(item.id),
-      profileId: item.id
+      profileId: item.id,
+      ...(item.categoryIds.includes("ru-cn-direct") ? {
+        catalogSource: "builtin-ru-cn" as const,
+        regionTag: item.regionTag ?? (["zai-chat", "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut", "rudalle"].includes(item.id) ? "CN" : "RU")
+      } : {}),
+      apiBaseUrl: item.apiBaseUrl,
+      description: item.description ?? DEFAULT_PROVIDER_INFO[item.id]?.description ?? ("Веб-интерфейс сервиса " + item.name + "."),
+      limits: item.limits ?? DEFAULT_PROVIDER_INFO[item.id]?.limits ?? "Точные лимиты не опубликованы; проверьте актуальные условия на сайте."
     }))
   };
 }
@@ -434,6 +500,33 @@ export function assertCatalogState(value: unknown): asserts value is CatalogStat
     for (const categoryId of item.categoryIds) {
       if (typeof categoryId !== "string" || !categoryIds.has(categoryId)) {
         throw new CatalogError("INVALID_CATALOG", "Connection references a missing category");
+      }
+    }
+
+    for (const field of ["description", "limits", "regionTag", "apiBaseUrl", "sourceUrl", "lastVerified"] as const) {
+      if (item[field] !== undefined && typeof item[field] !== "string") {
+        throw new CatalogError("INVALID_CATALOG", "Catalog provider metadata contains an invalid " + field);
+      }
+    }
+    if (item.apiBaseUrl !== undefined && (typeof item.apiBaseUrl !== "string" || !normalizeWebsiteUrl(item.apiBaseUrl))) {
+      throw new CatalogError("INVALID_CATALOG", "Catalog provider API base URL is invalid");
+    }
+    if (item.sourceUrl !== undefined && (typeof item.sourceUrl !== "string" || !normalizeWebsiteUrl(item.sourceUrl))) {
+      throw new CatalogError("INVALID_CATALOG", "Catalog provider source URL is invalid");
+    }
+    if (item.catalogSource !== undefined &&
+        !["builtin-ru-cn", "github-no-cost-ai", "github-free-apis"].includes(String(item.catalogSource))) {
+      throw new CatalogError("INVALID_CATALOG", "Catalog provider source identifier is invalid");
+    }
+    if (item.modelDetails !== undefined) {
+      if (!Array.isArray(item.modelDetails) || item.modelDetails.some((model) =>
+        !isRecord(model) || typeof model.id !== "string" || !model.id.trim() ||
+        typeof model.name !== "string" || !model.name.trim() ||
+        ["description", "context", "maxOutput", "modality", "limits"].some((field) =>
+          model[field] !== undefined && typeof model[field] !== "string"
+        )
+      )) {
+        throw new CatalogError("INVALID_CATALOG", "Catalog provider contains invalid model details");
       }
     }
 

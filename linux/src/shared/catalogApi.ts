@@ -5,7 +5,20 @@ import type {
   ProviderUpdate
 } from "../catalog/catalogModel";
 
+export interface CatalogSyncReport {
+  startedAt: string;
+  completedAt: string;
+  added: number;
+  updated: number;
+  unchanged: number;
+  skipped: number;
+  sourceErrors: string[];
+  sources: Array<{ id: string; label: string; entries: number; ok: boolean }>;
+  totalProviders: number;
+}
+
 export interface CatalogApi {
+  sync(): Promise<{ catalog: CatalogState; report: CatalogSyncReport }>;
   get(): Promise<CatalogState>;
   addCategory(name: string): Promise<CatalogState>;
   renameCategory(id: string, name: string): Promise<CatalogState>;

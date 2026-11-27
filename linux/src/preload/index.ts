@@ -4,8 +4,10 @@ import type { CatalogApi } from "../shared/catalogApi";
 import type { LocalAiApi } from "../shared/localAiApi";
 import type { DiagnosticsApi } from "../shared/diagnosticsApi";
 import type { ServiceAvailabilityApi } from "../shared/availabilityApi";
+import type { WindowApi } from "../shared/windowApi";
 
 const catalog: CatalogApi = {
+  sync: async () => ipcRenderer.invoke("catalog:sync"),
   get: () => ipcRenderer.invoke("catalog:get"),
   addCategory: (name) => ipcRenderer.invoke("catalog:category:add", { name }),
   renameCategory: (id, name) => ipcRenderer.invoke("catalog:category:rename", { id, name }),
@@ -59,12 +61,25 @@ const availability: ServiceAvailabilityApi = {
   checkCatalog: () => ipcRenderer.invoke("availability:check-catalog")
 };
 
+const windowControls: WindowApi = {
+  minimize: async () => { await ipcRenderer.invoke("window:minimize"); },
+  toggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),
+  close: async () => { await ipcRenderer.invoke("window:close"); },
+  isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+  onMaximizedChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, isMaximized: boolean) => listener(isMaximized);
+    ipcRenderer.on("window:maximized-changed", handler);
+    return () => ipcRenderer.removeListener("window:maximized-changed", handler);
+  }
+};
+
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
-  version: "0.1.8",
+  version: "0.1.12",
   catalog: Object.freeze(catalog),
   browser: Object.freeze(browser),
   localAi: Object.freeze(localAi),
   diagnostics: Object.freeze(diagnostics),
-  availability: Object.freeze(availability)
+  availability: Object.freeze(availability),
+  windowControls: Object.freeze(windowControls)
 }));

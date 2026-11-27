@@ -32,3 +32,11 @@ export function buildWorkspaceTabs(
     ...localTabs
   ];
 }
+
+/** Plan a bulk close without assuming website and local tabs share storage. */
+export function planWorkspaceTabClose(tabs: readonly WorkspaceTab[], keepKey: string | null) {
+  return {
+    websiteIds: tabs.flatMap((tab) => tab.kind === "website" && tab.key !== keepKey ? [tab.browserTabId] : []),
+    keptTab: tabs.find((tab) => tab.key === keepKey) ?? null
+  };
+}

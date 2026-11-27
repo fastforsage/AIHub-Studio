@@ -29,7 +29,6 @@ const BRANDS: Record<string, BrandDefinition> = {
   elevenlabs: { glyph: "11", brand: "elevenlabs" },
   notebooklm: { glyph: "N", brand: "google" },
   deepwiki: { glyph: "W", brand: "deepwiki" },
-  deepl: { glyph: "D", brand: "deepl" },
   gamma: { glyph: "G", brand: "gamma" },
   "google-labs": { glyph: "✦", brand: "google" },
   "nvidia-nim": { glyph: "N", brand: "nvidia" },

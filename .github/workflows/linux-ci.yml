@@ -43,8 +43,19 @@ jobs:
           version="$(node -p 'require("./package.json").version')"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Verify package versions
+        run: |
+          pkg_version="$(sed -n 's/^pkgver=//p' packaging/arch/PKGBUILD)"
+          if [[ "$pkg_version" != "${{ steps.app_version.outputs.version }}" ]]; then
+            echo "Arch PKGBUILD version $pkg_version does not match app version ${{ steps.app_version.outputs.version }}" >&2
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=high
 
       - name: Run unit tests
         run: npm test
@@ -57,6 +68,26 @@ jobs:
 
       - name: Chromium WebContentsView smoke test
         run: xvfb-run -a npm run smoke
+
+      - name: Verify packaged main-process dependency loading
+        run: |
+          set -euo pipefail
+          if grep -Fq "require('@molecule/api-ai-translation-bergamot')" out/main/index.js ||
+             grep -Fq 'require("@molecule/api-ai-translation-bergamot")' out/main/index.js ||
+             grep -Fq "require('@molecule/api-ai-translation')" out/main/index.js ||
+             grep -Fq 'require("@molecule/api-ai-translation")' out/main/index.js; then
+            echo "Bergamot was left as a runtime require in the Electron main bundle" >&2
+            exit 1
+          fi
+          set +e
+          xvfb-run -a timeout 15s ./node_modules/.bin/electron --no-sandbox out/main/index.js > /tmp/aihub-main-smoke.log 2>&1
+          status=$?
+          set -e
+          if [[ "$status" -ne 124 ]]; then
+            cat /tmp/aihub-main-smoke.log
+            echo "Electron main process exited before the startup smoke timeout (status $status)" >&2
+            exit 1
+          fi
 
       - name: Build unpacked Electron application
         run: npm run package:dir
