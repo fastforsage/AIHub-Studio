@@ -7,18 +7,7 @@ const packageMetadata = JSON.parse(
 const buildNumber = process.env.AIHUB_BUILD_NUMBER?.trim() || "local";
 
 export default {
-  main: {
-    build: {
-      // Bergamot is ESM-only. Bundle the provider and its core interface into
-      // the CommonJS Electron main entry instead of requiring them from app.asar.
-      externalizeDeps: {
-        exclude: [
-          "@molecule/api-ai-translation",
-          "@molecule/api-ai-translation-bergamot"
-        ]
-      }
-    }
-  },
+  main: {},
   preload: {},
   renderer: {
     plugins: [react()],

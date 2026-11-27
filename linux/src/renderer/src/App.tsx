@@ -14,7 +14,6 @@ import { buildWorkspaceTabs, type WorkspaceTab } from "../../shared/workspaceTab
 import { getInitiallyExpandedCategories, toggleExpandedCategory } from "../../shared/catalogNavigation";
 import type { DiagnosticsStatus, LogEntry, LogLevel, LoggingSettings } from "../../shared/diagnosticsApi";
 import type { AvailabilityStatus, ServiceAvailabilityReport } from "../../shared/availabilityApi";
-import type { TranslationReport } from "../../shared/translationApi";
 import type { CatalogSyncReport } from "../../shared/catalogApi";
 import { ProviderBrandIcon } from "./components/ProviderBrandIcon";
 
@@ -42,7 +41,6 @@ const EMPTY_CATALOG: CatalogState = {
     { id: "video-generator", name: "video generator" },
     { id: "writing-helper", name: "writing helper" },
     { id: "research-assistant", name: "research assistant" },
-    { id: "translator", name: "translator" },
     { id: "presentation-maker", name: "presentation maker" },
     { id: "image-generator", name: "image generator" },
     { id: "many-in-one", name: "many in one" },
@@ -72,7 +70,6 @@ function App() {
   const localAiApi = window.aihub?.localAi;
   const diagnosticsApi = window.aihub?.diagnostics;
   const availabilityApi = window.aihub?.availability;
-  const translationApi = window.aihub?.translation;
   const browserViewportRef = useRef<HTMLDivElement>(null);
   const settingsReturnMode = useRef<"catalog" | "browser" | "local-chat">("catalog");
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
@@ -99,12 +96,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [availabilityReport, setAvailabilityReport] = useState<ServiceAvailabilityReport | null>(null);
-  const [translationBusy, setTranslationBusy] = useState(false);
-  const [translationAuto, setTranslationAuto] = useState(() => localStorage.getItem("aihub.translation.auto") !== "false");
-  const [translationSourceLanguage, setTranslationSourceLanguage] = useState(() => localStorage.getItem("aihub.translation.source") ?? "auto");
-  const [settingsTab, setSettingsTab] = useState<"general" | "catalog" | "translation" | "connections" | "appearance" | "diagnostics" | "about">("general");
-  const [translationReport, setTranslationReport] = useState<TranslationReport | null>(null);
-  const [translationNotice, setTranslationNotice] = useState("Перевод выполняется локально на этом устройстве.");
+  const [settingsTab, setSettingsTab] = useState<"general" | "catalog" | "connections" | "appearance" | "diagnostics" | "about">("general");
   const [localChatProviderId, setLocalChatProviderId] = useState<string | null>(null);
   const [openLocalTabIds, setOpenLocalTabIds] = useState<string[]>([]);
   const [localChats, setLocalChats] = useState<Record<string, LocalChatMessage[]>>({});
@@ -573,53 +565,6 @@ function App() {
   }
 
 
-  async function translateActivePage(): Promise<void> {
-    if (!translationApi || !activeBrowserTab || translationBusy) return;
-    setTranslationBusy(true);
-    setError(null);
-    try {
-      const report = await translationApi.translatePage(activeBrowserTab.id, translationSourceLanguage === "auto" ? undefined : translationSourceLanguage);
-      setTranslationReport(report);
-      setTranslationNotice(report.translatedNodes > 0
-        ? `Переведено текстовых блоков: ${report.translatedNodes}`
-        : "Подходящий для перевода текст не найден.");
-    } catch (reason) {
-      setError("Ошибка перевода Bergamot: " + errorMessage(reason));
-    } finally {
-      setTranslationBusy(false);
-    }
-  }
-
-  async function restoreOriginalPage(): Promise<void> {
-    if (!translationApi || !activeBrowserTab) return;
-    try {
-      await translationApi.restoreOriginalPage(activeBrowserTab.id);
-      setTranslationReport(null);
-      setTranslationNotice("Показан оригинал страницы.");
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
-  }
-
-  useEffect(() => {
-    setTranslationReport(null);
-    setTranslationNotice("Перевод выполняется локально на этом устройстве.");
-  }, [activeBrowserTab?.id, activeBrowserTab?.url]);
-
-  useEffect(() => {
-    localStorage.setItem("aihub.translation.auto", String(translationAuto));
-  }, [translationAuto]);
-
-  useEffect(() => {
-    localStorage.setItem("aihub.translation.source", translationSourceLanguage);
-  }, [translationSourceLanguage]);
-
-  useEffect(() => {
-    if (!translationAuto || workspaceMode !== "browser" || !activeBrowserTab || activeBrowserTab.loading) return;
-    if (translationReport) return;
-    void translateActivePage();
-  }, [translationAuto, workspaceMode, activeBrowserTab?.id, activeBrowserTab?.loading, translationReport]);
-
   async function runBrowserAction(operation: () => Promise<BrowserManagerState>): Promise<void> {
     try {
       const next = await operation();
@@ -1047,7 +992,7 @@ function App() {
               <nav className="settings-tabs" aria-label="Разделы настроек">
                 {([
                   ["general", "⚙", "Основные"], ["catalog", "▤", "Каталог AI"],
-                  ["translation", "文", "Перевод"], ["connections", "↔", "Сеть и подключения"],
+                  ["connections", "↔", "Сеть и подключения"],
                   ["appearance", "◐", "Внешний вид"], ["diagnostics", "▥", "Диагностика"],
                   ["about", "ⓘ", "О программе"]
                 ] as const).map(([id, icon, label]) => (
@@ -1262,7 +1207,6 @@ function App() {
                 <div className="network-option-row"><div><strong>TLS Encrypted ClientHello (ECH)</strong><small>Экспериментальный режим отключения ECH для проверки совместимости с DPI. По умолчанию выключен; применяется после полного перезапуска.</small></div><span className="availability-badge availability-protected">Опционально</span></div>
                 <div className="network-command"><code>AIHUB_DISABLE_TLS_ECH=1 aihub-studio</code><button className="secondary-button" type="button" onClick={() => void navigator.clipboard.writeText("AIHUB_DISABLE_TLS_ECH=1 aihub-studio")}>Копировать команду</button></div>
                 <div className="settings-help">Для возврата к стандартному TLS запустите приложение обычным способом. Отключение ECH меняет сетевое поведение всего Chromium и может снизить приватность соединений.</div>
-                <div className="network-option-row"><div><strong>Загрузчик моделей Bergamot</strong><small>Использует настроенную сессию/прокси, Accept: application/octet-stream, диагностику HTTP и проверку размера и SHA-256.</small></div><span className="availability-badge availability-available">Диагностика включена</span></div>
               </section>
               <form className="settings-card" onSubmit={saveProxySettings}>
                 <div className="settings-card-heading">
@@ -1435,19 +1379,6 @@ function App() {
                 <div className="settings-help">Дополнительные темы и настройка акцентного цвета появятся в следующих обновлениях.</div>
               </section>}
 
-              {settingsTab === "translation" && <section className="settings-card translation-settings-card" aria-label="Настройки перевода">
-                <div className="settings-card-heading"><div className="settings-card-icon">文</div><div><h2>Перевод страниц</h2><p>Локальный перевод страниц через Bergamot · WASM + SIMD.</p></div></div>
-                <div className="translation-settings-intro"><span className="translation-local-badge">● Локально</span><strong>Контент не отправляется в облако</strong><small>Модели загружаются на устройство и хранятся локально.</small></div>
-                <label className="translation-auto-toggle translation-settings-auto"><input type="checkbox" checked={translationAuto} onChange={(event) => setTranslationAuto(event.target.checked)} /><span><strong>Автоматически переводить страницы</strong><small>Включено по умолчанию. Новые страницы будут переводиться после загрузки.</small></span></label>
-                <div className="translation-settings-grid">
-                  <label className="form-field"><span>Язык оригинала</span><select value={translationSourceLanguage} onChange={(event) => setTranslationSourceLanguage(event.target.value)}><option value="auto">Автоопределение</option><option value="en">Английский</option><option value="zh">Китайский</option><option value="ja">Японский</option><option value="ko">Корейский</option><option value="de">Немецкий</option><option value="fr">Французский</option><option value="es">Испанский</option><option value="ru">Русский</option></select></label>
-                  <label className="form-field"><span>Переводить на</span><select value="ru" disabled><option value="ru">Русский</option></select></label>
-                </div>
-                <div className="translation-engine-card"><div><strong>Движок перевода</strong><small>Bergamot · WASM + SIMD</small></div><span className="availability-badge availability-available"><span className="availability-dot" />Локальный движок</span></div>
-                <div className="translation-settings-actions"><button className="primary-button" type="button" disabled={translationBusy || !activeBrowserTab} onClick={() => void translateActivePage()}>{translationBusy ? "Переводим…" : "Перевести активную страницу"}</button><button className="secondary-button" type="button" disabled={!translationReport || !activeBrowserTab} onClick={() => void restoreOriginalPage()}>Показать оригинал</button></div>
-                <div className="translation-status" role="status" aria-live="polite">{translationBusy ? "Загрузка модели или перевод текста…" : translationNotice}</div>
-                <div className="settings-help">Текущая страница: {activeBrowserTab?.title ?? "Нет активной страницы"}. Обнаруженный язык: {translationReport?.sourceLanguage ?? "ещё не определён"}.</div>
-              </section>}
               </div>
             </div>
             </div>

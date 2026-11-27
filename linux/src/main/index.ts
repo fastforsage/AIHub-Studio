@@ -15,8 +15,6 @@ import { DiagnosticsManager } from "./diagnosticsManager";
 import { registerDiagnosticsIpc } from "./diagnosticsIpc";
 import { ServiceAvailabilityManager } from "./serviceAvailabilityManager";
 import { registerServiceAvailabilityIpc } from "./serviceAvailabilityIpc";
-import { TranslationManager } from "./translationManager";
-import { registerTranslationIpc } from "./translationIpc";
 
 const isLinuxWayland =
   process.platform === "linux" &&
@@ -139,8 +137,7 @@ async function bootstrap(): Promise<void> {
     (state) => {
       const target = mainWindow;
       if (target && !target.isDestroyed()) target.webContents.send("browser:changed", state);
-    },
-    (level, message, metadata) => diagnosticsManager?.log(level, "translation", message, metadata)
+    }
   );
 
   await browserManager.setProxyServer(initialBrowserSettings.proxyServer ?? "");
@@ -157,12 +154,6 @@ async function bootstrap(): Promise<void> {
   registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
   registerDiagnosticsIpc(diagnosticsManager, isTrustedRenderer);
   registerServiceAvailabilityIpc(new ServiceAvailabilityManager(() => catalogStore.get().providers, (input, init) => browserManager!.fetchForAvailability(input, init)), isTrustedRenderer);
-  const translationManager = new TranslationManager(
-    join(paths.data, "translation", "bergamot"),
-    applicationFetch,
-    (level, message, metadata) => diagnosticsManager?.log(level, "translation", message, metadata)
-  );
-  registerTranslationIpc(browserManager, translationManager, isTrustedRenderer);
   createMainWindow();
 }
 
