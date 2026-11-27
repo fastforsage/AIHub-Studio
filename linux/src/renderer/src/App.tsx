@@ -1281,7 +1281,7 @@ function App() {
                   <div className="settings-card-icon">⟳</div>
                   <div>
                     <h2>Обновление каталога AI</h2>
-                    <p>Получать актуальные веб-сервисы и OpenAI-совместимые API из двух публичных GitHub-списков. Встроенный пакет RU & CN Direct не удаляется.</p>
+                    <p>Получать актуальные веб-сервисы и OpenAI-совместимые API из двух публичных GitHub-списков.</p>
                   </div>
                 </div>
                 <div className="catalog-sync-toolbar">
@@ -1295,7 +1295,6 @@ function App() {
                 <div className="catalog-sync-sources">
                   <div><strong>zebbern/no-cost-ai</strong><small>Веб-чаты, генераторы, голосовые сервисы и инструменты</small></div>
                   <div><strong>mnfst/awesome-free-llm-apis</strong><small>API-провайдеры, модели, контекст и опубликованные лимиты</small></div>
-                  <div><strong>RU & CN Direct</strong><small>{catalog.providers.filter((provider) => provider.catalogSource === "builtin-ru-cn").length} встроенных сервисов · сохраняются при синхронизации</small></div>
                 </div>
                 {catalogSyncReport && (
                   <div className="catalog-sync-result" role="status">

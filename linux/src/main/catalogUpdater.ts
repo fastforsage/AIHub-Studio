@@ -261,7 +261,7 @@ function mergeRemoteEntries(current: CatalogState, remote: RemoteProvider[]): { 
         apiBaseUrl: entry.apiBaseUrl ?? existing.apiBaseUrl,
         regionTag: entry.regionTag ?? existing.regionTag,
         modelDetails: entry.modelDetails?.length ? entry.modelDetails : existing.modelDetails,
-        catalogSource: existing.catalogSource === "builtin-ru-cn" ? existing.catalogSource : entry.catalogSource,
+        catalogSource: entry.catalogSource,
         sourceUrl: entry.sourceUrl,
         lastVerified: entry.lastVerified
       };

@@ -33,10 +33,41 @@ function localApiUrl(provider: Extract<Provider, { type: "local-api" }>): string
   return "http://" + host + ":" + provider.port + "/v1/models";
 }
 
-function classify(status: number, latency: number): { status: AvailabilityStatus; message: string } {
-  if (status >= 200 && status < 400) return latency > 2500
-    ? { status: "slow", message: "Сайт отвечает медленно." }
-    : { status: "available", message: "Сайт отвечает." };
+function hostnameOf(value: string): string | null {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+// A redirect to a different domain usually means a login wall, a regional
+// gateway, or bot protection — the original page did not actually load.
+function isCrossDomainRedirect(originalUrl: string, finalUrl: string | null): boolean {
+  if (!finalUrl) return false;
+  const from = hostnameOf(originalUrl);
+  const to = hostnameOf(finalUrl);
+  if (!from || !to) return false;
+  return from !== to;
+}
+
+function classify(
+  status: number,
+  latency: number,
+  originalUrl: string,
+  finalUrl: string | null
+): { status: AvailabilityStatus; message: string } {
+  if (status >= 200 && status < 400) {
+    if (isCrossDomainRedirect(originalUrl, finalUrl)) {
+      return {
+        status: "protected",
+        message: "Сайт перенаправляет на другой домен (вероятна авторизация, региональная стена или защита от ботов)."
+      };
+    }
+    return latency > 2500
+      ? { status: "slow", message: "Сайт отвечает медленно." }
+      : { status: "available", message: "Сайт отвечает." };
+  }
   if ([401, 403, 429].includes(status)) return {
     status: "protected",
     message: "HTTP " + status + " может означать защиту от автоматических запросов, требование авторизации или ограничение частоты; это не доказывает, что сайт недоступен."
@@ -104,7 +135,7 @@ export class ServiceAvailabilityManager {
       const latencyMs = Date.now() - started;
       const finalUrl = response.url || url;
       await response.body?.cancel().catch(() => undefined);
-      const result = classify(response.status, latencyMs);
+      const result = classify(response.status, latencyMs, url, finalUrl);
       return {
         providerId: provider.id,
         status: region.status === "restricted" ? "regional-restriction" : result.status,

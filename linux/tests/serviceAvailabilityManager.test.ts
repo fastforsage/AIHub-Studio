@@ -111,4 +111,23 @@ describe("ServiceAvailabilityManager", () => {
     const report = await manager.checkCatalog();
     expect(report.results.map((item) => item.status)).toEqual(["unavailable", "unavailable"]);
   });
+
+  it("flags a cross-domain redirect as protected instead of available", async () => {
+    const fetcher = vi.fn(async (input: string | URL) => {
+      if (String(input) === "https://ipwho.is/") throw new Error("Geo service offline");
+      return {
+        ok: true,
+        status: 200,
+        url: "https://login.other-domain.example/",
+        body: { cancel: vi.fn(async () => undefined) }
+      } as unknown as Response;
+    });
+    const manager = new ServiceAvailabilityManager(
+      () => [provider("site", "https://example.com/")],
+      fetcher
+    );
+    const report = await manager.checkCatalog();
+    expect(report.results[0].status).toBe("protected");
+    expect(report.results[0].message).toContain("другой домен");
+  });
 });

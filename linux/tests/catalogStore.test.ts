@@ -27,11 +27,11 @@ describe("CatalogStore", () => {
     expect(initial.categories.map((category) => category.name)).toEqual([
       "chatbot", "music generator", "voice generator", "video generator",
       "writing helper", "research assistant", "presentation maker",
-      "image generator", "many in one", "API providers and aggregators", "RU & CN Direct (Без VPN)", "Local AI"
+      "image generator", "many in one", "API providers and aggregators", "search", "Local AI"
     ]);
     expect(initial.providers.map((provider) => provider.name)).toContain("ChatGPT");
     expect(initial.providers.map((provider) => provider.name)).toContain("Claude");
-    expect(initial.providers).toHaveLength(46);
+    expect(initial.providers).toHaveLength(49);
     expect(initial.providers.filter((provider) => provider.enabled)).toHaveLength(14);
 
     await store.transact((current) => addCategory(current, "Research", () => "research"));
@@ -72,11 +72,11 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const upgraded = await store.initialize();
-    expect(upgraded.catalogSeedVersion).toBe(4);
-    expect(upgraded.providers).toHaveLength(46);
+    expect(upgraded.catalogSeedVersion).toBe(5);
+    expect(upgraded.providers).toHaveLength(49);
     expect(upgraded.providers.filter((provider) => provider.enabled)).toHaveLength(14);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
-    expect(upgraded.categories.some((category) => category.id === "ru-cn-direct")).toBe(true);
+    expect(upgraded.categories.some((category) => category.id === "ru-cn-direct")).toBe(false);
     expect(upgraded.providers.find((provider) => provider.id === "mistral")?.categoryIds).toContain("api-providers");
   });
 
@@ -96,7 +96,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.catalogSeedVersion).toBe(4);
+    expect(migrated.catalogSeedVersion).toBe(5);
     expect(migrated.categories.map((category) => category.id)).toEqual(defaults.categories.map((category) => category.id));
     expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.enabled).toBe(true);
   });
@@ -119,12 +119,12 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.catalogSeedVersion).toBe(4);
-    expect(migrated.providers).toHaveLength(46);
+    expect(migrated.catalogSeedVersion).toBe(5);
+    expect(migrated.providers).toHaveLength(49);
     expect(migrated.categories.some((category) => category.id === "chatbot")).toBe(true);
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
-    expect(persisted.providers).toHaveLength(46);
+    expect(persisted.providers).toHaveLength(49);
   });
 
   it("merges the installed legacy catalog with the full catalog and preserves existing connections", async () => {
@@ -149,7 +149,7 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const migrated = await store.initialize();
-    expect(migrated.providers).toHaveLength(48);
+    expect(migrated.providers).toHaveLength(51);
     expect(migrated.providers.find((provider) => provider.id === "duckai")?.categoryIds).toContain("chatbot");
     expect(migrated.providers.find((provider) => provider.id === "gemma-local")?.categoryIds).toContain("local-ai");
     expect(migrated.providers.find((provider) => provider.id === "chatgpt")?.enabled).toBe(true);
@@ -159,7 +159,7 @@ describe("CatalogStore", () => {
     expect(migrated.categories.some((category) => category.id === "dev")).toBe(false);
     expect(migrated.providers.filter((provider) => provider.enabled).length).toBe(16);
     const persisted = JSON.parse(await readFile(filePath, "utf8"));
-    expect(persisted.providers).toHaveLength(48);
+    expect(persisted.providers).toHaveLength(51);
   });
 
 
@@ -219,16 +219,16 @@ describe("CatalogStore", () => {
 
     const store = new CatalogStore(filePath);
     const upgraded = await store.initialize();
-    expect(upgraded.providers).toHaveLength(57);
+    expect(upgraded.providers).toHaveLength(60);
     expect(upgraded.categories.some((category) => category.id === "api-providers")).toBe(true);
     expect(upgraded.providers.find((provider) => provider.id === "alice-ai")).toMatchObject({
       enabled: true
     });
-    expect(upgraded.providers.find((provider) => provider.id === "alice-ai")?.categoryIds).toContain("ru-cn-direct");
+    expect(upgraded.providers.find((provider) => provider.id === "alice-ai")?.categoryIds).toContain("chatbot");
     expect(upgraded.providers.find((provider) => provider.id === "gigachat")).toMatchObject({
       enabled: true
     });
-    expect(upgraded.providers.find((provider) => provider.id === "gigachat")?.categoryIds).toContain("ru-cn-direct");
+    expect(upgraded.providers.find((provider) => provider.id === "gigachat")?.categoryIds).toContain("chatbot");
     expect(upgraded.providers.find((provider) => provider.id === "nvidia-nim")?.enabled).toBe(false);
     expect(upgraded.providers.find((provider) => provider.id === "chatgpt")).toMatchObject({
       favorite: true, enabled: false, profileId: "existing-chatgpt-profile"
@@ -243,9 +243,9 @@ describe("CatalogStore", () => {
     }));
     const reloaded = new CatalogStore(filePath);
     const afterUserDeletion = await reloaded.initialize();
-    expect(afterUserDeletion.catalogSeedVersion).toBe(4);
+    expect(afterUserDeletion.catalogSeedVersion).toBe(5);
     expect(afterUserDeletion.providers.some((provider) => provider.id === "alice-ai")).toBe(false);
-    expect(afterUserDeletion.providers).toHaveLength(56);
+    expect(afterUserDeletion.providers).toHaveLength(59);
   });
 
   it("writes config with owner-only permissions", async () => {

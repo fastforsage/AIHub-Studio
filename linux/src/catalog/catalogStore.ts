@@ -8,14 +8,15 @@ import {
 } from "./catalogModel";
 import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
-const CURRENT_CATALOG_SEED_VERSION = 4;
+const CURRENT_CATALOG_SEED_VERSION = 5;
 const INCREMENTAL_PROVIDER_IDS = new Set([
   "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
   "cerebras-inference", "sambanova-cloud", "modelscope",
-  "huggingface-inference", "opencode-zen", "kilo-ai-gateway",
+  "huggingface-inference",
   "alice-ai", "gigachat", "deepseek", "kimi", "qwen", "mistral", "bothub", "gptunnel", "shedevrum", "rudalle", "sourcecraft", "zai-chat",
   "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut",
-  "zhipu-api", "siliconflow-api"
+  "zhipu-api", "siliconflow-api",
+  "brave", "bing", "google-search", "duckduckgo", "yandex"
 ]);
 
 
@@ -222,8 +223,7 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
   }
   const defaultApiCategory = defaults.categories.find((category) => category.id === "api-providers");
   const defaultChatbotCategory = defaults.categories.find((category) => category.id === "chatbot");
-  const ruCnCategory = defaults.categories.find((category) => category.id === "ru-cn-direct");
-  if (!defaultApiCategory || !defaultChatbotCategory || !ruCnCategory) {
+  if (!defaultApiCategory || !defaultChatbotCategory) {
     throw new Error("Incremental catalog seed is missing required categories");
   }
 
@@ -245,12 +245,6 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
   if (!apiCategory) {
     next.categories.push({ ...defaultApiCategory });
     apiCategory = next.categories[next.categories.length - 1];
-  }
-
-  let directCategory = findCategory("ru-cn-direct", ruCnCategory.name);
-  if (!directCategory) {
-    next.categories.push({ ...ruCnCategory });
-    directCategory = next.categories[next.categories.length - 1];
   }
 
   const providerIds = new Set(next.providers.map((provider) => provider.id));
@@ -276,7 +270,6 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
     }
     if (!INCREMENTAL_PROVIDER_IDS.has(seeded.id)) continue;
     const targetCategoryIds = seeded.categoryIds
-      .map((id) => id === "ru-cn-direct" ? directCategory!.id : id)
       .map((id) => id === "chatbot" ? chatbotCategory!.id : id === "api-providers" ? apiCategory!.id : id)
       .filter((id) => next.categories.some((category) => category.id === id));
     const fallbackCategoryId = seeded.id.endsWith("-api") ? apiCategory.id : chatbotCategory.id;
@@ -312,6 +305,14 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
     });
     providerIds.add(seeded.id);
   }
+
+  // The legacy "RU & CN Direct" pseudo-category was removed; its sites were
+  // redistributed into the real categories above. Drop any leftover reference.
+  next.categories = next.categories.filter((category) => category.id !== "ru-cn-direct");
+  next.providers = next.providers.map((provider) => ({
+    ...provider,
+    categoryIds: provider.categoryIds.filter((id) => id !== "ru-cn-direct")
+  }));
 
   next.catalogSeedVersion = CURRENT_CATALOG_SEED_VERSION;
   return next;
