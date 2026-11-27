@@ -16,8 +16,8 @@ const providers: Provider[] = [{
 }];
 
 describe("catalog sidebar navigation", () => {
-  it("opens categories that already contain AI connections on startup", () => {
-    expect(getInitiallyExpandedCategories(categories, providers)).toEqual(["ai", "local-ai"]);
+  it("keeps categories collapsed by default on startup", () => {
+    expect(getInitiallyExpandedCategories(categories, providers)).toEqual([]);
   });
 
   it("expands and collapses a category without changing other expanded categories", () => {

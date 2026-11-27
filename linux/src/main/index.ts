@@ -15,6 +15,7 @@ import { DiagnosticsManager } from "./diagnosticsManager";
 import { registerDiagnosticsIpc } from "./diagnosticsIpc";
 import { ServiceAvailabilityManager } from "./serviceAvailabilityManager";
 import { registerServiceAvailabilityIpc } from "./serviceAvailabilityIpc";
+import { forwardMaximizedState, registerWindowIpc } from "./windowIpc";
 
 const isLinuxWayland =
   process.platform === "linux" &&
@@ -64,6 +65,7 @@ function createMainWindow(): BrowserWindow {
     height: 900,
     minWidth: 1050,
     minHeight: 680,
+    frame: false,
     show: false,
     backgroundColor: "#111318",
     title: `AIHub Studio v${app.getVersion()}`,
@@ -77,6 +79,7 @@ function createMainWindow(): BrowserWindow {
   });
 
   removeNativeApplicationMenu(Menu, window);
+  forwardMaximizedState(window);
   mainWindow = window;
   window.webContents.on("render-process-gone", (_event, details) => {
     diagnosticsManager?.log("error", "renderer", "Renderer process terminated", {
@@ -144,6 +147,7 @@ async function bootstrap(): Promise<void> {
 
   const applicationFetch: typeof fetch = (input, init) => browserManager!.fetchForAvailability(input, init);
   const catalogUpdater = new CatalogUpdater(catalogStore, join(paths.config, "catalog-sync-state.json"), applicationFetch);
+  registerWindowIpc(() => mainWindow, isTrustedRenderer);
   registerCatalogIpc(catalogStore, catalogUpdater, isTrustedRenderer);
   void catalogUpdater.syncIfDue().then((report) => {
     if (report) diagnosticsManager?.log("info", "catalog", "Automatic catalog synchronization completed", report);

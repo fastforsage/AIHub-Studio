@@ -10,17 +10,19 @@ import { POPULAR_PROVIDER_IDS } from "../../catalog/catalogDefaults";
 import type { BrowserManagerState } from "../../browser/browserTypes";
 import type { LocalChatMessage } from "../../local-ai/localAiManager";
 import { formatBuildLabel } from "../../shared/versionLabel";
-import { buildWorkspaceTabs, type WorkspaceTab } from "../../shared/workspaceTabs";
+import { buildWorkspaceTabs, planWorkspaceTabClose, type WorkspaceTab } from "../../shared/workspaceTabs";
 import { getInitiallyExpandedCategories, toggleExpandedCategory } from "../../shared/catalogNavigation";
 import type { DiagnosticsStatus, LogEntry, LogLevel, LoggingSettings } from "../../shared/diagnosticsApi";
 import type { AvailabilityStatus, ServiceAvailabilityReport } from "../../shared/availabilityApi";
 import type { CatalogSyncReport } from "../../shared/catalogApi";
 import { ProviderBrandIcon } from "./components/ProviderBrandIcon";
+import { Icon } from "./components/Icon";
 
 type MenuTarget =
   | { kind: "root" }
   | { kind: "category"; id: string }
-  | { kind: "provider"; id: string };
+  | { kind: "provider"; id: string }
+  | { kind: "workspace-tab"; key: string };
 
 type ContextMenuState = { x: number; y: number; target: MenuTarget } | null;
 
@@ -71,6 +73,7 @@ function App() {
   const diagnosticsApi = window.aihub?.diagnostics;
   const availabilityApi = window.aihub?.availability;
   const browserViewportRef = useRef<HTMLDivElement>(null);
+  const loadedBrowserTabIds = useRef(new Set<string>());
   const settingsReturnMode = useRef<"catalog" | "browser" | "local-chat">("catalog");
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
   const [catalogSelection, setCatalogSelection] = useState<string[]>([]);
@@ -113,6 +116,49 @@ function App() {
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [logFilter, setLogFilter] = useState<LogLevel | "all">("all");
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [resizingSidebar, setResizingSidebar] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem("aihub:sidebar-width"));
+    return Number.isFinite(saved) && saved >= 200 && saved <= 420 ? saved : 258;
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
+    () => localStorage.getItem("aihub:sidebar-collapsed") === "1"
+  );
+
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const settingsFocusReturnRef = useRef<HTMLElement | null>(null);
+  const previousWorkspaceModeRef = useRef(workspaceMode);
+  const restoreSettingsFocusRef = useRef(false);
+
+  useEffect(() => {
+    localStorage.setItem("aihub:sidebar-width", String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem("aihub:sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    const windowControls = window.aihub?.windowControls;
+    if (!windowControls) return;
+    void windowControls.isMaximized().then(setIsMaximized).catch(() => undefined);
+    return windowControls.onMaximizedChanged(setIsMaximized);
+  }, []);
+
+  // Move focus into the settings surface on open and restore it on close so
+  // keyboard and screen-reader users do not lose their place.
+  useEffect(() => {
+    const previous = previousWorkspaceModeRef.current;
+    previousWorkspaceModeRef.current = workspaceMode;
+    if (workspaceMode === "settings" && previous !== "settings") {
+      settingsPanelRef.current?.focus();
+    } else if (previous === "settings" && workspaceMode !== "settings") {
+      if (restoreSettingsFocusRef.current) settingsFocusReturnRef.current?.focus();
+      restoreSettingsFocusRef.current = false;
+      settingsFocusReturnRef.current = null;
+    }
+  }, [workspaceMode]);
 
   useEffect(() => {
     if (!diagnosticsApi) return;
@@ -201,9 +247,20 @@ function App() {
     };
   }, [browserApi]);
 
+  const currentBrowserTab = browserState.tabs.find((tab) => tab.id === browserState.activeTabId);
+  const showBrowserSkeleton = Boolean(currentBrowserTab?.loading && !loadedBrowserTabIds.current.has(currentBrowserTab.id));
+
+  useEffect(() => {
+    for (const tab of browserState.tabs) {
+      if (!tab.loading) loadedBrowserTabIds.current.add(tab.id);
+    }
+    const existing = new Set(browserState.tabs.map((tab) => tab.id));
+    for (const id of loadedBrowserTabIds.current) if (!existing.has(id)) loadedBrowserTabIds.current.delete(id);
+  }, [browserState.tabs]);
+
   useEffect(() => {
     if (!browserApi) return;
-    const viewport = workspaceMode === "browser" ? browserViewportRef.current : null;
+    const viewport = workspaceMode === "browser" && !menu && !modal && !resizingSidebar && !showBrowserSkeleton ? browserViewportRef.current : null;
     if (!viewport) {
       void browserApi.setViewportBounds({ x: 0, y: 0, width: 0, height: 0 }).catch(() => undefined);
       return;
@@ -227,7 +284,7 @@ function App() {
       observer.disconnect();
       window.removeEventListener("resize", updateBounds);
     };
-  }, [browserApi, workspaceMode, browserState.activeTabId, browserState.tabs.length]);
+  }, [browserApi, workspaceMode, browserState.activeTabId, browserState.tabs.length, menu, modal, resizingSidebar, showBrowserSkeleton]);
 
   const selectedProvider = catalog.providers.find((provider) => provider.id === selectedProviderId) ?? null;
   const modalProvider = modal?.kind === "provider-edit" ? catalog.providers.find((provider) => provider.id === modal.id) ?? null : null;
@@ -245,6 +302,10 @@ function App() {
     () => buildWorkspaceTabs(browserState.tabs, catalog.providers, openLocalTabIds),
     [browserState.tabs, catalog.providers, openLocalTabIds]
   );
+  const contextWorkspaceTabKey = menu && menu.target.kind === "workspace-tab" ? menu.target.key : null;
+  const contextWorkspaceTab = contextWorkspaceTabKey
+    ? workspaceTabs.find((tab) => tab.key === contextWorkspaceTabKey) ?? null
+    : null;
   const activeWorkspaceTabKey = workspaceMode === "settings" && settingsOpen
     ? "settings"
     : workspaceMode === "browser" && activeBrowserTab
@@ -322,6 +383,8 @@ function App() {
   }
 
   function openSettings(): void {
+    settingsFocusReturnRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setSettingsTab("general");
     if (workspaceMode !== "settings") settingsReturnMode.current = workspaceMode;
     setCatalogSelection(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
@@ -332,7 +395,10 @@ function App() {
 
   function closeSettings(): void {
     setSettingsOpen(false);
-    if (workspaceMode === "settings") setWorkspaceMode(settingsReturnMode.current);
+    if (workspaceMode === "settings") {
+      restoreSettingsFocusRef.current = true;
+      setWorkspaceMode(settingsReturnMode.current);
+    }
   }
 
   async function syncCatalogNow(): Promise<void> {
@@ -411,6 +477,43 @@ function App() {
     setMenu({ x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 270), target });
   }
 
+  useEffect(() => {
+    if (!menu && !modal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (menu) setMenu(null);
+        else if (!busy) setModal(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [menu, modal, busy]);
+
+  function onSidebarResizeStart(event: MouseEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    if (event.button !== 0) return;
+    setResizingSidebar(true);
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    const onMove = (moveEvent: globalThis.MouseEvent): void => {
+      const next = Math.min(420, Math.max(200, startWidth + (moveEvent.clientX - startX)));
+      setSidebarWidth(next);
+    };
+    const onUp = (): void => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onUp);
+      setResizingSidebar(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", onUp);
+  }
+
   function submitModal(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (!modal) return;
@@ -449,6 +552,34 @@ function App() {
     void commit(() => catalogApi!.updateProvider(provider.id, update));
   }
 
+  async function closeWorkspaceTabsExcept(keepKey: string | null): Promise<void> {
+    try {
+      let nextBrowser = browserState;
+      const { websiteIds, keptTab: kept } = planWorkspaceTabClose(workspaceTabs, keepKey);
+      for (const id of websiteIds) {
+        if (browserApi) nextBrowser = await browserApi.close(id);
+      }
+      setBrowserState(nextBrowser);
+      setOpenLocalTabIds(kept?.kind === "local-ai" ? [kept.providerId] : []);
+      if (keepKey !== "settings") setSettingsOpen(false);
+      if (keepKey === "settings") {
+        settingsReturnMode.current = "catalog";
+        setWorkspaceMode("settings");
+      } else if (kept?.kind === "website" && browserApi) {
+        setBrowserState(await browserApi.activate(kept.browserTabId));
+        setWorkspaceMode("browser");
+      } else if (kept?.kind === "local-ai") {
+        setLocalChatProviderId(kept.providerId);
+        setWorkspaceMode("local-chat");
+      } else {
+        setWorkspaceMode("catalog");
+      }
+      setError(null);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  }
+
   function invokeMenuAction(action: string): void {
     if (!menu) return;
     const target = menu.target;
@@ -477,6 +608,23 @@ function App() {
       } else {
         setMenu(null);
       }
+    } else if (action === "tab-close" && target.kind === "workspace-tab") {
+      const tab = workspaceTabs.find((item) => item.key === target.key);
+      if (target.key === "settings") closeSettings();
+      else if (tab) closeWorkspaceTab(tab);
+      setMenu(null);
+    } else if (action === "tab-close-others" && target.kind === "workspace-tab") {
+      setMenu(null);
+      void closeWorkspaceTabsExcept(target.key);
+    } else if (action === "tab-close-all" && target.kind === "workspace-tab") {
+      setMenu(null);
+      void closeWorkspaceTabsExcept(null);
+    } else if (action === "tab-reload" && target.kind === "workspace-tab") {
+      const tab = workspaceTabs.find((item) => item.key === target.key);
+      if (tab?.kind === "website" && browserApi) {
+        void runBrowserAction(() => browserApi.reload(tab.browserTabId));
+      }
+      setMenu(null);
     }
   }
 
@@ -778,37 +926,66 @@ function App() {
   }
 
   return (
-    <div className="app-shell" onClick={() => menu && setMenu(null)}>
-      <aside className="sidebar">
-        <div className="brand">
+    <div className="app-shell">
+      <header className="titlebar">
+        <div className="titlebar-drag">
+          <button className="titlebar-icon-button" type="button" title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"} aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" /></svg>
+          </button>
           <div className="brand-mark">A</div>
-          <div>
-            <div className="brand-name">AIHub Studio</div>
-            <div className="brand-edition">LINUX EDITION</div>
-          </div>
+          <span className="titlebar-title">AIHub Studio</span>
         </div>
-
+        <div className="window-controls">
+          <button className="window-control-button" type="button" title="Minimize" aria-label="Minimize" onClick={() => void window.aihub?.windowControls.minimize()}>
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" strokeWidth="1.2" /></svg>
+          </button>
+          <button className="window-control-button" type="button" title={isMaximized ? "Restore" : "Maximize"} aria-label={isMaximized ? "Restore" : "Maximize"} onClick={() => void window.aihub?.windowControls.toggleMaximize().then(setIsMaximized)}>
+            {isMaximized
+              ? <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="3" y="1.5" width="7.5" height="7.5" fill="none" stroke="currentColor" strokeWidth="1.2" /><path d="M1.5 3v7.5H9" fill="none" stroke="currentColor" strokeWidth="1.2" /></svg>
+              : <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1.2" /></svg>}
+          </button>
+          <button className="window-control-button window-control-close" type="button" title="Close" aria-label="Close" onClick={() => void window.aihub?.windowControls.close()}>
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" strokeWidth="1.2" /></svg>
+          </button>
+        </div>
+      </header>
+      <div className="app-body">
+      <aside inert={sidebarCollapsed} aria-hidden={sidebarCollapsed} className={sidebarCollapsed ? "sidebar sidebar-collapsed" : "sidebar"} style={{ width: sidebarCollapsed ? 0 : sidebarWidth, minWidth: sidebarCollapsed ? 0 : sidebarWidth }}>
         <button className={workspaceMode === "settings" ? "nav-item nav-item-active sidebar-settings-button" : "nav-item sidebar-settings-button"} type="button" onClick={openSettings}>
-          <span className="nav-icon">⚙</span><span>Настройки</span>
+          <span className="nav-icon"><Icon name="settings" /></span><span>Настройки</span>
         </button>
 
         <div className="sidebar-scroll" aria-label="Workspace navigation">
         <div className="sidebar-label">WORKSPACE</div>
         <button className={workspaceMode === "catalog" && activeCategory === "all" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("all"); }}>
-          <span className="nav-icon">▦</span><span>AI Catalog</span><span className="item-count">{catalog.providers.filter((item) => item.enabled).length}</span>
+          <span className="nav-icon"><Icon name="grid" /></span><span>AI Catalog</span><span className="item-count">{catalog.providers.filter((item) => item.enabled).length}</span>
         </button>
         <button className={workspaceMode === "catalog" && activeCategory === "favorites" ? "nav-item nav-item-active" : "nav-item"} type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory("favorites"); }}>
-          <span className="nav-icon favorite-icon">★</span><span>Favorites</span><span className="item-count">{catalog.providers.filter((item) => item.enabled && item.favorite).length}</span>
+          <span className="nav-icon favorite-icon"><Icon name="star" /></span><span>Favorites</span><span className="item-count">{catalog.providers.filter((item) => item.enabled && item.favorite).length}</span>
         </button>
+
+        <div className="sidebar-divider" />
+        <div className="sidebar-label">LOCAL AI</div>
+        {!catalog.providers.some((item) => item.enabled && item.type === "local-api") && <button className="local-add-button" type="button" onClick={() => openModal({ kind: "local-add" })}>Add Local AI</button>}
+        {catalog.providers.filter((item) => item.enabled && item.type === "local-api").map((provider) => (
+          <button key={provider.id} className={workspaceMode === "local-chat" && localChatProviderId === provider.id ? "category-provider category-provider-active" : "category-provider"} type="button"
+            title={provider.name}
+            onClick={() => void openLocalChat(provider)}
+            onContextMenu={(event) => showContextMenu(event, { kind: "provider", id: provider.id })}>
+            <span className="category-provider-icon local-provider-icon"><Icon name="local" size={15} /></span>
+            <span className="category-provider-name">{provider.name}</span>
+            {provider.favorite && <span className="category-provider-star"><Icon name="star" size={12} /></span>}
+          </button>
+        ))}
 
         <div className="sidebar-divider" />
         <div className="category-heading">
           <div className="sidebar-label">CATEGORIES</div>
-          <button className="icon-button" type="button" title="Add category" onClick={() => openModal({ kind: "category-add" })} onContextMenu={(event) => showContextMenu(event, { kind: "root" })}>＋</button>
+          <button className="icon-button" type="button" title="Add category" onClick={() => openModal({ kind: "category-add" })} onContextMenu={(event) => showContextMenu(event, { kind: "root" })}><Icon name="add" /></button>
         </div>
         <div className="category-list" aria-label="AI categories">
-          {catalog.categories.map((category) => {
-            const categoryProviders = catalog.providers.filter((provider) => provider.enabled && provider.categoryIds.includes(category.id));
+          {catalog.categories.filter((category) => category.id !== "local-ai").map((category) => {
+            const categoryProviders = catalog.providers.filter((provider) => provider.enabled && provider.type === "website" && provider.categoryIds.includes(category.id));
             const expanded = expandedCategoryIds.includes(category.id);
             return (
               <div className="category-tree" key={category.id}>
@@ -819,11 +996,11 @@ function App() {
                     aria-expanded={expanded} disabled={categoryProviders.length === 0}
                     onClick={() => setExpandedCategoryIds((current) =>
                       toggleExpandedCategory(current, category.id)
-                    )}>{expanded ? "▾" : "▸"}</button>
+                    )}><span className={expanded ? "chevron-expanded" : ""}><Icon name="chevron" size={13} /></span></button>
                   <button className={activeCategory === category.id ? "category-item category-item-active" : "category-item"}
                     type="button" onClick={() => { setWorkspaceMode("catalog"); setActiveCategory(category.id); }}
                     onContextMenu={(event) => showContextMenu(event, { kind: "category", id: category.id })}>
-                    <span className="folder-icon">▰</span>
+                    <span className="folder-icon"><Icon name="folder" /></span>
                     <span className="category-name">{category.name}</span>
                     <span className="item-count">{categoryProviders.length}</span>
                   </button>
@@ -841,9 +1018,9 @@ function App() {
                         onContextMenu={(event) => showContextMenu(event, { kind: "provider", id: provider.id })}>
                         {provider.type === "website"
                           ? <ProviderBrandIcon providerId={provider.id} name={provider.name} size="small" />
-                          : <span className="category-provider-icon local-provider-icon">⌘</span>}
+                          : <span className="category-provider-icon local-provider-icon"><Icon name="local" size={15} /></span>}
                         <span className="category-provider-name">{provider.name}</span>
-                        {provider.favorite && <span className="category-provider-star">★</span>}
+                        {provider.favorite && <span className="category-provider-star"><Icon name="star" size={12} /></span>}
                       </button>
                     ))}
                   </div>
@@ -859,6 +1036,12 @@ function App() {
           <span>Chromium workspace · {window.aihub?.platform ?? "Linux"}</span>
           <span className="sidebar-version">{formatBuildLabel(__APP_VERSION__, __APP_BUILD__)}</span>
         </div>
+        {!sidebarCollapsed && <div className="sidebar-resizer" onMouseDown={onSidebarResizeStart} role="separator" tabIndex={0} aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin={200} aria-valuemax={420} aria-valuenow={sidebarWidth} onKeyDown={(event) => {
+          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+            event.preventDefault();
+            setSidebarWidth((width) => Math.max(200, Math.min(420, width + (event.key === "ArrowRight" ? 10 : -10))));
+          }
+        }} />}
       </aside>
 
       <main className="main-area">
@@ -867,37 +1050,42 @@ function App() {
             {workspaceTabs.map((tab) => {
               const active = activeWorkspaceTabKey === tab.key;
               return (
-                <div key={tab.key} className={active ? "workspace-tab workspace-tab-active" : "workspace-tab"}>
+                <div key={tab.key} className={active ? "workspace-tab workspace-tab-active" : "workspace-tab"}
+                  onContextMenu={(event) => showContextMenu(event, { kind: "workspace-tab", key: tab.key })}>
                   <button className="workspace-tab-select" type="button" role="tab" aria-selected={active}
                     title={tab.kind === "website" ? tab.url : tab.title} onClick={() => activateWorkspaceTab(tab)}>
                     {tab.kind === "local-ai"
-                      ? <span className="workspace-tab-icon local-tab-icon">⌘</span>
+                      ? <span className="workspace-tab-icon local-tab-icon"><Icon name="local" size={15} /></span>
                       : <ProviderBrandIcon providerId={browserState.tabs.find((browserTab) => browserTab.id === tab.browserTabId)?.providerId ?? "website"} name={tab.title} size="small" />}
                     <span className="workspace-tab-label">{tab.title}</span>
-                    {tab.kind === "website" && tab.loading && <span className="workspace-tab-loading">◌</span>}
+                    {tab.kind === "website" && tab.loading && <span className="workspace-tab-loading"><Icon name="spinner" size={14} /></span>}
                   </button>
                   <button className="workspace-tab-close" type="button"
                     title={"Close " + tab.title} aria-label={"Close " + tab.title}
-                    onClick={() => closeWorkspaceTab(tab)}>×</button>
+                    onClick={() => closeWorkspaceTab(tab)}><Icon name="close" size={14} /></button>
                 </div>
               );
             })}
             {settingsOpen && (
-              <div className={workspaceMode === "settings" ? "workspace-tab workspace-tab-active settings-workspace-tab" : "workspace-tab settings-workspace-tab"}>
+              <div className={workspaceMode === "settings" ? "workspace-tab workspace-tab-active settings-workspace-tab" : "workspace-tab settings-workspace-tab"}
+                onContextMenu={(event) => showContextMenu(event, { kind: "workspace-tab", key: "settings" })}>
                 <button className="workspace-tab-select" type="button" role="tab" aria-selected={workspaceMode === "settings"}
                   onClick={() => {
-                    if (workspaceMode !== "settings") settingsReturnMode.current = workspaceMode;
+                    if (workspaceMode !== "settings") {
+                      settingsReturnMode.current = workspaceMode;
+                      settingsFocusReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+                    }
                     setWorkspaceMode("settings");
                   }}>
-                  <span className="workspace-tab-icon settings-tab-icon">⚙</span>
+                  <span className="workspace-tab-icon settings-tab-icon"><Icon name="settings" /></span>
                   <span className="workspace-tab-label">Настройки</span>
                 </button>
                 <button className="workspace-tab-close" type="button" title="Закрыть настройки" aria-label="Закрыть настройки"
-                  onClick={closeSettings}>×</button>
+                  onClick={closeSettings}><Icon name="close" size={14} /></button>
               </div>
             )}
             <button className="workspace-new-tab" type="button" title="Add website or Local AI" aria-label="Add website or Local AI"
-              onClick={(event) => { setWorkspaceMode("catalog"); setActiveCategory("all"); showContextMenu(event, { kind: "root" }); }}>＋</button>
+              onClick={(event) => { setWorkspaceMode("catalog"); setActiveCategory("all"); showContextMenu(event, { kind: "root" }); }}><Icon name="add" size={18} /></button>
           </div>
         </header>
 
@@ -905,7 +1093,12 @@ function App() {
           {workspaceMode === "browser" ? (
             <div className="browser-workspace">
               {activeBrowserTab?.error && <div className="browser-error" role="alert">{activeBrowserTab.error}</div>}
+              {activeBrowserTab?.loading && <div className="browser-loading-bar" aria-hidden="true" />}
               <div className="browser-viewport" ref={browserViewportRef}>
+                {showBrowserSkeleton && <div className="browser-skeleton" role="status" aria-live="polite">
+                  <div className="browser-skeleton-lines" aria-hidden="true"><i /><i /><i /><i /></div>
+                  <span>Загрузка страницы…</span>
+                </div>}
                 {!activeBrowserTab && <div className="browser-empty">Open a cloud website from the AI catalog.</div>}
               </div>
             </div>
@@ -948,7 +1141,7 @@ function App() {
                 {!activeLocalProvider && <div className="local-chat-empty">This Local AI connection was removed. Return to the catalog and select another connection.</div>}
                 {activeLocalProvider && activeLocalMessages.length === 0 && (
                   <div className="local-chat-empty">
-                    <div className="local-chat-empty-icon">⌘</div>
+                    <div className="local-chat-empty-icon"><Icon name="local" size={22} /></div>
                     <h2>Start a local conversation</h2>
                     <p>Messages stay in this window session and are not written to a chat archive.</p>
                     {activeLocalProvider.models.length === 0 && <button className="primary-button" type="button" disabled={discoveringProviderId === activeLocalProvider.id} onClick={() => void refreshLocalModels(activeLocalProvider.id)}>Discover models</button>}
@@ -980,7 +1173,7 @@ function App() {
               </form>
             </div>
           ) : workspaceMode === "settings" ? (
-            <div className="settings-page">
+            <div className="settings-page" ref={settingsPanelRef} tabIndex={-1}>
               <div className="page-heading">
                 <div>
                   <div className="eyebrow">AIHUB STUDIO · SETTINGS</div>
@@ -991,13 +1184,13 @@ function App() {
               <div className="settings-layout">
               <nav className="settings-tabs" aria-label="Разделы настроек">
                 {([
-                  ["general", "⚙", "Основные"], ["catalog", "▤", "Каталог AI"],
-                  ["connections", "↔", "Сеть и подключения"],
-                  ["appearance", "◐", "Внешний вид"], ["diagnostics", "▥", "Диагностика"],
-                  ["about", "ⓘ", "О программе"]
+                  ["general", "settings", "Основные"], ["catalog", "grid", "Каталог AI"],
+                  ["connections", "network", "Сеть и подключения"],
+                  ["appearance", "appearance", "Внешний вид"], ["diagnostics", "diagnostics", "Диагностика"],
+                  ["about", "info", "О программе"]
                 ] as const).map(([id, icon, label]) => (
                   <button key={id} type="button" className={settingsTab === id ? "settings-tab settings-tab-active" : "settings-tab"}
-                    onClick={() => setSettingsTab(id)}><span>{icon}</span>{label}</button>
+                    onClick={() => setSettingsTab(id)}><span><Icon name={icon} /></span>{label}</button>
                 ))}
               </nav>
               <div className="settings-content">
@@ -1055,7 +1248,7 @@ function App() {
                           <div className="availability-settings-provider">
                             {provider.type === "website"
                               ? <ProviderBrandIcon providerId={provider.id} name={provider.name} size="small" />
-                              : <span className="catalog-local-icon">⌘</span>}
+                              : <span className="catalog-local-icon"><Icon name="local" size={15} /></span>}
                             <span>
                               <strong>{provider.name}</strong>
                               <small>{provider.type === "website" ? provider.url : provider.apiType + " · " + provider.host + ":" + provider.port}</small>
@@ -1118,7 +1311,7 @@ function App() {
 
               <section className="settings-card catalog-settings-card">
                 <div className="settings-card-heading">
-                  <div className="settings-card-icon">▦</div>
+                  <div className="settings-card-icon"><Icon name="grid" size={20} /></div>
                   <div>
                     <h2>AI catalog</h2>
                     <p>Choose which services appear in the left sidebar. Unselected services remain available here.</p>
@@ -1144,7 +1337,7 @@ function App() {
                     if (categoryProviders.length === 0) return null;
                     const selectedCount = categoryProviders.filter((provider) => catalogSelection.includes(provider.id)).length;
                     return (
-                      <details className="catalog-category" key={category.id} open={catalogSearch.trim().length > 0 || selectedCount > 0}>
+                      <details className="catalog-category" key={category.id} open={catalogSearch.trim().length > 0 ? true : undefined}>
                         <summary>
                           <span className="catalog-category-title">{category.name}</span>
                           <span className="catalog-category-count">{selectedCount} / {categoryProviders.length}</span>
@@ -1161,7 +1354,7 @@ function App() {
                                 onChange={() => toggleCatalogProvider(provider.id)} />
                               {provider.type === "website"
                                 ? <ProviderBrandIcon providerId={provider.id} name={provider.name} size="small" />
-                                : <span className="catalog-local-icon">⌘</span>}
+                                : <span className="catalog-local-icon"><Icon name="local" size={15} /></span>}
                               <span>{provider.name}</span>
                               <small>{provider.type === "website" ? "Website" : "Local API"}</small>
                             </label>
@@ -1425,7 +1618,7 @@ function App() {
           <div className="connection-grid" aria-label="AI connections">
             {visibleProviders.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">＋</div>
+                <div className="empty-icon"><Icon name="add" size={22} /></div>
                 <h2>No connections here yet</h2>
                 <p>Add a cloud website or a local OpenAI-compatible endpoint.</p>
                 <div className="empty-actions">
@@ -1442,7 +1635,7 @@ function App() {
                   title={provider.type === "website" ? "Open website in a workspace tab" : "Open Local AI chat in a workspace tab"}>
                   {provider.type === "website"
                     ? <ProviderBrandIcon providerId={provider.id} name={provider.name} size="large" />
-                    : <span className="provider-icon local-icon">⌘</span>}
+                    : <span className="provider-icon local-icon"><Icon name="local" size={15} /></span>}
                   <span className="connection-copy">
                     <span className="provider-name">{provider.name}</span>
                     <span className="provider-subtitle">{provider.type === "website" ? provider.url : provider.apiType + " · " + provider.host + ":" + provider.port}</span>
@@ -1465,10 +1658,10 @@ function App() {
                     })() : <span className="connection-hint">{provider.models.length ? provider.models.length + " model(s) discovered" : "Open local chat"}</span>}
                   </div>
                   <div className="connection-actions">
-                    {provider.favorite && <span className="provider-star" title="Favorite">★</span>}
+                    {provider.favorite && <span className="provider-star" title="Favorite"><Icon name="star" size={15} /></span>}
                     <button className="connection-menu" type="button" title={"Manage " + provider.name}
                       aria-label={"Manage " + provider.name}
-                      onClick={(event) => showContextMenu(event, { kind: "provider", id: provider.id })}>⋯</button>
+                      onClick={(event) => showContextMenu(event, { kind: "provider", id: provider.id })}><Icon name="more" /></button>
                   </div>
                 </div>
               </article>
@@ -1478,28 +1671,36 @@ function App() {
           )}
         </section>
       </main>
+      </div>
 
       {menu && (
         <div className="context-backdrop" onClick={() => setMenu(null)} onContextMenu={(event) => { event.preventDefault(); setMenu(null); }}>
           <div className="context-menu" style={{ left: menu.x, top: menu.y }} onClick={(event) => event.stopPropagation()}>
             {menu.target.kind === "root" && <>
-              <button type="button" onClick={() => invokeMenuAction("website-add")}>＋ Add Website</button>
-              <button type="button" onClick={() => invokeMenuAction("local-add")}>＋ Add Local AI</button>
+              <button type="button" onClick={() => invokeMenuAction("website-add")}>Add Website</button>
+              <button type="button" onClick={() => invokeMenuAction("local-add")}>Add Local AI</button>
               <div className="context-divider" />
-              <button type="button" onClick={() => invokeMenuAction("category-add")}>▰ Add Category</button>
+              <button type="button" onClick={() => invokeMenuAction("category-add")}>Add Category</button>
             </>}
             {menu.target.kind === "category" && <>
-              <button type="button" onClick={() => invokeMenuAction("website-add")}>＋ Add Website</button>
-              <button type="button" onClick={() => invokeMenuAction("local-add")}>＋ Add Local AI</button>
+              <button type="button" onClick={() => invokeMenuAction("website-add")}>Add Website</button>
+              <button type="button" onClick={() => invokeMenuAction("local-add")}>Add Local AI</button>
               <div className="context-divider" />
-              <button type="button" onClick={() => invokeMenuAction("category-edit")}>✎ Change</button>
-              <button className="danger-menu-item" type="button" onClick={() => invokeMenuAction("category-delete")}>⌫ Del</button>
+              <button type="button" onClick={() => invokeMenuAction("category-edit")}>Change</button>
+              <button className="danger-menu-item" type="button" onClick={() => invokeMenuAction("category-delete")}>Delete</button>
             </>}
             {menu.target.kind === "provider" && <>
-              <button type="button" onClick={() => invokeMenuAction("provider-edit")}>✎ Change</button>
-              <button type="button" onClick={() => invokeMenuAction("favorite")}>★ {contextProvider?.favorite ? "Remove from Favorites" : "Add to Favorites"}</button>
+              <button type="button" onClick={() => invokeMenuAction("provider-edit")}>Change</button>
+              <button type="button" onClick={() => invokeMenuAction("favorite")}>{contextProvider?.favorite ? "Remove from Favorites" : "Add to Favorites"}</button>
               <div className="context-divider" />
-              <button className="danger-menu-item" type="button" onClick={() => invokeMenuAction("provider-delete")}>⌫ Del</button>
+              <button className="danger-menu-item" type="button" onClick={() => invokeMenuAction("provider-delete")}>Delete</button>
+            </>}
+            {menu.target.kind === "workspace-tab" && <>
+              {contextWorkspaceTab?.kind === "website" && <button type="button" onClick={() => invokeMenuAction("tab-reload")}>Reload</button>}
+              <button type="button" onClick={() => invokeMenuAction("tab-close")}>Close tab</button>
+              <button type="button" onClick={() => invokeMenuAction("tab-close-others")}>Close other tabs</button>
+              <div className="context-divider" />
+              <button className="danger-menu-item" type="button" onClick={() => invokeMenuAction("tab-close-all")}>Close all tabs</button>
             </>}
           </div>
         </div>
@@ -1516,7 +1717,7 @@ function App() {
                   modal.kind === "website-add" ? "Add website" :
                   modal.kind === "local-add" ? "Add Local AI" : "Change connection"}</h2>
               </div>
-              <button className="icon-button close-button" type="button" onClick={() => setModal(null)} aria-label="Close">×</button>
+              <button className="icon-button close-button" type="button" onClick={() => setModal(null)} aria-label="Close"><Icon name="close" /></button>
             </div>
 
             <label className="form-field">

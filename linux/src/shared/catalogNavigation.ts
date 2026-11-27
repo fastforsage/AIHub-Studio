@@ -4,9 +4,10 @@ export function getInitiallyExpandedCategories(
   categories: readonly Category[],
   providers: readonly Provider[]
 ): string[] {
-  return categories
-    .filter((category) => providers.some((provider) => provider.categoryIds.includes(category.id)))
-    .map((category) => category.id);
+  // Categories start collapsed; the user expands them explicitly.
+  void categories;
+  void providers;
+  return [];
 }
 
 export function toggleExpandedCategory(currentIds: readonly string[], categoryId: string): string[] {
