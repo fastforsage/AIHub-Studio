@@ -22,12 +22,12 @@ describe("catalog categories", () => {
     const catalog = createDefaultCatalog();
     expect(catalog.categories.map((category) => category.name)).toEqual([
       "chatbot", "music generator", "voice generator", "video generator",
-      "writing helper", "research assistant", "translator", "presentation maker",
-      "image generator", "many in one", "API providers and aggregators", "Local AI"
+      "writing helper", "research assistant", "presentation maker",
+      "image generator", "many in one", "API providers and aggregators", "RU & CN Direct (Без VPN)", "Local AI"
     ]);
     expect(catalog.providers.map((provider) => provider.name)).toContain("ChatGPT");
     expect(catalog.providers.map((provider) => provider.name)).toContain("Claude");
-    expect(catalog.providers).toHaveLength(32);
+    expect(catalog.providers).toHaveLength(46);
     expect(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id)).toEqual([
       "chatgpt", "alice-ai", "gigachat", "claude", "gemini", "grok",
       "deepseek", "perplexity", "copilot", "mistral", "openrouter", "kimi",

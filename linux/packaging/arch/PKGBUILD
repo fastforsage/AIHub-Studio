@@ -1,6 +1,6 @@
 # Maintainer: AIHub Studio Contributors <github@users.noreply.github.com>
 pkgname=aihub-studio
-pkgver=0.1.8
+pkgver=0.1.12
 pkgrel="${AIHUB_PKGREL:-1}"
 pkgdesc="Chromium-based workspace for cloud AI websites and local language models"
 arch=('x86_64')

@@ -14,6 +14,7 @@ import { buildWorkspaceTabs, type WorkspaceTab } from "../../shared/workspaceTab
 import { getInitiallyExpandedCategories, toggleExpandedCategory } from "../../shared/catalogNavigation";
 import type { DiagnosticsStatus, LogEntry, LogLevel, LoggingSettings } from "../../shared/diagnosticsApi";
 import type { AvailabilityStatus, ServiceAvailabilityReport } from "../../shared/availabilityApi";
+import type { CatalogSyncReport } from "../../shared/catalogApi";
 import { ProviderBrandIcon } from "./components/ProviderBrandIcon";
 
 type MenuTarget =
@@ -40,7 +41,6 @@ const EMPTY_CATALOG: CatalogState = {
     { id: "video-generator", name: "video generator" },
     { id: "writing-helper", name: "writing helper" },
     { id: "research-assistant", name: "research assistant" },
-    { id: "translator", name: "translator" },
     { id: "presentation-maker", name: "presentation maker" },
     { id: "image-generator", name: "image generator" },
     { id: "many-in-one", name: "many in one" },
@@ -76,6 +76,8 @@ function App() {
   const [catalogSelection, setCatalogSelection] = useState<string[]>([]);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogSaving, setCatalogSaving] = useState(false);
+  const [catalogSyncBusy, setCatalogSyncBusy] = useState(false);
+  const [catalogSyncReport, setCatalogSyncReport] = useState<CatalogSyncReport | null>(null);
   const [activeCategory, setActiveCategory] = useState("all");
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<string[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
@@ -94,6 +96,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [availabilityReport, setAvailabilityReport] = useState<ServiceAvailabilityReport | null>(null);
+  const [settingsTab, setSettingsTab] = useState<"general" | "catalog" | "connections" | "appearance" | "diagnostics" | "about">("general");
   const [localChatProviderId, setLocalChatProviderId] = useState<string | null>(null);
   const [openLocalTabIds, setOpenLocalTabIds] = useState<string[]>([]);
   const [localChats, setLocalChats] = useState<Record<string, LocalChatMessage[]>>({});
@@ -319,6 +322,7 @@ function App() {
   }
 
   function openSettings(): void {
+    setSettingsTab("general");
     if (workspaceMode !== "settings") settingsReturnMode.current = workspaceMode;
     setCatalogSelection(catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
     setCatalogSearch("");
@@ -329,6 +333,24 @@ function App() {
   function closeSettings(): void {
     setSettingsOpen(false);
     if (workspaceMode === "settings") setWorkspaceMode(settingsReturnMode.current);
+  }
+
+  async function syncCatalogNow(): Promise<void> {
+    if (!catalogApi || catalogSyncBusy) return;
+    setCatalogSyncBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await catalogApi.sync();
+      setCatalog(result.catalog);
+      setCatalogSelection(result.catalog.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
+      setCatalogSyncReport(result.report);
+      setNotice("Каталог обновлён: добавлено " + result.report.added + ", обновлено " + result.report.updated + ".");
+    } catch (reason) {
+      setError("Не удалось обновить каталог: " + errorMessage(reason));
+    } finally {
+      setCatalogSyncBusy(false);
+    }
   }
 
   async function checkCatalogAvailability(): Promise<void> {
@@ -541,6 +563,7 @@ function App() {
     setLocalChats((current) => ({ ...current, [localChatProviderId]: [] }));
     setError(null);
   }
+
 
   async function runBrowserAction(operation: () => Promise<BrowserManagerState>): Promise<void> {
     try {
@@ -960,16 +983,29 @@ function App() {
             <div className="settings-page">
               <div className="page-heading">
                 <div>
-                  <div className="eyebrow">APPLICATION SETTINGS</div>
-                  <h1>Settings</h1>
-                  <p className="welcome-copy">Configure how Chromium connects to websites.</p>
+                  <div className="eyebrow">AIHUB STUDIO · SETTINGS</div>
+                  <h1>Настройки</h1>
+                  <p className="welcome-copy">Параметры приложения, каталога и браузера.</p>
                 </div>
               </div>
-
+              <div className="settings-layout">
+              <nav className="settings-tabs" aria-label="Разделы настроек">
+                {([
+                  ["general", "⚙", "Основные"], ["catalog", "▤", "Каталог AI"],
+                  ["connections", "↔", "Сеть и подключения"],
+                  ["appearance", "◐", "Внешний вид"], ["diagnostics", "▥", "Диагностика"],
+                  ["about", "ⓘ", "О программе"]
+                ] as const).map(([id, icon, label]) => (
+                  <button key={id} type="button" className={settingsTab === id ? "settings-tab settings-tab-active" : "settings-tab"}
+                    onClick={() => setSettingsTab(id)}><span>{icon}</span>{label}</button>
+                ))}
+              </nav>
+              <div className="settings-content">
               {error && <div className="alert alert-error" role="alert">{error}</div>}
               {notice && <div className="alert alert-success" role="status">{notice}</div>}
               {proxyNotice && <div className="alert alert-success" role="status">{proxyNotice}</div>}
 
+              {settingsTab === "general" && <>
               <section className="settings-card availability-settings-card" aria-label="AI service availability">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">◉</div>
@@ -1044,6 +1080,42 @@ function App() {
                 </div>
               </section>
 
+              </>}
+
+              {settingsTab === "catalog" && <>
+              <section className="settings-card catalog-sync-settings-card" aria-label="Catalog updates">
+                <div className="settings-card-heading">
+                  <div className="settings-card-icon">⟳</div>
+                  <div>
+                    <h2>Обновление каталога AI</h2>
+                    <p>Получать актуальные веб-сервисы и OpenAI-совместимые API из двух публичных GitHub-списков. Встроенный пакет RU & CN Direct не удаляется.</p>
+                  </div>
+                </div>
+                <div className="catalog-sync-toolbar">
+                  <div>
+                    <strong>{catalogSyncReport ? "Последняя синхронизация: " + new Date(catalogSyncReport.completedAt).toLocaleString() : "Источники GitHub подключены"}</strong>
+                    <small>Обновление выполняется через Chromium session и настроенный прокси.</small>
+                  </div>
+                  <button className="primary-button" type="button" disabled={catalogSyncBusy || !catalogApi}
+                    onClick={() => void syncCatalogNow()}>{catalogSyncBusy ? "Обновляем…" : "Обновить каталог"}</button>
+                </div>
+                <div className="catalog-sync-sources">
+                  <div><strong>zebbern/no-cost-ai</strong><small>Веб-чаты, генераторы, голосовые сервисы и инструменты</small></div>
+                  <div><strong>mnfst/awesome-free-llm-apis</strong><small>API-провайдеры, модели, контекст и опубликованные лимиты</small></div>
+                  <div><strong>RU & CN Direct</strong><small>{catalog.providers.filter((provider) => provider.catalogSource === "builtin-ru-cn").length} встроенных сервисов · сохраняются при синхронизации</small></div>
+                </div>
+                {catalogSyncReport && (
+                  <div className="catalog-sync-result" role="status">
+                    <span>Добавлено: {catalogSyncReport.added}</span>
+                    <span>Обновлено: {catalogSyncReport.updated}</span>
+                    <span>Без изменений: {catalogSyncReport.unchanged}</span>
+                    <span>Пропущено: {catalogSyncReport.skipped}</span>
+                    {catalogSyncReport.sourceErrors.map((message) => <small className="catalog-sync-warning" key={message}>{message}</small>)}
+                  </div>
+                )}
+                <div className="settings-help">Автосинхронизация выполняется при запуске приложения не чаще одного раза в сутки. Существующие избранные, включённые и пользовательские записи не заменяются.</div>
+              </section>
+
               <section className="settings-card catalog-settings-card">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">▦</div>
@@ -1083,7 +1155,8 @@ function App() {
                         </div>
                         <div className="catalog-provider-options">
                           {categoryProviders.map((provider) => (
-                            <label className="catalog-provider-option" key={provider.id}>
+                            <div className="catalog-provider-entry" key={provider.id}>
+                            <label className="catalog-provider-option">
                               <input type="checkbox" checked={catalogSelection.includes(provider.id)}
                                 onChange={() => toggleCatalogProvider(provider.id)} />
                               {provider.type === "website"
@@ -1092,6 +1165,28 @@ function App() {
                               <span>{provider.name}</span>
                               <small>{provider.type === "website" ? "Website" : "Local API"}</small>
                             </label>
+                            {(provider.description || provider.limits || provider.apiBaseUrl || (provider.type === "website" && provider.modelDetails?.length)) && (
+                              <details className="catalog-provider-info">
+                                <summary>Описание и лимиты</summary>
+                                {provider.description && <p>{provider.description}</p>}
+                                {provider.limits && <p><strong>Лимиты:</strong> {provider.limits}</p>}
+                                {provider.apiBaseUrl && <p><strong>API endpoint:</strong> <code>{provider.apiBaseUrl}</code></p>}
+                                {provider.type === "website" && provider.modelDetails && provider.modelDetails.length > 0 && (
+                                  <div className="catalog-model-details">
+                                    {provider.modelDetails.map((model) => (
+                                      <div className="catalog-model-detail" key={model.id}>
+                                        <strong>{model.name}</strong>
+                                        <small>{[model.context ? "Контекст " + model.context : "", model.maxOutput ? "Вывод " + model.maxOutput : "", model.modality ?? ""].filter(Boolean).join(" · ")}</small>
+                                        <small>{model.description ?? ("Модель " + model.name + " от провайдера " + provider.name + ".")}</small>
+                                        {model.limits && <small>Лимиты: {model.limits}</small>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {provider.lastVerified && <small>Источник обновлён: {new Date(provider.lastVerified).toLocaleDateString()}</small>}
+                              </details>
+                            )}
+                          </div>
                           ))}
                         </div>
                       </details>
@@ -1104,6 +1199,15 @@ function App() {
                 </div>
               </section>
 
+              </>}
+
+              {settingsTab === "connections" && <>
+              <section className="settings-card network-diagnostics-card" aria-label="Сетевые параметры AIHub Studio">
+                <div className="settings-card-heading"><div className="settings-card-icon">⌁</div><div><h2>Сетевые параметры AIHub Studio</h2><p>Диагностика Chromium, TLS ECH и загрузки ресурсов через общую сессию приложения.</p></div></div>
+                <div className="network-option-row"><div><strong>TLS Encrypted ClientHello (ECH)</strong><small>Экспериментальный режим отключения ECH для проверки совместимости с DPI. По умолчанию выключен; применяется после полного перезапуска.</small></div><span className="availability-badge availability-protected">Опционально</span></div>
+                <div className="network-command"><code>AIHUB_DISABLE_TLS_ECH=1 aihub-studio</code><button className="secondary-button" type="button" onClick={() => void navigator.clipboard.writeText("AIHUB_DISABLE_TLS_ECH=1 aihub-studio")}>Копировать команду</button></div>
+                <div className="settings-help">Для возврата к стандартному TLS запустите приложение обычным способом. Отключение ECH меняет сетевое поведение всего Chromium и может снизить приватность соединений.</div>
+              </section>
               <form className="settings-card" onSubmit={saveProxySettings}>
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">⇄</div>
@@ -1133,6 +1237,9 @@ function App() {
                 </div>
               </form>
 
+              </>}
+
+              {settingsTab === "diagnostics" && <>
               {diagnosticsStatus?.lastWriteError && (
                 <div className="alert alert-error" role="alert">
                   Failed to write log files: {diagnosticsStatus.lastWriteError}
@@ -1238,6 +1345,9 @@ function App() {
                 </div>
               </section>
 
+              </>}
+
+              {settingsTab === "about" && <>
               <section className="settings-card version-card" aria-label="Application version">
                 <div className="settings-card-heading">
                   <div className="settings-card-icon">ⓘ</div>
@@ -1261,6 +1371,16 @@ function App() {
                   </div>
                 </dl>
               </section>
+              </>}
+
+              {settingsTab === "appearance" && <section className="settings-card appearance-settings-card" aria-label="Внешний вид">
+                <div className="settings-card-heading"><div className="settings-card-icon">◐</div><div><h2>Внешний вид</h2><p>Настройки оформления рабочего пространства.</p></div></div>
+                <div className="appearance-theme-option"><span className="appearance-theme-preview" aria-hidden="true">Aa</span><span><strong>Тёмная тема</strong><small>Текущая тема интерфейса AIHub Studio.</small></span><span className="availability-badge availability-available"><span className="availability-dot" />Активна</span></div>
+                <div className="settings-help">Дополнительные темы и настройка акцентного цвета появятся в следующих обновлениях.</div>
+              </section>}
+
+              </div>
+            </div>
             </div>
           ) : (
             <>

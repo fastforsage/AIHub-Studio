@@ -8,6 +8,7 @@ import { CatalogStore } from "../catalog/catalogStore";
 import { resolveAppPaths } from "../shared/appPaths";
 import { registerBrowserIpc } from "./browserIpc";
 import { registerCatalogIpc } from "./catalogIpc";
+import { CatalogUpdater } from "./catalogUpdater";
 import { registerLocalAiIpc } from "./localAiIpc";
 import { removeNativeApplicationMenu } from "./nativeMenu";
 import { DiagnosticsManager } from "./diagnosticsManager";
@@ -19,10 +20,18 @@ const isLinuxWayland =
   process.platform === "linux" &&
   (process.env.XDG_SESSION_TYPE?.toLocaleLowerCase() === "wayland" || Boolean(process.env.WAYLAND_DISPLAY));
 
+const disableTlsEch = process.env.AIHUB_DISABLE_TLS_ECH === "1";
+const disabledChromiumFeatures = [
+  ...(isLinuxWayland ? ["WaylandWpColorManagerV1"] : []),
+  ...(disableTlsEch ? ["EncryptedClientHello"] : [])
+];
+if (disabledChromiumFeatures.length > 0) {
+  app.commandLine.appendSwitch("disable-features", disabledChromiumFeatures.join(","));
+}
+
 if (isLinuxWayland) {
   // Some KDE/KWin Wayland compositors do not expose the color-management
   // protocol features expected by this Chromium build.
-  app.commandLine.appendSwitch("disable-features", "WaylandWpColorManagerV1");
   // Keep Chromium's compositor/GTK debug noise out of the user's terminal.
   // App-level failures remain available in AIHub Studio's Diagnostics viewer.
   app.commandLine.appendSwitch("log-level", "3");
@@ -114,7 +123,8 @@ async function bootstrap(): Promise<void> {
   diagnosticsManager.log("info", "app", "Application startup", {
     version: app.getVersion(),
     platform: process.platform,
-    architecture: process.arch
+    architecture: process.arch,
+    tlsEchDisabled: disableTlsEch
   });
 
   const catalogStore = new CatalogStore(join(paths.config, "catalog.json"));
@@ -132,7 +142,14 @@ async function bootstrap(): Promise<void> {
 
   await browserManager.setProxyServer(initialBrowserSettings.proxyServer ?? "");
 
-  registerCatalogIpc(catalogStore, isTrustedRenderer);
+  const applicationFetch: typeof fetch = (input, init) => browserManager!.fetchForAvailability(input, init);
+  const catalogUpdater = new CatalogUpdater(catalogStore, join(paths.config, "catalog-sync-state.json"), applicationFetch);
+  registerCatalogIpc(catalogStore, catalogUpdater, isTrustedRenderer);
+  void catalogUpdater.syncIfDue().then((report) => {
+    if (report) diagnosticsManager?.log("info", "catalog", "Automatic catalog synchronization completed", report);
+  }).catch((error: unknown) => {
+    diagnosticsManager?.log("warn", "catalog", "Automatic catalog synchronization failed; existing catalog was preserved", error);
+  });
   registerBrowserIpc(browserManager, catalogStore, browserSettings, isTrustedRenderer);
   registerLocalAiIpc(new LocalAiManager(), catalogStore, isTrustedRenderer);
   registerDiagnosticsIpc(diagnosticsManager, isTrustedRenderer);

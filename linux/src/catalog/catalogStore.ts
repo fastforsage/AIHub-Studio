@@ -8,12 +8,14 @@ import {
 } from "./catalogModel";
 import { POPULAR_PROVIDER_IDS } from "./catalogDefaults";
 
-const CURRENT_CATALOG_SEED_VERSION = 2;
+const CURRENT_CATALOG_SEED_VERSION = 4;
 const INCREMENTAL_PROVIDER_IDS = new Set([
-  "alice-ai", "gigachat",
   "nvidia-nim", "groqcloud", "cloudflare-workers-ai", "cohere",
   "cerebras-inference", "sambanova-cloud", "modelscope",
-  "huggingface-inference", "opencode-zen", "kilo-ai-gateway"
+  "huggingface-inference", "opencode-zen", "kilo-ai-gateway",
+  "alice-ai", "gigachat", "deepseek", "kimi", "qwen", "mistral", "bothub", "gptunnel", "shedevrum", "rudalle", "sourcecraft", "zai-chat",
+  "doubao", "tencent-yuanbao", "kling", "hailuo", "pixverse", "vidu", "capcut",
+  "zhipu-api", "siliconflow-api"
 ]);
 
 
@@ -31,7 +33,8 @@ export class CatalogStore {
       const raw = await readFile(this.filePath, "utf8");
       const parsedRaw: unknown = JSON.parse(raw);
       const repaired = repairDuplicateProviderEntries(parsedRaw);
-      const parsed = repaired.catalog;
+      const restoredCategories = restoreMissingBuiltinCategories(repaired.catalog, createDefaultCatalog());
+      const parsed = restoredCategories.catalog;
       assertCatalogState(parsed);
       const legacyDefaultIds = new Set(["ai", "local-ai", "dev", "community", "design", "email", "video"]);
       const currentDefaults = createDefaultCatalog();
@@ -143,7 +146,7 @@ export class CatalogStore {
           this.state = mergeIncrementalProviderDefaults(this.state, currentDefaults);
           assertCatalogState(this.state);
           await this.write(this.state);
-        } else if (repaired.changed) {
+        } else if (repaired.changed || restoredCategories.changed) {
           await this.write(this.state);
         }
       }
@@ -206,9 +209,21 @@ export class CatalogStore {
 
 function mergeIncrementalProviderDefaults(state: CatalogState, defaults: CatalogState): CatalogState {
   const next = structuredClone(state);
+
+  // Restore missing built-in categories from prior damaged/partial catalog states.
+  // Existing category names and IDs are preserved, including user-created categories.
+  const categoryIds = new Set(next.categories.map((category) => category.id));
+  const categoryNames = new Set(next.categories.map((category) => category.name.trim().toLocaleLowerCase()));
+  for (const category of defaults.categories) {
+    if (categoryIds.has(category.id) || categoryNames.has(category.name.trim().toLocaleLowerCase())) continue;
+    next.categories.push({ ...category });
+    categoryIds.add(category.id);
+    categoryNames.add(category.name.trim().toLocaleLowerCase());
+  }
   const defaultApiCategory = defaults.categories.find((category) => category.id === "api-providers");
   const defaultChatbotCategory = defaults.categories.find((category) => category.id === "chatbot");
-  if (!defaultApiCategory || !defaultChatbotCategory) {
+  const ruCnCategory = defaults.categories.find((category) => category.id === "ru-cn-direct");
+  if (!defaultApiCategory || !defaultChatbotCategory || !ruCnCategory) {
     throw new Error("Incremental catalog seed is missing required categories");
   }
 
@@ -232,6 +247,12 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
     apiCategory = next.categories[next.categories.length - 1];
   }
 
+  let directCategory = findCategory("ru-cn-direct", ruCnCategory.name);
+  if (!directCategory) {
+    next.categories.push({ ...ruCnCategory });
+    directCategory = next.categories[next.categories.length - 1];
+  }
+
   const providerIds = new Set(next.providers.map((provider) => provider.id));
   const normalizeUrl = (value: string): string => {
     try { return new URL(value).href; } catch { return value.trim(); }
@@ -239,10 +260,27 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
   const normalizeName = (value: string): string => value.trim().toLocaleLowerCase();
 
   for (const seeded of defaults.providers) {
-    if (!INCREMENTAL_PROVIDER_IDS.has(seeded.id) || providerIds.has(seeded.id)) continue;
-    const targetCategoryId = seeded.id === "alice-ai" || seeded.id === "gigachat"
-      ? chatbotCategory.id
-      : apiCategory.id;
+    const existingById = next.providers.find((provider) => provider.id === seeded.id);
+    if (existingById) {
+      if (existingById.type === "website" && seeded.type === "website") {
+        existingById.description = seeded.description ?? existingById.description;
+        existingById.limits = seeded.limits ?? existingById.limits;
+        existingById.apiBaseUrl = seeded.apiBaseUrl ?? existingById.apiBaseUrl;
+        existingById.regionTag = seeded.regionTag ?? existingById.regionTag;
+        if (INCREMENTAL_PROVIDER_IDS.has(seeded.id)) {
+          existingById.categoryIds = [...new Set([...existingById.categoryIds, ...seeded.categoryIds])];
+          existingById.catalogSource = seeded.catalogSource ?? existingById.catalogSource;
+        }
+      }
+      continue;
+    }
+    if (!INCREMENTAL_PROVIDER_IDS.has(seeded.id)) continue;
+    const targetCategoryIds = seeded.categoryIds
+      .map((id) => id === "ru-cn-direct" ? directCategory!.id : id)
+      .map((id) => id === "chatbot" ? chatbotCategory!.id : id === "api-providers" ? apiCategory!.id : id)
+      .filter((id) => next.categories.some((category) => category.id === id));
+    const fallbackCategoryId = seeded.id.endsWith("-api") ? apiCategory.id : chatbotCategory.id;
+    const categoryIds = targetCategoryIds.length ? targetCategoryIds : [fallbackCategoryId];
 
     const sameWebsite = seeded.type === "website"
       ? next.providers.find((provider) =>
@@ -250,7 +288,7 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
         )
       : undefined;
     if (sameWebsite) {
-      sameWebsite.categoryIds = [...new Set([...sameWebsite.categoryIds, targetCategoryId])];
+      sameWebsite.categoryIds = [...new Set([...sameWebsite.categoryIds, ...categoryIds])];
       providerIds.add(seeded.id);
       continue;
     }
@@ -268,7 +306,7 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
     next.providers.push({
       ...seeded,
       name,
-      categoryIds: [targetCategoryId],
+      categoryIds,
       favorite: false,
       enabled: POPULAR_PROVIDER_IDS.includes(seeded.id)
     });
@@ -277,6 +315,94 @@ function mergeIncrementalProviderDefaults(state: CatalogState, defaults: Catalog
 
   next.catalogSeedVersion = CURRENT_CATALOG_SEED_VERSION;
   return next;
+}
+
+function restoreMissingBuiltinCategories(value: unknown, defaults: CatalogState): { catalog: unknown; changed: boolean } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return { catalog: value, changed: false };
+  const document = value as Record<string, unknown>;
+  if (!Array.isArray(document.categories) ||
+      (typeof document.catalogSeedVersion === "number" && document.catalogSeedVersion >= CURRENT_CATALOG_SEED_VERSION)) {
+    return { catalog: value, changed: false };
+  }
+  const legacyIds = new Set(["ai", "local-ai", "dev", "community", "design", "email", "video"]);
+  const isLegacyStarterLayout = document.catalogSeedVersion === undefined &&
+    document.categories.length === legacyIds.size &&
+    document.categories.every((item) =>
+      typeof item === "object" && item !== null && !Array.isArray(item) &&
+      typeof (item as Record<string, unknown>).id === "string" &&
+      legacyIds.has((item as Record<string, unknown>).id as string)
+    );
+  if (isLegacyStarterLayout) return { catalog: value, changed: false };
+
+  const categories = [...document.categories];
+  const ids = new Set(categories.flatMap((item) =>
+    typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).id === "string"
+      ? [(item as Record<string, unknown>).id as string] : []
+  ));
+  const byName = new Map(categories.flatMap((item) =>
+    typeof item === "object" && item !== null && !Array.isArray(item) &&
+    typeof (item as Record<string, unknown>).id === "string" &&
+    typeof (item as Record<string, unknown>).name === "string"
+      ? [[((item as Record<string, unknown>).name as string).trim().toLocaleLowerCase(), (item as Record<string, unknown>).id as string] as const]
+      : []
+  ));
+  const aliases = new Map<string, string>();
+  let changed = false;
+
+  for (const category of defaults.categories) {
+    if (ids.has(category.id)) {
+      aliases.set(category.id, category.id);
+      continue;
+    }
+    const existingId = byName.get(category.name.trim().toLocaleLowerCase());
+    if (existingId) {
+      aliases.set(category.id, existingId);
+      changed = true;
+      continue;
+    }
+    categories.push({ ...category });
+    ids.add(category.id);
+    byName.set(category.name.trim().toLocaleLowerCase(), category.id);
+    aliases.set(category.id, category.id);
+    changed = true;
+  }
+
+  let providers: unknown = document.providers;
+  if (Array.isArray(document.providers)) {
+    providers = document.providers.map((rawProvider) => {
+      if (typeof rawProvider !== "object" || rawProvider === null || Array.isArray(rawProvider)) return rawProvider;
+      const provider = rawProvider as Record<string, unknown>;
+      const originalCategoryIds = provider.categoryIds;
+      if (!Array.isArray(originalCategoryIds)) return rawProvider;
+      const categoryIds = [...new Set(originalCategoryIds.map((id) =>
+        typeof id === "string" ? aliases.get(id) ?? id : id
+      ))];
+      if (categoryIds.length !== originalCategoryIds.length ||
+          categoryIds.some((id, index) => id !== originalCategoryIds[index])) changed = true;
+      return { ...provider, categoryIds };
+    });
+  }
+
+  const orderedBuiltins = defaults.categories.flatMap((category) => {
+    const actualId = aliases.get(category.id) ?? category.id;
+    const match = categories.find((item) =>
+      typeof item === "object" && item !== null && !Array.isArray(item) &&
+      (item as Record<string, unknown>).id === actualId
+    );
+    return match ? [match] : [];
+  });
+  const builtinIds = new Set(orderedBuiltins.flatMap((item) =>
+    typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).id === "string"
+      ? [(item as Record<string, unknown>).id as string] : []
+  ));
+  const customCategories = categories.filter((item) =>
+    typeof item !== "object" || item === null || Array.isArray(item) ||
+    !builtinIds.has(String((item as Record<string, unknown>).id ?? ""))
+  );
+  const orderedCategories = [...orderedBuiltins, ...customCategories];
+  if (JSON.stringify(orderedCategories) !== JSON.stringify(categories)) changed = true;
+
+  return { catalog: changed ? { ...document, categories: orderedCategories, providers } : value, changed };
 }
 
 function repairDuplicateProviderEntries(value: unknown): { catalog: unknown; changed: boolean } {

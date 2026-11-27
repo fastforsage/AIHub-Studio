@@ -6,6 +6,7 @@ import type { DiagnosticsApi } from "../shared/diagnosticsApi";
 import type { ServiceAvailabilityApi } from "../shared/availabilityApi";
 
 const catalog: CatalogApi = {
+  sync: async () => ipcRenderer.invoke("catalog:sync"),
   get: () => ipcRenderer.invoke("catalog:get"),
   addCategory: (name) => ipcRenderer.invoke("catalog:category:add", { name }),
   renameCategory: (id, name) => ipcRenderer.invoke("catalog:category:rename", { id, name }),
@@ -61,7 +62,7 @@ const availability: ServiceAvailabilityApi = {
 
 contextBridge.exposeInMainWorld("aihub", Object.freeze({
   platform: process.platform,
-  version: "0.1.8",
+  version: "0.1.12",
   catalog: Object.freeze(catalog),
   browser: Object.freeze(browser),
   localAi: Object.freeze(localAi),
